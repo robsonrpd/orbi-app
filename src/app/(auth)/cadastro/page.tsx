@@ -25,16 +25,34 @@ export default function CadastroPage() {
     setError(null)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
+
+    // 1. Cria o usuário no Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: {
-        data: { name: form.name, company_name: form.company },
-      },
     })
 
-    if (error) {
-      setError(error.message)
+    if (authError || !authData.user) {
+      setError(authError?.message ?? 'Erro ao criar conta.')
+      setLoading(false)
+      return
+    }
+
+    // 2. Cria empresa e usuário via API route (usa service role)
+    const res = await fetch('/api/setup-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: authData.user.id,
+        email: form.email,
+        name: form.name,
+        companyName: form.company,
+      }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json()
+      setError(data.error ?? 'Erro ao configurar a conta.')
       setLoading(false)
       return
     }
@@ -67,7 +85,7 @@ export default function CadastroPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="company" className="text-[#2E2D29] text-sm font-medium">Nome do negócio</Label>
-          <Input id="company" placeholder="Clínica da Silva" value={form.company}
+          <Input id="company" placeholder="Ótica Central" value={form.company}
             onChange={e => set('company', e.target.value)} required
             className="h-11 border-[#EAE8E1] focus-visible:ring-[#1A56FF]" />
         </div>
