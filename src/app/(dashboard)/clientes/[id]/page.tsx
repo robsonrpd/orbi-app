@@ -19,17 +19,45 @@ function formatDateTime(s: string) {
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) notFound()
+
   const service = createServiceClient()
 
-  const { data: contact } = await service.from('contacts').select('*').eq('id', id).single()
-  if (!contact) notFound()
+  // Busca company_id do usuário logado
+  const { data: userData } = await service
+    .from('users')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
 
-  const [{ data: appointments }, { data: transactions }, { data: conversations }] = await Promise.all([
-    service.from('appointments').select('*, services(name)').eq('contact_id', id).order('start_at', { ascending: false }).limit(10),
-    service.from('transactions').select('*').eq('contact_id', id).order('created_at', { ascending: false }).limit(10),
-    service.from('conversations').select('*').eq('contact_id', id).single(),
+  if (!userData) notFound()
+
+  // SEGURANÇA: valida que o contato pertence à empresa do usuário logado
+  const { data: contact } = await service
+    .from('contacts')
+    .select('*')
+    .eq('id', id)
+    .eq('company_id', userData.company_id) // isolamento multi-tenant
+    .single()
+
+  if (!contact) notFound() // 404 para contatos de outras empresas também
+
+  const [{ data: appointments }, { data: transactions }] = await Promise.all([
+    service.from('appointments')
+      .select('*, services(name)')
+      .eq('contact_id', id)
+      .eq('company_id', userData.company_id) // reforço multi-tenant
+      .order('start_at', { ascending: false })
+      .limit(10),
+    service.from('transactions')
+      .select('*')
+      .eq('contact_id', id)
+      .eq('company_id', userData.company_id) // reforço multi-tenant
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
 
   const totalGasto = (transactions ?? []).filter(t => t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0)
@@ -63,12 +91,10 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
                 <Phone className="size-4 text-[#8C8880]" />
                 <span className="text-sm text-[#2E2D29]">{contact.phone}</span>
               </div>
-
               <div className="flex items-center gap-3 p-3 bg-[#F7F6F3] rounded-lg">
                 <DollarSign className="size-4 text-[#0DB57A]" />
                 <span className="text-sm text-[#2E2D29]">{formatCurrency(totalGasto)} no total</span>
               </div>
-
               {(contact.tags ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {(contact.tags ?? []).map((tag: string) => (
@@ -78,20 +104,19 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
                   ))}
                 </div>
               )}
-
               {contact.notes && (
                 <p className="text-xs text-[#8C8880] pt-1 border-t border-[#EAE8E1]">{contact.notes}</p>
               )}
             </div>
 
-            <div className="mt-5 space-y-2">
+            <div className="mt-5">
               <Button className="w-full h-9 bg-[#1A56FF] hover:bg-[#1445DD] text-white text-xs gap-2">
                 <MessageSquare className="size-3.5" /> Enviar mensagem
               </Button>
             </div>
           </div>
 
-          {/* Histórico de agendamentos */}
+          {/* Agendamentos */}
           <div className="bg-white rounded-xl border border-[#EAE8E1]">
             <div className="px-5 py-4 border-b border-[#EAE8E1] flex items-center gap-2">
               <Calendar className="size-4 text-[#1A56FF]" />
@@ -102,11 +127,11 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
                 <p className="px-5 py-8 text-center text-sm text-[#C8C5BB]">Nenhum agendamento</p>
               ) : (
                 (appointments ?? []).map((a: Record<string, unknown>) => {
-                  const service = a.services as { name?: string } | null
+                  const svc = a.services as { name?: string } | null
                   return (
                     <div key={a.id as string} className="px-5 py-3 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-[#1C1B18]">{service?.name ?? 'Serviço'}</p>
+                        <p className="text-sm font-medium text-[#1C1B18]">{svc?.name ?? 'Serviço'}</p>
                         <p className="text-xs text-[#8C8880]">{formatDateTime(a.start_at as string)}</p>
                       </div>
                       <AppointmentBadge status={a.status as 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'} />
@@ -117,7 +142,7 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          {/* Histórico financeiro */}
+          {/* Cobranças */}
           <div className="bg-white rounded-xl border border-[#EAE8E1]">
             <div className="px-5 py-4 border-b border-[#EAE8E1] flex items-center gap-2">
               <DollarSign className="size-4 text-[#0DB57A]" />

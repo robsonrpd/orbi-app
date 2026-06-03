@@ -39,12 +39,11 @@ export default function CadastroPage() {
     }
 
     // 2. Cria empresa e usuário via API route (usa service role)
+    // userId e email vêm do token JWT no servidor — não os enviamos aqui
     const res = await fetch('/api/setup-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        userId: authData.user.id,
-        email: form.email,
         name: form.name,
         companyName: form.company,
       }),
