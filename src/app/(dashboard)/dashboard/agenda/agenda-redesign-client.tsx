@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { AppointmentBadge } from '@/components/orbi/status-badge'
 import { NovoAgendamentoModal } from '@/components/orbi/novo-agendamento-modal'
+import { ProgramarPanel } from '@/components/orbi/programar-panel'
+import { BloquearHorariosModal } from '@/components/orbi/bloquear-horarios-modal'
 import {
   ChevronLeft, ChevronRight, Plus, Filter, Calendar,
-  CheckCircle, DollarSign, Clock, X, Search
+  CheckCircle, DollarSign, Clock, X, Search, CalendarClock, Ban
 } from 'lucide-react'
 
 type Contact = { id: string; name: string | null; phone: string }
@@ -36,6 +38,8 @@ export function AgendaRedesignClient({ appointments, contacts, services, totalFa
   const [weekOffset, setWeekOffset] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [programarOpen, setProgramarOpen] = useState(false)
+  const [bloquearOpen, setBloquearOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('todos')
   const [searchClient, setSearchClient] = useState('')
 
@@ -92,16 +96,26 @@ export function AgendaRedesignClient({ appointments, contacts, services, totalFa
         </div>
 
         {/* Ações */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-4 gap-3">
+          <button onClick={() => setFilterOpen(true)}
+            className="h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
+            style={{ fontFamily: 'Barlow, sans-serif', background: 'linear-gradient(135deg, #0A0F1E, #1A3A6E)' }}>
+            <Filter className="size-4" /> Filtrar
+          </button>
+          <button onClick={() => setProgramarOpen(true)}
+            className="h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
+            style={{ fontFamily: 'Barlow, sans-serif', background: 'linear-gradient(135deg, #0D6E6E, #0891B2)' }}>
+            <CalendarClock className="size-4" /> Programar
+          </button>
+          <button onClick={() => setBloquearOpen(true)}
+            className="h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
+            style={{ fontFamily: 'Barlow, sans-serif', background: 'linear-gradient(135deg, #7F1D1D, #EF4444)' }}>
+            <Ban className="size-4" /> Bloquear
+          </button>
           <button onClick={() => setModalOpen(true)}
             className="h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
             style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.3)' }}>
-            <Plus className="size-4" /> Novo Agendamento
-          </button>
-          <button onClick={() => setFilterOpen(true)}
-            className="h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all hover:opacity-90"
-            style={{ fontFamily: 'Barlow, sans-serif', background: 'linear-gradient(135deg, #0A0F1E, #1A3A6E)', color: 'white' }}>
-            <Filter className="size-4" /> Filtrar Agendamentos
+            <Plus className="size-4" /> Novo
           </button>
         </div>
 
@@ -269,6 +283,8 @@ export function AgendaRedesignClient({ appointments, contacts, services, totalFa
       )}
 
       <NovoAgendamentoModal open={modalOpen} onClose={() => setModalOpen(false)} contacts={contacts} services={services} />
+      {programarOpen && <ProgramarPanel onClose={() => setProgramarOpen(false)} contacts={contacts} services={services} />}
+      {bloquearOpen && <BloquearHorariosModal onClose={() => setBloquearOpen(false)} />}
     </>
   )
 }
