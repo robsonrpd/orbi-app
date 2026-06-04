@@ -4,15 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard,
-  Calendar,
-  Users,
-  DollarSign,
-  Bot,
-  MessageSquare,
-  Settings,
-  LogOut,
-  Zap,
+  LayoutDashboard, Calendar, Users, DollarSign,
+  Bot, MessageSquare, Settings, LogOut, Eye,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -24,10 +17,6 @@ const navItems = [
   { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
   { href: '/dashboard/ia', label: 'Inteligência IA', icon: Bot },
-]
-
-const bottomItems = [
-  { href: '/dashboard/settings', label: 'Configurações', icon: Settings },
 ]
 
 export function Sidebar() {
@@ -46,64 +35,70 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-60 shrink-0 bg-white border-r border-[#EAE8E1] flex flex-col h-screen sticky top-0">
+    <aside className="w-[220px] shrink-0 flex flex-col h-screen sticky top-0"
+      style={{ background: 'linear-gradient(180deg, #0A0F1E 0%, #0D1635 100%)' }}>
+
+      {/* Textura pontilhada sutil */}
+      <div className="absolute inset-0 opacity-[0.025] pointer-events-none"
+        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-[#EAE8E1]">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#1A56FF] rounded-lg flex items-center justify-center">
-            <Zap className="size-4 text-white fill-white" />
+      <div className="relative z-10 px-5 py-5 border-b border-white/5">
+        <Link href="/dashboard" className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: '#1A56FF', boxShadow: '0 0 16px rgba(26,86,255,0.5)' }}>
+            <Eye className="size-4 text-white" strokeWidth={1.5} />
           </div>
-          <span className="text-2xl font-black tracking-tight text-[#1C1B18]"
-            style={{ fontFamily: 'Fraunces, serif' }}>
-            Orbi<span className="text-[#1A56FF]">.</span>
+          <span className="text-2xl font-black text-white tracking-tight"
+            style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
+            Orbi<span style={{ color: '#1A56FF' }}>.</span>
           </span>
-        </div>
+        </Link>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-              isActive(item.href, item.exact)
-                ? 'bg-[#EEF2FF] text-[#1A56FF]'
-                : 'text-[#8C8880] hover:bg-[#F7F6F3] hover:text-[#2E2D29]'
-            )}
-          >
-            <item.icon className={cn(
-              'size-4 shrink-0',
-              isActive(item.href, item.exact) ? 'text-[#1A56FF]' : 'text-[#C8C5BB]'
-            )} />
-            {item.label}
-          </Link>
-        ))}
+      <nav className="relative z-10 flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        <p className="text-[10px] font-bold text-white/20 uppercase tracking-[2px] px-3 pb-2 pt-1"
+          style={{ fontFamily: 'Barlow, sans-serif' }}>
+          Menu
+        </p>
+        {navItems.map((item) => {
+          const active = isActive(item.href, item.exact)
+          return (
+            <Link key={item.href} href={item.href}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group',
+                active
+                  ? 'text-white'
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+              )}
+              style={active ? {
+                background: 'rgba(26, 86, 255, 0.2)',
+                boxShadow: 'inset 0 0 0 1px rgba(26,86,255,0.3)'
+              } : {}}>
+              <item.icon className={cn('size-4 shrink-0 transition-colors', active ? 'text-[#93AAFF]' : 'text-white/30 group-hover:text-white/50')} strokeWidth={1.5} />
+              <span>{item.label}</span>
+              {active && <span className="ml-auto w-1 h-4 rounded-full bg-[#1A56FF]" />}
+            </Link>
+          )
+        })}
       </nav>
 
       {/* Bottom */}
-      <div className="px-3 py-4 border-t border-[#EAE8E1] space-y-0.5">
-        {bottomItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-              isActive(item.href)
-                ? 'bg-[#EEF2FF] text-[#1A56FF]'
-                : 'text-[#8C8880] hover:bg-[#F7F6F3] hover:text-[#2E2D29]'
-            )}
-          >
-            <item.icon className="size-4 shrink-0 text-[#C8C5BB]" />
-            {item.label}
-          </Link>
-        ))}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#8C8880] hover:bg-red-50 hover:text-red-600 transition-all duration-150"
-        >
-          <LogOut className="size-4 shrink-0 text-[#C8C5BB]" />
+      <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
+        <Link href="/dashboard/settings"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+            isActive('/dashboard/settings')
+              ? 'text-white bg-white/10'
+              : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+          )}>
+          <Settings className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
+          Configurações
+        </Link>
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all">
+          <LogOut className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
           Sair
         </button>
       </div>
