@@ -6,13 +6,16 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Calendar, Users, DollarSign,
   Bot, MessageSquare, Settings, LogOut, Eye,
+  Scissors, Clock,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { href: '/dashboard/agenda', label: 'Agenda', icon: Calendar },
+  { href: '/dashboard/servicos', label: 'Serviços', icon: Scissors },
+  { href: '/dashboard/funcionamento', label: 'Funcionamento', icon: Clock },
+  { href: '/dashboard/agenda', label: 'Agendamentos', icon: Calendar },
   { href: '/dashboard/clientes', label: 'Clientes', icon: Users },
   { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
@@ -37,8 +40,6 @@ export function Sidebar() {
   return (
     <aside className="w-[220px] shrink-0 flex flex-col h-screen sticky top-0"
       style={{ background: 'linear-gradient(180deg, #0A0F1E 0%, #0D1635 100%)' }}>
-
-      {/* Textura pontilhada sutil */}
       <div className="absolute inset-0 opacity-[0.025] pointer-events-none"
         style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
 
@@ -59,23 +60,16 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="relative z-10 flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         <p className="text-[10px] font-bold text-white/20 uppercase tracking-[2px] px-3 pb-2 pt-1"
-          style={{ fontFamily: 'Barlow, sans-serif' }}>
-          Menu
-        </p>
+          style={{ fontFamily: 'Barlow, sans-serif' }}>Menu</p>
         {navItems.map((item) => {
           const active = isActive(item.href, item.exact)
           return (
             <Link key={item.href} href={item.href}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group',
-                active
-                  ? 'text-white'
-                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                active ? 'text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'
               )}
-              style={active ? {
-                background: 'rgba(26, 86, 255, 0.2)',
-                boxShadow: 'inset 0 0 0 1px rgba(26,86,255,0.3)'
-              } : {}}>
+              style={active ? { background: 'rgba(26,86,255,0.2)', boxShadow: 'inset 0 0 0 1px rgba(26,86,255,0.3)' } : {}}>
               <item.icon className={cn('size-4 shrink-0 transition-colors', active ? 'text-[#93AAFF]' : 'text-white/30 group-hover:text-white/50')} strokeWidth={1.5} />
               <span>{item.label}</span>
               {active && <span className="ml-auto w-1 h-4 rounded-full bg-[#1A56FF]" />}
@@ -87,12 +81,8 @@ export function Sidebar() {
       {/* Bottom */}
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
         <Link href="/dashboard/settings"
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            isActive('/dashboard/settings')
-              ? 'text-white bg-white/10'
-              : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-          )}>
+          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+            isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/5')}>
           <Settings className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
           Configurações
         </Link>
