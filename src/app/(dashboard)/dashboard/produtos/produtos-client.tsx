@@ -1,28 +1,43 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
+import { createProduct, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, Camera, AlertTriangle,
-  DollarSign, Tag, Archive
+  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, Glasses
 } from 'lucide-react'
 
 type Product = {
   id: string; name: string; price: number; cost_price: number
   stock: number; active: boolean; created_at: string
+  tipo_produto: string | null; ncm: string | null; grife: string | null
+  controla_estoque: boolean | null
 }
 
 function fmt(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
-const EMOJIS = ['👓', '🔭', '💎', '🩺', '✨', '🧴', '📦', '⚗️']
-
-const SUGGESTIONS = [
-  'Óculos de grau', 'Óculos de sol', 'Lente de contato', 'Armação infantil',
-  'Armação premium', 'Solução para lentes', 'Estojo de óculos', 'Cordão de óculos',
+// Tipos de produto de ótica com NCM fiscal
+const TIPOS = [
+  { label: 'Lentes de cristal', ncm: '90014000', emoji: '🔍' },
+  { label: 'Lentes CR39/Poli/Trivex', ncm: '90015000', emoji: '🔍' },
+  { label: 'Armação de acetato', ncm: '90031100', emoji: '👓' },
+  { label: 'Armação de metal', ncm: '90031910', emoji: '👓' },
+  { label: 'Armação outros materiais', ncm: '90031990', emoji: '👓' },
+  { label: 'Óculos de sol', ncm: '90041000', emoji: '🕶️' },
+  { label: 'Óculos de correção', ncm: '90049010', emoji: '👓' },
+  { label: 'Óculos de segurança', ncm: '90049020', emoji: '🥽' },
+  { label: 'Limpa-lentes', ncm: '34012090', emoji: '🧴' },
+  { label: 'Relógio', ncm: '90011100', emoji: '⌚' },
+  { label: 'Serviços/Outros', ncm: '00000000', emoji: '📦' },
 ]
+
+function emojiFor(tipo: string | null) {
+  return TIPOS.find(t => t.label === tipo)?.emoji ?? '📦'
+}
 
 type Props = { products: Product[] }
 
@@ -31,26 +46,44 @@ export function ProdutosClient({ products }: Props) {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [movProduct, setMovProduct] = useState<Product | null>(null)
+
+  // Form fields
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [costPrice, setCostPrice] = useState('')
   const [stock, setStock] = useState('0')
-  const [error, setError] = useState<string | null>(null)
+  const [tipo, setTipo] = useState('')
+  const [grife, setGrife] = useState('')
+  const [controla, setControla] = useState(true)
 
   const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase())
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    (p.grife ?? '').toLowerCase().includes(search.toLowerCase())
   )
-
-  const lowStock = products.filter(p => p.stock > 0 && p.stock <= 5)
+  const lowStock = products.filter(p => p.controla_estoque !== false && p.stock > 0 && p.stock <= 5)
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) { setError('Nome obrigatório.'); return }
     setLoading(true); setError(null)
-    await new Promise(r => setTimeout(r, 800))
-    setLoading(false); setSaved(true)
-    setTimeout(() => { setSaved(false); setTab('estoque') }, 1500)
-    setName(''); setPrice(''); setCostPrice(''); setStock('0')
+    const ncm = TIPOS.find(t => t.label === tipo)?.ncm ?? ''
+    const result = await createProduct({
+      name, price: parseFloat(price.replace(',', '.')) || 0,
+      costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
+      stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla,
+    })
+    setLoading(false)
+    if (result?.error) { setError(result.error); return }
+    setSaved(true)
+    setTimeout(() => { setSaved(false); setTab('estoque') }, 1200)
+    setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true)
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id); await deleteProduct(id); setDeletingId(null)
   }
 
   const TABS = [
@@ -59,6 +92,12 @@ export function ProdutosClient({ products }: Props) {
     { key: 'vendas', label: 'Vendas', icon: BarChart2 },
     { key: 'cadastrar', label: 'Cadastrar', icon: Plus },
   ]
+
+  const inputCls = "w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all placeholder:text-[#C8C5BB]"
+  const labelCls = "text-xs font-bold text-[#2E2D29] uppercase tracking-wider mb-1.5 block"
+
+  const margem = price && costPrice && parseFloat(price) > 0 && parseFloat(costPrice) > 0
+    ? Math.round(((parseFloat(price) - parseFloat(costPrice)) / parseFloat(price)) * 100) : null
 
   return (
     <div className="space-y-5">
@@ -69,7 +108,7 @@ export function ProdutosClient({ products }: Props) {
             const active = tab === t.key as typeof tab
             return (
               <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${active ? 'text-white' : 'text-[#8C8880] bg-white border border-[#EAE8E1] hover:border-[#1A56FF]/30 hover:text-[#1A56FF]'}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${active ? 'text-white' : 'text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#1A56FF]'}`}
                 style={active ? { background: 'linear-gradient(135deg,#1A56FF,#1445DD)', fontFamily: 'Barlow, sans-serif', boxShadow: '0 4px 12px rgba(26,86,255,0.3)' } : { fontFamily: 'Barlow, sans-serif' }}>
                 <t.icon className="size-3.5" /> {t.label}
               </button>
@@ -85,24 +124,23 @@ export function ProdutosClient({ products }: Props) {
         )}
       </div>
 
-      {/* Alerta estoque baixo */}
-      {lowStock.length > 0 && tab === 'estoque' && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50">
-          <AlertTriangle className="size-4 text-amber-500 shrink-0" />
-          <p className="text-sm text-amber-700">
-            <strong>{lowStock.length} produto{lowStock.length > 1 ? 's' : ''}</strong> com estoque baixo:
-            {lowStock.map(p => <span key={p.id} className="ml-1 font-semibold">{p.name}</span>)}
-          </p>
-        </div>
-      )}
-
       {/* Estoque */}
       {tab === 'estoque' && (
         <>
+          {lowStock.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50">
+              <AlertTriangle className="size-4 text-amber-500 shrink-0" />
+              <p className="text-sm text-amber-700">
+                <strong>{lowStock.length} produto{lowStock.length > 1 ? 's' : ''}</strong> com estoque baixo:
+                {lowStock.map(p => <span key={p.id} className="ml-1 font-semibold">{p.name}</span>)}
+              </p>
+            </div>
+          )}
+
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar produto..."
+              placeholder="Buscar produto ou grife..."
               className="w-full h-10 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-white text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
           </div>
 
@@ -125,38 +163,38 @@ export function ProdutosClient({ products }: Props) {
             </GlowCard>
           ) : (
             <div className="grid grid-cols-4 gap-4">
-              {filtered.map((p, i) => {
-                const isLow = p.stock > 0 && p.stock <= 5
-                const isOut = p.stock === 0
+              {filtered.map(p => {
+                const isLow = p.controla_estoque !== false && p.stock > 0 && p.stock <= 5
+                const isOut = p.controla_estoque !== false && p.stock === 0
                 return (
                   <GlowCard key={p.id}>
                     <div className="p-4">
-                      <div className="relative w-full h-32 rounded-xl mb-3 flex items-center justify-center text-4xl overflow-hidden"
+                      <div className="relative w-full h-28 rounded-xl mb-3 flex items-center justify-center text-4xl overflow-hidden"
                         style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
-                        {EMOJIS[i % EMOJIS.length]}
+                        {emojiFor(p.tipo_produto)}
                         {(isLow || isOut) && (
-                          <span className={`absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white`}
+                          <span className="absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white"
                             style={{ fontFamily: 'Barlow, sans-serif', background: isOut ? '#EF4444' : '#F59E0B' }}>
                             {isOut ? 'SEM ESTOQUE' : 'BAIXO'}
                           </span>
                         )}
                       </div>
-                      <p className="text-sm font-bold text-[#1C1B18] truncate mb-1">{p.name}</p>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-black text-[#1A56FF]" style={{ fontFamily: 'Fraunces, serif' }}>
-                          {fmt(p.price)}
-                        </span>
-                        <span className="text-xs text-[#8C8880]">{p.stock} un.</span>
+                      <p className="text-sm font-bold text-[#1C1B18] truncate">{p.name}</p>
+                      {p.grife && <p className="text-xs text-[#8C8880] mb-1">{p.grife}</p>}
+                      <div className="flex items-center justify-between mb-3 mt-1">
+                        <span className="text-sm font-black text-[#1A56FF]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(p.price)}</span>
+                        {p.controla_estoque !== false
+                          ? <span className="text-xs text-[#8C8880]">{p.stock} un.</span>
+                          : <span className="text-[10px] text-[#C8C5BB]">sem controle</span>}
                       </div>
                       <div className="flex gap-2">
-                        <button className="flex-1 flex items-center justify-center gap-1 h-8 rounded-lg text-xs font-semibold text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] transition-colors">
-                          <Edit2 className="size-3" /> Editar
+                        <button onClick={() => setMovProduct(p)}
+                          className="flex-1 flex items-center justify-center gap-1 h-8 rounded-lg text-xs font-semibold text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] transition-colors">
+                          <RefreshCw className="size-3" /> Movimentar
                         </button>
-                        <button className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] border border-[#EAE8E1] hover:bg-[#F7F6F3] transition-colors">
-                          <Archive className="size-3.5" />
-                        </button>
-                        <button className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 border border-[#EAE8E1] hover:bg-red-50 transition-colors">
-                          <Trash2 className="size-3.5" />
+                        <button onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 border border-[#EAE8E1] hover:bg-red-50 transition-colors">
+                          {deletingId === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                         </button>
                       </div>
                     </div>
@@ -168,35 +206,19 @@ export function ProdutosClient({ products }: Props) {
         </>
       )}
 
-      {/* Vender */}
+      {/* Vender / Vendas placeholders */}
       {tab === 'vender' && (
-        <GlowCard>
-          <div className="p-8 text-center flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#EEF2FF] flex items-center justify-center">
-              <ShoppingCart className="size-7 text-[#1A56FF]" strokeWidth={1.5} />
-            </div>
-            <div>
-              <p className="text-base font-bold text-[#1C1B18]">Ponto de Venda</p>
-              <p className="text-sm text-[#8C8880] mt-1 max-w-xs">Registre vendas de produtos para seus clientes diretamente pelo painel.</p>
-            </div>
-            <p className="text-xs text-[#C8C5BB]">Em breve — integração com cobranças via Asaas</p>
-          </div>
-        </GlowCard>
+        <GlowCard><div className="p-8 text-center flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-[#EEF2FF] flex items-center justify-center"><ShoppingCart className="size-7 text-[#1A56FF]" strokeWidth={1.5} /></div>
+          <div><p className="text-base font-bold text-[#1C1B18]">Ponto de Venda</p>
+          <p className="text-sm text-[#8C8880] mt-1 max-w-xs">Em breve — venda de produtos com baixa automática de estoque e cobrança via Asaas.</p></div>
+        </div></GlowCard>
       )}
-
-      {/* Vendas */}
       {tab === 'vendas' && (
-        <GlowCard>
-          <div className="p-8 text-center flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#E6F9F3] flex items-center justify-center">
-              <BarChart2 className="size-7 text-[#0DB57A]" strokeWidth={1.5} />
-            </div>
-            <div>
-              <p className="text-base font-bold text-[#1C1B18]">Histórico de Vendas</p>
-              <p className="text-sm text-[#8C8880] mt-1">Nenhuma venda registrada ainda.</p>
-            </div>
-          </div>
-        </GlowCard>
+        <GlowCard><div className="p-8 text-center flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-[#E6F9F3] flex items-center justify-center"><BarChart2 className="size-7 text-[#0DB57A]" strokeWidth={1.5} /></div>
+          <div><p className="text-base font-bold text-[#1C1B18]">Histórico de Vendas</p><p className="text-sm text-[#8C8880] mt-1">Nenhuma venda registrada ainda.</p></div>
+        </div></GlowCard>
       )}
 
       {/* Cadastrar */}
@@ -206,88 +228,74 @@ export function ProdutosClient({ products }: Props) {
             <div className="p-6 border-b border-[#EAE8E1]">
               <div className="flex items-center gap-2">
                 <Package className="size-5 text-[#1A56FF]" strokeWidth={1.5} />
-                <h2 className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>
-                  Novo Produto
-                </h2>
+                <h2 className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Novo Produto</h2>
               </div>
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-5">
-              {error && (
-                <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>
-              )}
+              {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
-              {/* Upload foto (decorativo) */}
               <div className="flex justify-center">
-                <div className="w-36 h-36 rounded-2xl border-2 border-dashed border-[#EAE8E1] flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#1A56FF] hover:bg-[#EEF2FF]/30 transition-all">
-                  <div className="w-10 h-10 rounded-xl bg-[#F7F6F3] flex items-center justify-center">
-                    <Camera className="size-5 text-[#C8C5BB]" strokeWidth={1.5} />
-                  </div>
-                  <p className="text-xs text-[#C8C5BB] text-center font-medium">Adicionar foto<br />
-                    <span className="font-normal">JPG, PNG até 5MB</span>
-                  </p>
+                <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-[#EAE8E1] flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#1A56FF] transition-all">
+                  <Camera className="size-5 text-[#C8C5BB]" strokeWidth={1.5} />
+                  <p className="text-[10px] text-[#C8C5BB] text-center">Adicionar foto</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider flex items-center gap-1" style={{ fontFamily: 'Barlow, sans-serif' }}>
-                    Nome do produto <span className="text-red-400">*</span>
-                  </label>
+                <div className="col-span-2">
+                  <label className={labelCls}>Nome do produto <span className="text-red-400">*</span></label>
                   <input value={name} onChange={e => setName(e.target.value)} required
-                    placeholder="Ex: Óculos de grau, Lente de contato..."
-                    className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all placeholder:text-[#C8C5BB]" />
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {SUGGESTIONS.map(s => (
-                      <button key={s} type="button" onClick={() => setName(s)}
-                        className="px-2.5 py-1 rounded-full text-xs border border-[#EAE8E1] text-[#8C8880] hover:border-[#1A56FF] hover:text-[#1A56FF] hover:bg-[#EEF2FF] transition-all">
-                        {s}
-                      </button>
-                    ))}
-                  </div>
+                    placeholder="Ex: Ray-Ban Aviador, Lente Transitions..." className={inputCls} />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>
-                    Preço de venda (R$) <span className="text-red-400">*</span>
-                  </label>
+                <div>
+                  <label className={labelCls}>Tipo / NCM</label>
+                  <select value={tipo} onChange={e => setTipo(e.target.value)} className={inputCls}>
+                    <option value="">Selecione o tipo...</option>
+                    {TIPOS.map(t => <option key={t.ncm} value={t.label}>{t.emoji} {t.label} — {t.ncm}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Grife / Marca</label>
+                  <input value={grife} onChange={e => setGrife(e.target.value)} placeholder="Ray-Ban, Oakley..." className={inputCls} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Preço de venda (R$) <span className="text-red-400">*</span></label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
                     <input value={price} onChange={e => setPrice(e.target.value)} type="number" step="0.01" min="0"
-                      placeholder="0,00"
-                      className="w-full h-11 pl-9 pr-3 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all" />
+                      placeholder="0,00" className={inputCls.replace('px-4', 'pl-9 pr-3')} />
                   </div>
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>
-                    Preço de custo (R$) <span className="text-[#C8C5BB] font-normal normal-case tracking-normal ml-1">— para calcular lucro</span>
-                  </label>
+                <div>
+                  <label className={labelCls}>Preço de custo (R$)</label>
                   <div className="relative">
                     <Tag className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
                     <input value={costPrice} onChange={e => setCostPrice(e.target.value)} type="number" step="0.01" min="0"
-                      placeholder="0,00"
-                      className="w-full h-11 pl-9 pr-3 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all" />
+                      placeholder="0,00" className={inputCls.replace('px-4', 'pl-9 pr-3')} />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>
-                    Estoque inicial
-                  </label>
+                <div>
+                  <label className={labelCls}>Estoque inicial</label>
                   <input value={stock} onChange={e => setStock(e.target.value)} type="number" min="0"
-                    className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all" />
-                  <p className="text-xs text-[#C8C5BB]">Quantidade disponível agora</p>
+                    disabled={!controla} className={inputCls + (controla ? '' : ' opacity-50')} />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <button type="button" onClick={() => setControla(!controla)}
+                    className="flex items-center justify-between px-3 h-11 rounded-xl bg-[#F7F6F3] border border-[#EAE8E1]">
+                    <span className="text-sm font-medium text-[#2E2D29]">Controla estoque</span>
+                    <span className={`relative w-10 h-5 rounded-full transition-colors ${controla ? 'bg-[#0DB57A]' : 'bg-[#EAE8E1]'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${controla ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </span>
+                  </button>
                 </div>
 
-                {price && costPrice && parseFloat(price) > 0 && parseFloat(costPrice) > 0 && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>
-                      Margem de lucro
-                    </label>
+                {margem !== null && (
+                  <div className="col-span-2">
                     <div className="h-11 px-4 rounded-xl bg-[#E6F9F3] border border-[#0DB57A]/20 flex items-center">
-                      <span className="text-sm font-bold text-[#0DB57A]">
-                        {Math.round(((parseFloat(price) - parseFloat(costPrice)) / parseFloat(price)) * 100)}% de margem
-                      </span>
+                      <span className="text-sm font-bold text-[#0DB57A]">{margem}% de margem de lucro</span>
                     </div>
                   </div>
                 )}
@@ -296,14 +304,90 @@ export function ProdutosClient({ products }: Props) {
               <button type="submit" disabled={loading}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-                {loading ? <Loader2 className="size-4 animate-spin" />
-                  : saved ? <><Check className="size-4" /> Produto salvo!</>
-                  : <><Package className="size-4" /> Salvar Produto</>}
+                {loading ? <Loader2 className="size-4 animate-spin" /> : saved ? <><Check className="size-4" /> Produto salvo!</> : <><Package className="size-4" /> Salvar Produto</>}
               </button>
             </form>
           </GlowCard>
         </div>
       )}
+
+      {/* Modal de movimentação */}
+      {movProduct && <MovimentacaoModal product={movProduct} onClose={() => setMovProduct(null)} />}
+    </div>
+  )
+}
+
+function MovimentacaoModal({ product, onClose }: { product: Product; onClose: () => void }) {
+  const [tipo, setTipo] = useState<'entrada' | 'saida' | 'ajuste'>('entrada')
+  const [qtd, setQtd] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const q = parseInt(qtd)
+    if (!q || q <= 0) { setError('Quantidade inválida.'); return }
+    setLoading(true); setError(null)
+    const result = await movimentarEstoque({ productId: product.id, tipo, quantidade: q, motivo })
+    setLoading(false)
+    if (result?.error) { setError(result.error); return }
+    onClose()
+  }
+
+  const TIPOS_MOV = [
+    { key: 'entrada', label: 'Entrada', icon: ArrowUp, color: '#0DB57A', bg: '#E6F9F3' },
+    { key: 'saida', label: 'Saída', icon: ArrowDown, color: '#EF4444', bg: '#FEF2F2' },
+    { key: 'ajuste', label: 'Ajuste', icon: RefreshCw, color: '#1A56FF', bg: '#EEF2FF' },
+  ] as const
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4" style={{ background: 'linear-gradient(135deg, #0A0F1E, #1A56FF)' }}>
+          <div className="flex items-center gap-2.5">
+            <Package className="size-5 text-white" strokeWidth={1.5} />
+            <div>
+              <p className="text-sm font-bold text-white">Movimentar Estoque</p>
+              <p className="text-xs text-white/50">{product.name} — atual: {product.stock} un.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/50 hover:text-white"><X className="size-5" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
+          <div className="grid grid-cols-3 gap-2">
+            {TIPOS_MOV.map(t => (
+              <button key={t.key} type="button" onClick={() => setTipo(t.key)}
+                className="flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all"
+                style={{ borderColor: tipo === t.key ? t.color : '#EAE8E1', background: tipo === t.key ? t.bg : 'white' }}>
+                <t.icon className="size-4" style={{ color: tipo === t.key ? t.color : '#C8C5BB' }} />
+                <span className="text-xs font-bold" style={{ color: tipo === t.key ? t.color : '#8C8880', fontFamily: 'Barlow, sans-serif' }}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+          <div>
+            <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider mb-1.5 block" style={{ fontFamily: 'Barlow, sans-serif' }}>
+              {tipo === 'ajuste' ? 'Novo valor do estoque' : 'Quantidade'} <span className="text-red-400">*</span>
+            </label>
+            <input value={qtd} onChange={e => setQtd(e.target.value)} type="number" min="1" required autoFocus
+              className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider mb-1.5 block" style={{ fontFamily: 'Barlow, sans-serif' }}>Motivo</label>
+            <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ex: Compra, venda, perda..."
+              className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880] hover:text-[#2E2D29] transition-colors">Cancelar</button>
+            <button type="submit" disabled={loading}
+              className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white"
+              style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <><Check className="size-4" /> Confirmar</>}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
