@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Calendar, Users, DollarSign,
   Bot, MessageSquare, Settings, LogOut, Eye,
-  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3,
+  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -23,6 +23,7 @@ const navItems = [
   { href: '/dashboard/ordens-servico', label: 'Ordens de Serviço', icon: FileText },
   { href: '/dashboard/produtos', label: 'Produtos', icon: Package },
   { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
+  { href: '/dashboard/caixa', label: 'Caixa', icon: Wallet },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/dashboard/avaliacoes', label: 'Avaliações', icon: Star },
   { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
@@ -87,6 +88,12 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
+        <Link href="/dashboard/parametros"
+          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+            isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/5')}>
+          <SlidersHorizontal className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
+          Parâmetros
+        </Link>
         <Link href="/dashboard/settings"
           className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
             isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/5')}>
