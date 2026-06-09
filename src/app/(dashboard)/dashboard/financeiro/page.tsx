@@ -11,10 +11,11 @@ export default async function FinanceiroPage() {
   const companyId = userData?.company_id
   const companySlug = (userData?.companies as { slug?: string } | null)?.slug ?? 'minha-otica'
 
-  const [{ data: transactions }, { data: contacts }] = await Promise.all([
+  const [{ data: transactions }, { data: contacts }, { data: contasPagar }] = await Promise.all([
     service.from('transactions').select('id, amount, status, due_date, created_at, notes, contacts(id, name, phone)')
       .eq('company_id', companyId).order('created_at', { ascending: false }),
     service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
+    service.from('contas_pagar' as never).select('*').eq('company_id', companyId).order('vencimento'),
   ])
 
   return (
@@ -25,6 +26,7 @@ export default async function FinanceiroPage() {
           transactions={(transactions ?? []) as never}
           contacts={contacts ?? []}
           companySlug={companySlug}
+          contasPagar={(contasPagar ?? []) as never}
         />
       </div>
     </div>

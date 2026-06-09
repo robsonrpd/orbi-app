@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { TransactionBadge } from '@/components/orbi/status-badge'
 import { NovaCobrancaModal } from '@/components/orbi/nova-cobranca-modal'
+import { AcoesRapidasFinanceiro } from '@/components/orbi/acoes-rapidas-financeiro'
 import {
   DollarSign, TrendingDown, TrendingUp, RotateCcw,
   Copy, ExternalLink, List, BarChart2, Filter,
@@ -26,9 +27,14 @@ function fmtDate(s: string) {
 
 const PERIODS = ['Hoje', 'Ontem', '7 dias', '30 dias', 'Mês atual', 'Mês passado']
 
-type Props = { transactions: Transaction[]; contacts: Contact[]; companySlug: string }
+type ContaPagar = {
+  id: string; descricao: string; fornecedor: string | null
+  valor: number; vencimento: string | null; status: string
+}
 
-export function FinanceiroRedesignClient({ transactions, contacts, companySlug }: Props) {
+type Props = { transactions: Transaction[]; contacts: Contact[]; companySlug: string; contasPagar: ContaPagar[] }
+
+export function FinanceiroRedesignClient({ transactions, contacts, companySlug, contasPagar }: Props) {
   const [period, setPeriod] = useState('30 dias')
   const [view, setView] = useState<'resumo' | 'fluxo'>('resumo')
   const [novaCobrancaOpen, setNovaCobrancaOpen] = useState(false)
@@ -60,6 +66,9 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug }
   return (
     <>
       <div className="space-y-5">
+        {/* Menu de ações rápidas */}
+        <AcoesRapidasFinanceiro contasPagar={contasPagar} />
+
         {/* Período */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="flex items-center gap-1.5 text-xs font-bold text-[#8C8880] uppercase tracking-wider mr-1"
