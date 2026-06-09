@@ -13,27 +13,47 @@ async function getCompanyId(): Promise<string | null> {
   return data?.company_id ?? null
 }
 
+function extractFields(formData: FormData) {
+  const get = (k: string) => {
+    const v = formData.get(k) as string
+    return v?.trim() ? v.trim() : null
+  }
+  const tagsRaw = formData.get('tags') as string
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : []
+  const lgpd = (formData.get('lgpd_consent') as string) || 'nao_informado'
+  const active = formData.get('active') !== 'false'
+
+  return {
+    name: get('name'),
+    phone: get('phone'),
+    email: get('email'),
+    cep: get('cep'),
+    endereco: get('endereco'),
+    numero: get('numero'),
+    complemento: get('complemento'),
+    bairro: get('bairro'),
+    cidade: get('cidade'),
+    uf: get('uf'),
+    notes: get('notes'),
+    tags,
+    lgpd_consent: lgpd,
+    active,
+  }
+}
+
 export async function createContact(formData: FormData) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
 
+  const f = extractFields(formData)
+  if (!f.phone) return { error: 'Telefone é obrigatório.' }
+  if (f.phone.length > 20) return { error: 'Telefone inválido.' }
+  if (f.name && f.name.length > 200) return { error: 'Nome muito longo.' }
+
   const service = createServiceClient()
-  const name = formData.get('name') as string
-  const phone = formData.get('phone') as string
-  const notes = formData.get('notes') as string
-  const tagsRaw = formData.get('tags') as string
-  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : []
-
-  if (!phone?.trim()) return { error: 'Telefone é obrigatório.' }
-  if (phone.length > 20) return { error: 'Telefone inválido.' }
-  if (name && name.length > 200) return { error: 'Nome muito longo.' }
-
   const { error } = await service.from('contacts').insert({
-    company_id: companyId, // sempre do servidor, nunca do cliente
-    name: name?.trim() || null,
-    phone: phone.trim(),
-    notes: notes?.trim() || null,
-    tags,
+    company_id: companyId,
+    ...f,
   })
 
   if (error) {
@@ -50,32 +70,14 @@ export async function updateContact(id: string, formData: FormData) {
   if (!companyId) return { error: 'Não autenticado.' }
 
   const service = createServiceClient()
-
-  // SEGURANÇA: confirma que o contato pertence à empresa do usuário
   const { data: existing } = await service
-    .from('contacts')
-    .select('id')
-    .eq('id', id)
-    .eq('company_id', companyId)
-    .single()
-
+    .from('contacts').select('id').eq('id', id).eq('company_id', companyId).single()
   if (!existing) return { error: 'Contato não encontrado.' }
 
-  const name = formData.get('name') as string
-  const phone = formData.get('phone') as string
-  const notes = formData.get('notes') as string
-  const tagsRaw = formData.get('tags') as string
-  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : []
+  const f = extractFields(formData)
+  if (!f.phone) return { error: 'Telefone é obrigatório.' }
 
-  if (!phone?.trim()) return { error: 'Telefone é obrigatório.' }
-
-  const { error } = await service.from('contacts').update({
-    name: name?.trim() || null,
-    phone: phone.trim(),
-    notes: notes?.trim() || null,
-    tags,
-  }).eq('id', id).eq('company_id', companyId)
-
+  const { error } = await service.from('contacts').update(f).eq('id', id).eq('company_id', companyId)
   if (error) return { error: 'Erro ao atualizar cliente.' }
 
   revalidatePath('/dashboard/clientes')
