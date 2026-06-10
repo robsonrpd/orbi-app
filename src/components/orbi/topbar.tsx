@@ -1,6 +1,7 @@
 'use client'
 
-import { Bell, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
+import { Notificacoes } from './notificacoes'
 
 type TopbarProps = {
   title: string
@@ -29,10 +30,7 @@ export function Topbar({ title, subtitle }: TopbarProps) {
             className="h-8 w-48 pl-8 pr-3 text-xs rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-[#2E2D29] placeholder:text-[#C8C5BB] outline-none focus:border-[#1A56FF] focus:ring-2 focus:ring-[#1A56FF]/10 transition-all"
           />
         </div>
-        <button className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F7F6F3] border border-[#EAE8E1] transition-colors">
-          <Bell className="size-3.5 text-[#8C8880]" strokeWidth={1.5} />
-          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#1A56FF] rounded-full" />
-        </button>
+        <Notificacoes />
       </div>
     </header>
   )

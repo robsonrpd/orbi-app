@@ -67,7 +67,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="relative z-10 flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        <p className="text-[10px] font-bold text-white/20 uppercase tracking-[2px] px-3 pb-2 pt-1"
+        <p className="text-[10px] font-bold text-white/35 uppercase tracking-[2px] px-3 pb-2 pt-1"
           style={{ fontFamily: 'Barlow, sans-serif' }}>Menu</p>
         {navItems.map((item) => {
           const active = isActive(item.href, item.exact)
@@ -75,10 +75,10 @@ export function Sidebar() {
             <Link key={item.href} href={item.href}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group',
-                active ? 'text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                active ? 'text-white' : 'text-white/70 hover:text-white hover:bg-white/5'
               )}
               style={active ? { background: 'rgba(26,86,255,0.2)', boxShadow: 'inset 0 0 0 1px rgba(26,86,255,0.3)' } : {}}>
-              <item.icon className={cn('size-4 shrink-0 transition-colors', active ? 'text-[#93AAFF]' : 'text-white/30 group-hover:text-white/50')} strokeWidth={1.5} />
+              <item.icon className={cn('size-4 shrink-0 transition-colors', active ? 'text-[#93AAFF]' : 'text-white/50 group-hover:text-white/80')} strokeWidth={1.5} />
               <span>{item.label}</span>
               {active && <span className="ml-auto w-1 h-4 rounded-full bg-[#1A56FF]" />}
             </Link>
@@ -90,19 +90,19 @@ export function Sidebar() {
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
         <Link href="/dashboard/parametros"
           className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/5')}>
-          <SlidersHorizontal className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
+            isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+          <SlidersHorizontal className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
           Parâmetros
         </Link>
         <Link href="/dashboard/settings"
           className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/5')}>
-          <Settings className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
+            isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+          <Settings className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
           Configurações
         </Link>
         <button onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all">
-          <LogOut className="size-4 shrink-0 text-white/30" strokeWidth={1.5} />
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all">
+          <LogOut className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
           Sair
         </button>
       </div>
