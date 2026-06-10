@@ -62,3 +62,44 @@ export async function createTransaction(formData: FormData) {
   revalidatePath('/dashboard')
   return { success: true }
 }
+
+const FORMAS = ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'boleto', 'outro']
+
+/** Dá baixa manual numa cobrança: marca como paga com a forma de pagamento. */
+export async function baixarTransacao(id: string, forma: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!FORMAS.includes(forma)) return { error: 'Forma de pagamento inválida.' }
+
+  const service = createServiceClient()
+  // Valida posse
+  const { data: tx } = await service
+    .from('transactions').select('id').eq('id', id).eq('company_id', companyId).single()
+  if (!tx) return { error: 'Cobrança não encontrada.' }
+
+  const { error } = await service.from('transactions').update({
+    status: 'paid',
+    paid_at: new Date().toISOString(),
+    forma_pagamento: forma,
+  }).eq('id', id).eq('company_id', companyId)
+
+  if (error) return { error: 'Erro ao dar baixa.' }
+
+  revalidatePath('/dashboard/financeiro')
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+/** Reabre uma cobrança paga (volta para pendente). */
+export async function reabrirTransacao(id: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+  const { error } = await service.from('transactions').update({
+    status: 'pending', paid_at: null, forma_pagamento: null,
+  }).eq('id', id).eq('company_id', companyId)
+  if (error) return { error: 'Erro ao reabrir.' }
+  revalidatePath('/dashboard/financeiro')
+  revalidatePath('/dashboard')
+  return { success: true }
+}

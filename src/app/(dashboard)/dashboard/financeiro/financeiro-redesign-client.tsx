@@ -5,10 +5,11 @@ import { GlowCard } from '@/components/orbi/glow-card'
 import { TransactionBadge } from '@/components/orbi/status-badge'
 import { NovaCobrancaModal } from '@/components/orbi/nova-cobranca-modal'
 import { AcoesRapidasFinanceiro } from '@/components/orbi/acoes-rapidas-financeiro'
+import { baixarTransacao } from '@/lib/actions/transactions'
 import {
   DollarSign, TrendingDown, TrendingUp, RotateCcw,
   Copy, ExternalLink, List, BarChart2, Filter,
-  Plus, QrCode, ChevronRight
+  Plus, QrCode, ChevronRight, X, Loader2, Check, Banknote, CreditCard, Smartphone, FileText
 } from 'lucide-react'
 
 type Contact = { id: string; name: string | null; phone: string }
@@ -39,6 +40,7 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
   const [view, setView] = useState<'resumo' | 'fluxo'>('resumo')
   const [novaCobrancaOpen, setNovaCobrancaOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [receberTx, setReceberTx] = useState<{ id: string; nome: string; valor: number } | null>(null)
 
   const paid = transactions.filter(t => t.status === 'paid')
   const pending = transactions.filter(t => t.status === 'pending')
@@ -183,8 +185,12 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
               </div>
             ) : (
               <div className="divide-y divide-[#F7F6F3]">
-                {transactions.map(t => (
-                  <div key={t.id} className="flex items-center justify-between py-4 hover:bg-[#F7F6F3] -mx-2 px-2 rounded-xl transition-colors">
+                {transactions.map(t => {
+                  const podeReceber = t.status === 'pending' || t.status === 'overdue'
+                  return (
+                  <div key={t.id}
+                    onClick={() => podeReceber && setReceberTx({ id: t.id, nome: t.contacts?.name ?? t.contacts?.phone ?? '—', valor: Number(t.amount) })}
+                    className={`flex items-center justify-between py-4 -mx-2 px-2 rounded-xl transition-colors ${podeReceber ? 'hover:bg-[#EEF2FF] cursor-pointer' : 'hover:bg-[#F7F6F3]'}`}>
                     <div className="flex items-center gap-4">
                       <div className="w-9 h-9 rounded-full bg-[#EEF2FF] flex items-center justify-center text-xs font-bold text-[#1A56FF]">
                         {(t.contacts?.name ?? t.contacts?.phone ?? '?')[0].toUpperCase()}
@@ -197,14 +203,19 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
+                      {podeReceber && (
+                        <span className="text-xs font-bold text-[#0DB57A] bg-[#E6F9F3] px-2.5 py-1 rounded-full hidden group-hover:inline">Receber</span>
+                      )}
                       <TransactionBadge status={t.status as 'pending' | 'paid' | 'overdue' | 'cancelled'} />
                       <p className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>
                         {fmt(Number(t.amount))}
                       </p>
-                      <ChevronRight className="size-4 text-[#C8C5BB]" />
+                      {podeReceber
+                        ? <span className="text-xs font-bold text-[#0DB57A]">Receber →</span>
+                        : <ChevronRight className="size-4 text-[#C8C5BB]" />}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -212,6 +223,83 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
       </div>
 
       <NovaCobrancaModal open={novaCobrancaOpen} onClose={() => setNovaCobrancaOpen(false)} contacts={contacts} />
+      {receberTx && <ReceberModal tx={receberTx} onClose={() => setReceberTx(null)} />}
     </>
+  )
+}
+
+const FORMAS_PAGTO = [
+  { key: 'dinheiro', label: 'Dinheiro', icon: Banknote, color: '#0DB57A', bg: '#E6F9F3' },
+  { key: 'pix', label: 'PIX', icon: Smartphone, color: '#1A56FF', bg: '#EEF2FF' },
+  { key: 'cartao_credito', label: 'Crédito', icon: CreditCard, color: '#8B5CF6', bg: '#F5F3FF' },
+  { key: 'cartao_debito', label: 'Débito', icon: CreditCard, color: '#06B6D4', bg: '#ECFEFF' },
+  { key: 'boleto', label: 'Boleto', icon: FileText, color: '#F59E0B', bg: '#FEF3C7' },
+  { key: 'outro', label: 'Outro', icon: DollarSign, color: '#8C8880', bg: '#F1F0EC' },
+]
+
+function ReceberModal({ tx, onClose }: { tx: { id: string; nome: string; valor: number }; onClose: () => void }) {
+  const [forma, setForma] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function confirmar() {
+    if (!forma) { setError('Escolha a forma de pagamento.'); return }
+    setLoading(true); setError(null)
+    const r = await baixarTransacao(tx.id, forma)
+    setLoading(false)
+    if (r?.error) { setError(r.error); return }
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4" style={{ background: 'linear-gradient(135deg,#0DB57A,#0a9e6a)' }}>
+          <div className="flex items-center gap-2.5">
+            <Check className="size-5 text-white" strokeWidth={2} />
+            <p className="text-sm font-bold text-white">Receber Pagamento</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white"><X className="size-5" /></button>
+        </div>
+        <div className="p-6 space-y-5">
+          {/* Resumo */}
+          <div className="rounded-xl bg-[#F7F6F3] p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-[#8C8880]">Recebendo de</p>
+              <p className="text-sm font-bold text-[#1C1B18]">{tx.nome}</p>
+            </div>
+            <p className="text-2xl font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.valor)}
+            </p>
+          </div>
+
+          {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
+
+          {/* Formas de pagamento */}
+          <div>
+            <p className="text-xs font-bold text-[#8C8880] uppercase tracking-wider mb-2.5" style={{ fontFamily: 'Barlow, sans-serif' }}>Forma de pagamento</p>
+            <div className="grid grid-cols-3 gap-2">
+              {FORMAS_PAGTO.map(f => (
+                <button key={f.key} onClick={() => setForma(f.key)}
+                  className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all"
+                  style={{ borderColor: forma === f.key ? f.color : '#EAE8E1', background: forma === f.key ? f.bg : 'white' }}>
+                  <f.icon className="size-5" style={{ color: forma === f.key ? f.color : '#C8C5BB' }} strokeWidth={1.5} />
+                  <span className="text-xs font-semibold" style={{ color: forma === f.key ? f.color : '#8C8880' }}>{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880] hover:text-[#2E2D29] transition-colors">Cancelar</button>
+            <button onClick={confirmar} disabled={loading}
+              className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg,#0DB57A,#0a9e6a)', boxShadow: '0 4px 16px rgba(13,181,122,0.35)' }}>
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <><Check className="size-4" /> Confirmar Recebimento</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
