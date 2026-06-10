@@ -69,7 +69,12 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
     <>
       <div className="space-y-5">
         {/* Menu de ações rápidas */}
-        <AcoesRapidasFinanceiro contasPagar={contasPagar} />
+        <AcoesRapidasFinanceiro
+          contasPagar={contasPagar}
+          pendentes={transactions
+            .filter(t => t.status === 'pending' || t.status === 'overdue')
+            .map(t => ({ id: t.id, nome: t.contacts?.name ?? t.contacts?.phone ?? '—', valor: Number(t.amount), due_date: t.due_date }))}
+        />
 
         {/* Período */}
         <div className="flex items-center gap-2 flex-wrap">
