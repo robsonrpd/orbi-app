@@ -8,32 +8,37 @@ export default async function FounderPage() {
   const admin = await getSuperAdmin()
   const service = createServiceClient()
 
-  // Todas as empresas + contagem de usuários
   const { data: companies } = await service
     .from('companies')
-    .select('id, name, slug, business_type, subscription_status, subscription_plan, trial_ends_at, created_at, active')
+    .select('id, name, slug, business_type, subscription_status, subscription_plan, trial_ends_at, created_at, active, settings')
     .order('created_at', { ascending: false })
 
-  // Conta clientes (contacts) e usuários por empresa para métricas de uso
+  // Clientes (contacts) por empresa
   const { data: contactsCount } = await service.from('contacts').select('company_id')
   const usoMap: Record<string, number> = {}
   ;(contactsCount ?? []).forEach(c => { usoMap[c.company_id] = (usoMap[c.company_id] ?? 0) + 1 })
 
-  const list = (companies ?? []).map(c => ({
-    ...c,
-    clientes: usoMap[c.id] ?? 0,
-  }))
+  // E-mail do dono (admin) por empresa
+  const { data: users } = await service.from('users').select('company_id, email, name').eq('role', 'admin')
+  const ownerMap: Record<string, { email: string; name: string | null }> = {}
+  ;(users ?? []).forEach(u => { if (!ownerMap[u.company_id]) ownerMap[u.company_id] = { email: u.email, name: u.name } })
 
-  // MRR estimado
+  const list = (companies ?? []).map(c => {
+    const settings = (c.settings ?? {}) as { owner_phone?: string }
+    return {
+      id: c.id, name: c.name, slug: c.slug, business_type: c.business_type,
+      subscription_status: c.subscription_status, subscription_plan: c.subscription_plan,
+      trial_ends_at: c.trial_ends_at, created_at: c.created_at, active: c.active,
+      clientes: usoMap[c.id] ?? 0,
+      owner_email: ownerMap[c.id]?.email ?? null,
+      owner_name: ownerMap[c.id]?.name ?? null,
+      owner_phone: settings.owner_phone ?? null,
+    }
+  })
+
   const mrr = list
     .filter(c => c.subscription_status === 'active')
     .reduce((s, c) => s + (PLAN_PRICE[c.subscription_plan ?? ''] ?? 97), 0)
 
-  return (
-    <FounderClient
-      companies={list as never}
-      mrr={mrr}
-      adminEmail={admin?.email ?? ''}
-    />
-  )
+  return <FounderClient companies={list as never} mrr={mrr} adminEmail={admin?.email ?? ''} />
 }
