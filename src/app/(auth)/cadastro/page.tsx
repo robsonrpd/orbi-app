@@ -4,13 +4,13 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, User, Building2, Mail, Lock, ArrowRight, Check } from 'lucide-react'
+import { Loader2, User, Building2, Mail, Lock, ArrowRight, Check, Phone } from 'lucide-react'
 
 const perks = ['14 dias grátis', 'Sem cartão de crédito', 'Cancele quando quiser']
 
 export default function CadastroPage() {
   const router = useRouter()
-  const [form, setForm] = useState({ name: '', company: '', email: '', password: '' })
+  const [form, setForm] = useState({ name: '', company: '', phone: '', email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,7 +38,7 @@ export default function CadastroPage() {
     const res = await fetch('/api/setup-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, companyName: form.company }),
+      body: JSON.stringify({ name: form.name, companyName: form.company, phone: form.phone }),
     })
 
     if (!res.ok) {
@@ -128,6 +128,20 @@ export default function CadastroPage() {
             <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
             <input type="email" placeholder="seu@email.com" value={form.email}
               onChange={e => set('email', e.target.value)} required
+              className="w-full h-11 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
+          </div>
+        </div>
+
+        {/* WhatsApp */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-[#2E2D29] uppercase tracking-wider"
+            style={{ fontFamily: 'Barlow, sans-serif' }}>
+            WhatsApp
+          </label>
+          <div className="relative">
+            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
+            <input type="tel" placeholder="(85) 99999-9999" value={form.phone}
+              onChange={e => set('phone', e.target.value)} required
               className="w-full h-11 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
           </div>
         </div>

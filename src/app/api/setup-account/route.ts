@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
     }
 
-    const { name, companyName } = await req.json()
+    const { name, companyName, phone } = await req.json()
 
     const service = createServiceClient()
 
@@ -39,10 +39,15 @@ export async function POST(req: NextRequest) {
 
     const slug = toSlug(companyName || 'empresa') + '-' + user.id.slice(0, 6)
 
-    // 3. Cria a empresa
+    // 3. Cria a empresa (guarda telefone do dono em settings para suporte/IA)
+    const ownerPhone = (phone ?? '').replace(/\D/g, '')
     const { data: company, error: companyError } = await service
       .from('companies')
-      .insert({ name: companyName || 'Minha Empresa', slug })
+      .insert({
+        name: companyName || 'Minha Empresa',
+        slug,
+        settings: ownerPhone ? { owner_phone: ownerPhone } : {},
+      })
       .select()
       .single()
 
