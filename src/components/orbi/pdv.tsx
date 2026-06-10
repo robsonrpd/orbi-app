@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { registrarVenda } from '@/lib/actions/vendas'
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, Loader2, Check,
-  Banknote, Smartphone, CreditCard, User, X, AlertTriangle, Wallet
+  Banknote, Smartphone, CreditCard, User, X, AlertTriangle, Wallet, Calendar
 } from 'lucide-react'
 
 type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null }
@@ -34,6 +34,7 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [showContacts, setShowContacts] = useState(false)
   const [vendedor, setVendedor] = useState('')
+  const [dataVenda, setDataVenda] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sucesso, setSucesso] = useState<string | null>(null)
@@ -71,11 +72,14 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
     if (cart.length === 0) { setError('Adicione produtos ao carrinho.'); return }
     if (!forma) { setError('Escolha a forma de pagamento.'); return }
     setLoading(true); setError(null)
+    // Se a data for hoje, usa o horário atual; senão, meio-dia da data escolhida
+    const hoje = new Date().toISOString().split('T')[0]
+    const dataISO = dataVenda === hoje ? new Date().toISOString() : new Date(dataVenda + 'T12:00:00').toISOString()
     const result = await registrarVenda({
       itens: cart.map(({ product_id, nome, valor, qtd }) => ({ product_id, nome, valor, qtd })),
       contactId: selectedContact?.id ?? null,
       clienteNome: selectedContact?.name ?? '',
-      vendedor, formaPagamento: forma,
+      vendedor, formaPagamento: forma, dataVenda: dataISO,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
@@ -163,7 +167,13 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
         <div className="border-t border-[#EAE8E1] p-3 space-y-3">
           {error && <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg px-3 py-2 flex items-center gap-1.5"><AlertTriangle className="size-3.5 shrink-0" />{error}</div>}
 
-          {/* Cliente (opcional) */}
+          {/* Data + Cliente */}
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
+            <input type="date" value={dataVenda} onChange={e => setDataVenda(e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full h-9 pl-8 pr-3 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none focus:border-[#1A56FF]" />
+          </div>
           <div className="relative">
             <User className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
             <input value={contactSearch}

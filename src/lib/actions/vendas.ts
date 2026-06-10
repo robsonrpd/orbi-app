@@ -28,11 +28,18 @@ export async function registrarVenda(payload: {
   clienteNome: string
   vendedor: string
   formaPagamento: string
+  dataVenda?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
   if (!payload.itens?.length) return { error: 'Adicione ao menos um produto.' }
   if (!payload.formaPagamento) return { error: 'Escolha a forma de pagamento.' }
+
+  // Data da venda (permite registrar venda passada). Default: agora.
+  let dataISO = new Date().toISOString()
+  if (payload.dataVenda && !isNaN(new Date(payload.dataVenda).getTime())) {
+    dataISO = new Date(payload.dataVenda).toISOString()
+  }
 
   const service = createServiceClient()
 
@@ -82,6 +89,7 @@ export async function registrarVenda(payload: {
     itens: payload.itens, total,
     forma_pagamento: payload.formaPagamento,
     caixa_id: caixa?.id ?? null,
+    created_at: dataISO,
   })
   if (vendaError) return { error: 'Erro ao registrar venda.' }
 
@@ -89,7 +97,7 @@ export async function registrarVenda(payload: {
   if (caixa) {
     await service.from('caixa_movimentos').insert({
       company_id: companyId, caixa_id: caixa.id, tipo: 'entrada',
-      valor: total, descricao: `Venda #${numero}`,
+      valor: total, descricao: `Venda #${numero}`, created_at: dataISO,
     })
     await service.from('caixas').update({ total_entradas: Number(caixa.total_entradas) + total })
       .eq('id', caixa.id).eq('company_id', companyId)
@@ -98,7 +106,7 @@ export async function registrarVenda(payload: {
   // 7. Transação paga (faturamento)
   await service.from('transactions').insert({
     company_id: companyId, contact_id: payload.contactId, amount: total,
-    status: 'paid', paid_at: new Date().toISOString(),
+    status: 'paid', paid_at: dataISO, created_at: dataISO,
     forma_pagamento: payload.formaPagamento,
     notes: `Venda #${numero} — produtos`,
   })
