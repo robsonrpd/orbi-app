@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createProduct, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
+import { PDV } from '@/components/orbi/pdv'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, Camera, AlertTriangle,
@@ -49,9 +50,17 @@ function emojiFor(tipo: string | null) {
   return [...TIPOS, ...TIPOS_DIVERSOS].find(t => t.label === tipo)?.emoji ?? '📦'
 }
 
-type Props = { products: Product[] }
+type Contact = { id: string; name: string | null; phone: string }
+type Venda = {
+  id: string; numero: number; cliente_nome: string | null; vendedor: string | null
+  itens: { nome: string; valor: number; qtd: number }[]; total: number
+  forma_pagamento: string | null; created_at: string
+  contacts: { name: string | null; phone: string } | null
+}
 
-export function ProdutosClient({ products }: Props) {
+type Props = { products: Product[]; contacts: Contact[]; vendas: Venda[]; caixaAberto: boolean }
+
+export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Props) {
   const [tab, setTab] = useState<'estoque' | 'vender' | 'vendas' | 'cadastrar'>('estoque')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -238,19 +247,67 @@ export function ProdutosClient({ products }: Props) {
         </>
       )}
 
-      {/* Vender / Vendas placeholders */}
+      {/* Vender — PDV funcional */}
       {tab === 'vender' && (
-        <GlowCard><div className="p-8 text-center flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#EEF2FF] flex items-center justify-center"><ShoppingCart className="size-7 text-[#1A56FF]" strokeWidth={1.5} /></div>
-          <div><p className="text-base font-bold text-[#1C1B18]">Ponto de Venda</p>
-          <p className="text-sm text-[#8C8880] mt-1 max-w-xs">Em breve — venda de produtos com baixa automática de estoque e cobrança via Asaas.</p></div>
-        </div></GlowCard>
+        <PDV products={products as never} contacts={contacts} caixaAberto={caixaAberto} />
       )}
+
+      {/* Vendas — histórico */}
       {tab === 'vendas' && (
-        <GlowCard><div className="p-8 text-center flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#E6F9F3] flex items-center justify-center"><BarChart2 className="size-7 text-[#0DB57A]" strokeWidth={1.5} /></div>
-          <div><p className="text-base font-bold text-[#1C1B18]">Histórico de Vendas</p><p className="text-sm text-[#8C8880] mt-1">Nenhuma venda registrada ainda.</p></div>
-        </div></GlowCard>
+        vendas.length === 0 ? (
+          <GlowCard><div className="p-12 text-center flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-[#E6F9F3] flex items-center justify-center"><BarChart2 className="size-7 text-[#0DB57A]" strokeWidth={1.5} /></div>
+            <div><p className="text-base font-bold text-[#1C1B18]">Histórico de Vendas</p><p className="text-sm text-[#8C8880] mt-1">Nenhuma venda registrada. Use a aba "Vender" para registrar.</p></div>
+          </div></GlowCard>
+        ) : (
+          <div className="space-y-3">
+            {/* Resumo */}
+            <div className="grid grid-cols-3 gap-4">
+              <GlowCard><div className="p-4">
+                <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1" style={{ fontFamily: 'Barlow, sans-serif' }}>Total de Vendas</p>
+                <p className="text-2xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{vendas.length}</p>
+              </div></GlowCard>
+              <GlowCard><div className="p-4">
+                <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1" style={{ fontFamily: 'Barlow, sans-serif' }}>Faturado</p>
+                <p className="text-2xl font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(vendas.reduce((s, v) => s + Number(v.total), 0))}</p>
+              </div></GlowCard>
+              <GlowCard><div className="p-4">
+                <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1" style={{ fontFamily: 'Barlow, sans-serif' }}>Itens Vendidos</p>
+                <p className="text-2xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{vendas.reduce((s, v) => s + v.itens.reduce((a, i) => a + Number(i.qtd), 0), 0)}</p>
+              </div></GlowCard>
+            </div>
+            {/* Lista */}
+            <GlowCard><div className="divide-y divide-[#F7F6F3]">
+              {vendas.map(v => (
+                <div key={v.id} className="px-5 py-3.5 flex items-center justify-between hover:bg-[#F7F6F3] transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 text-center px-2 py-1.5 rounded-xl bg-[#0A0F1E]">
+                      <p className="text-[9px] text-white/40 uppercase" style={{ fontFamily: 'Barlow, sans-serif' }}>Venda</p>
+                      <p className="text-sm font-black text-white" style={{ fontFamily: 'Fraunces, serif' }}>#{v.numero}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[#1C1B18]">
+                        {v.itens.map(i => `${i.qtd}x ${i.nome}`).join(', ')}
+                      </p>
+                      <p className="text-xs text-[#8C8880]">
+                        {v.contacts?.name ?? v.cliente_nome ?? 'Cliente avulso'}
+                        {' · '}{new Date(v.created_at).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {v.forma_pagamento && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#1A56FF] uppercase" style={{ fontFamily: 'Barlow, sans-serif' }}>
+                        {v.forma_pagamento.replace('cartao_', '').replace('_', ' ')}
+                      </span>
+                    )}
+                    <p className="text-sm font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(Number(v.total))}</p>
+                  </div>
+                </div>
+              ))}
+            </div></GlowCard>
+          </div>
+        )
       )}
 
       {/* Cadastrar */}
