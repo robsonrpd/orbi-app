@@ -13,7 +13,7 @@ type Product = {
   id: string; name: string; price: number; cost_price: number
   stock: number; active: boolean; created_at: string
   tipo_produto: string | null; ncm: string | null; grife: string | null
-  controla_estoque: boolean | null
+  controla_estoque: boolean | null; categoria: string | null
 }
 
 function fmt(v: number) {
@@ -35,8 +35,18 @@ const TIPOS = [
   { label: 'Serviços/Outros', ncm: '00000000', emoji: '📦' },
 ]
 
+// Tipos de produtos diversos / conveniência
+const TIPOS_DIVERSOS = [
+  { label: 'Bebida', ncm: '', emoji: '🥤' },
+  { label: 'Alimento / Snack', ncm: '', emoji: '🍫' },
+  { label: 'Café / Quente', ncm: '', emoji: '☕' },
+  { label: 'Acessório', ncm: '', emoji: '🎒' },
+  { label: 'Higiene / Limpeza', ncm: '', emoji: '🧴' },
+  { label: 'Outro', ncm: '', emoji: '🛒' },
+]
+
 function emojiFor(tipo: string | null) {
-  return TIPOS.find(t => t.label === tipo)?.emoji ?? '📦'
+  return [...TIPOS, ...TIPOS_DIVERSOS].find(t => t.label === tipo)?.emoji ?? '📦'
 }
 
 type Props = { products: Product[] }
@@ -58,22 +68,28 @@ export function ProdutosClient({ products }: Props) {
   const [tipo, setTipo] = useState('')
   const [grife, setGrife] = useState('')
   const [controla, setControla] = useState(true)
+  const [categoria, setCategoria] = useState<'otica' | 'diversos'>('otica')
+  const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'otica' | 'diversos'>('todos')
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.grife ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = products.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.grife ?? '').toLowerCase().includes(search.toLowerCase())
+    const cat = p.categoria ?? 'otica'
+    const matchCat = filtroCategoria === 'todos' || cat === filtroCategoria
+    return matchSearch && matchCat
+  })
   const lowStock = products.filter(p => p.controla_estoque !== false && p.stock > 0 && p.stock <= 5)
+
+  const tiposList = categoria === 'otica' ? TIPOS : TIPOS_DIVERSOS
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) { setError('Nome obrigatório.'); return }
     setLoading(true); setError(null)
-    const ncm = TIPOS.find(t => t.label === tipo)?.ncm ?? ''
+    const ncm = tiposList.find(t => t.label === tipo)?.ncm ?? ''
     const result = await createProduct({
       name, price: parseFloat(price.replace(',', '.')) || 0,
       costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
-      stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla,
+      stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
@@ -137,11 +153,27 @@ export function ProdutosClient({ products }: Props) {
             </div>
           )}
 
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar produto ou grife..."
-              className="w-full h-10 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-white text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar produto ou grife..."
+                className="w-full h-10 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-white text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
+            </div>
+            {/* Filtro de categoria */}
+            <div className="flex items-center bg-white border border-[#EAE8E1] rounded-xl p-1">
+              {([
+                { key: 'todos', label: 'Todos' },
+                { key: 'otica', label: '👓 Ótica' },
+                { key: 'diversos', label: '🛒 Diversos' },
+              ] as const).map(f => (
+                <button key={f.key} onClick={() => setFiltroCategoria(f.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filtroCategoria === f.key ? 'bg-[#1A56FF] text-white' : 'text-[#8C8880]'}`}
+                  style={{ fontFamily: 'Barlow, sans-serif' }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {filtered.length === 0 ? (
@@ -234,6 +266,29 @@ export function ProdutosClient({ products }: Props) {
             <form onSubmit={handleSave} className="p-6 space-y-5">
               {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
+              {/* Categoria do produto */}
+              <div>
+                <label className={labelCls}>Categoria do produto</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => { setCategoria('otica'); setTipo('') }}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${categoria === 'otica' ? 'border-[#1A56FF] bg-[#EEF2FF]' : 'border-[#EAE8E1] bg-white'}`}>
+                    <span className="text-xl">👓</span>
+                    <div className="text-left">
+                      <p className={`text-sm font-bold ${categoria === 'otica' ? 'text-[#1A56FF]' : 'text-[#1C1B18]'}`}>Produto de Ótica</p>
+                      <p className="text-[10px] text-[#8C8880]">Armações, lentes, óculos</p>
+                    </div>
+                  </button>
+                  <button type="button" onClick={() => { setCategoria('diversos'); setTipo('') }}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${categoria === 'diversos' ? 'border-[#1A56FF] bg-[#EEF2FF]' : 'border-[#EAE8E1] bg-white'}`}>
+                    <span className="text-xl">🛒</span>
+                    <div className="text-left">
+                      <p className={`text-sm font-bold ${categoria === 'diversos' ? 'text-[#1A56FF]' : 'text-[#1C1B18]'}`}>Conveniência / Diversos</p>
+                      <p className="text-[10px] text-[#8C8880]">Água, café, snacks...</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div className="flex justify-center">
                 <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-[#EAE8E1] flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#1A56FF] transition-all">
                   <Camera className="size-5 text-[#C8C5BB]" strokeWidth={1.5} />
@@ -245,20 +300,26 @@ export function ProdutosClient({ products }: Props) {
                 <div className="col-span-2">
                   <label className={labelCls}>Nome do produto <span className="text-red-400">*</span></label>
                   <input value={name} onChange={e => setName(e.target.value)} required
-                    placeholder="Ex: Ray-Ban Aviador, Lente Transitions..." className={inputCls} />
+                    placeholder={categoria === 'otica' ? 'Ex: Ray-Ban Aviador, Lente Transitions...' : 'Ex: Água 500ml, Café, Chocolate...'} className={inputCls} />
                 </div>
 
-                <div>
-                  <label className={labelCls}>Tipo / NCM</label>
+                <div className={categoria === 'diversos' ? 'col-span-2' : ''}>
+                  <label className={labelCls}>{categoria === 'otica' ? 'Tipo / NCM' : 'Categoria'}</label>
                   <select value={tipo} onChange={e => setTipo(e.target.value)} className={inputCls}>
-                    <option value="">Selecione o tipo...</option>
-                    {TIPOS.map(t => <option key={t.ncm} value={t.label}>{t.emoji} {t.label} — {t.ncm}</option>)}
+                    <option value="">Selecione...</option>
+                    {tiposList.map(t => (
+                      <option key={t.label} value={t.label}>
+                        {t.emoji} {t.label}{t.ncm ? ` — ${t.ncm}` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
-                <div>
-                  <label className={labelCls}>Grife / Marca</label>
-                  <input value={grife} onChange={e => setGrife(e.target.value)} placeholder="Ray-Ban, Oakley..." className={inputCls} />
-                </div>
+                {categoria === 'otica' && (
+                  <div>
+                    <label className={labelCls}>Grife / Marca</label>
+                    <input value={grife} onChange={e => setGrife(e.target.value)} placeholder="Ray-Ban, Oakley..." className={inputCls} />
+                  </div>
+                )}
 
                 <div>
                   <label className={labelCls}>Preço de venda (R$) <span className="text-red-400">*</span></label>

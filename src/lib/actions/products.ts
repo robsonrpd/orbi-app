@@ -22,6 +22,7 @@ export async function createProduct(payload: {
   ncm: string
   grife: string
   controlaEstoque: boolean
+  categoria?: 'otica' | 'diversos'
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
@@ -40,6 +41,7 @@ export async function createProduct(payload: {
     ncm: payload.ncm || null,
     grife: payload.grife?.trim() || null,
     controla_estoque: payload.controlaEstoque,
+    categoria: payload.categoria ?? 'otica',
     active: true,
   }).select().single()
 
