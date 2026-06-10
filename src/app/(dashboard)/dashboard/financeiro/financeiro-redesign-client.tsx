@@ -15,7 +15,7 @@ import {
 type Contact = { id: string; name: string | null; phone: string }
 type Transaction = {
   id: string; amount: number; status: string
-  due_date: string | null; created_at: string; notes: string | null
+  due_date: string | null; created_at: string; paid_at: string | null; notes: string | null
   contacts: Contact | null
 }
 
@@ -42,12 +42,34 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
   const [copied, setCopied] = useState(false)
   const [receberTx, setReceberTx] = useState<{ id: string; nome: string; valor: number } | null>(null)
 
-  const paid = transactions.filter(t => t.status === 'paid')
-  const pending = transactions.filter(t => t.status === 'pending')
-  const overdue = transactions.filter(t => t.status === 'overdue')
+  // Calcula o intervalo de datas conforme o período selecionado
+  function rangeFor(p: string): { start: Date; end: Date } {
+    const now = new Date()
+    const hoje0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (p === 'Hoje') return { start: hoje0, end: now }
+    if (p === 'Ontem') {
+      const ontem = new Date(hoje0); ontem.setDate(ontem.getDate() - 1)
+      return { start: ontem, end: new Date(hoje0.getTime() - 1) }
+    }
+    if (p === '7 dias') { const s = new Date(hoje0); s.setDate(s.getDate() - 6); return { start: s, end: now } }
+    if (p === '30 dias') { const s = new Date(hoje0); s.setDate(s.getDate() - 29); return { start: s, end: now } }
+    if (p === 'Mês atual') return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now }
+    if (p === 'Mês passado') return { start: new Date(now.getFullYear(), now.getMonth() - 1, 1), end: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59) }
+    return { start: new Date(2000, 0, 1), end: now }
+  }
+  const { start, end } = rangeFor(period)
+  const dataRef = (t: Transaction) => new Date(t.status === 'paid' && t.paid_at ? t.paid_at : t.created_at)
+  const transactionsFiltradas = transactions.filter(t => {
+    const d = dataRef(t).getTime()
+    return d >= start.getTime() && d <= end.getTime()
+  })
+
+  const paid = transactionsFiltradas.filter(t => t.status === 'paid')
+  const pending = transactionsFiltradas.filter(t => t.status === 'pending')
+  const overdue = transactionsFiltradas.filter(t => t.status === 'overdue')
 
   const valorTotal = paid.reduce((s, t) => s + Number(t.amount), 0)
-  const faturamentoBruto = transactions.reduce((s, t) => s + Number(t.amount), 0)
+  const faturamentoBruto = transactionsFiltradas.reduce((s, t) => s + Number(t.amount), 0)
   const reembolsos = 0
 
   const paymentLink = `orbi-app-saiw.vercel.app/pagar/${companySlug}`
@@ -181,16 +203,16 @@ export function FinanceiroRedesignClient({ transactions, contacts, companySlug, 
               </div>
             </div>
 
-            {transactions.length === 0 ? (
+            {transactionsFiltradas.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-12">
                 <div className="w-12 h-12 rounded-xl bg-[#F7F6F3] flex items-center justify-center">
                   <DollarSign className="size-6 text-[#EAE8E1]" strokeWidth={1} />
                 </div>
-                <p className="text-sm text-[#C8C5BB]">Nenhuma transação encontrada</p>
+                <p className="text-sm text-[#C8C5BB]">Nenhuma transação no período</p>
               </div>
             ) : (
               <div className="divide-y divide-[#F7F6F3]">
-                {transactions.map(t => {
+                {transactionsFiltradas.map(t => {
                   const podeReceber = t.status === 'pending' || t.status === 'overdue'
                   return (
                   <div key={t.id}

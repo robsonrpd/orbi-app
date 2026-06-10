@@ -45,7 +45,10 @@ export async function createProduct(payload: {
     active: true,
   }).select().single()
 
-  if (error) return { error: 'Erro ao cadastrar produto.' }
+  if (error) {
+    console.error('createProduct:', error)
+    return { error: `Erro ao cadastrar: ${error.message}` }
+  }
 
   // Registra entrada inicial de estoque
   if (payload.stock > 0 && product) {
