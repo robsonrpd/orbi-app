@@ -1,9 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { guardModo } from '@/lib/auth/modo'
 import { Topbar } from '@/components/orbi/topbar'
 import { RelatoriosClient } from './relatorios-client'
 
 export default async function RelatoriosPage() {
+  await guardModo('relatorios')
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 

@@ -2,6 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
+import { getModo } from '@/lib/auth/modo'
 import { revalidatePath } from 'next/cache'
 
 export async function createProduct(payload: {
@@ -71,13 +72,17 @@ export async function updateProduct(id: string, payload: {
   if (!payload.name?.trim()) return { error: 'Nome obrigatório.' }
 
   const service = createServiceClient()
-  const { data: existing } = await service.from('products').select('id').eq('id', id).eq('company_id', companyId).single()
+  const { data: existing } = await service.from('products').select('id, price, cost_price').eq('id', id).eq('company_id', companyId).single()
   if (!existing) return { error: 'Produto não encontrado.' }
+
+  // Modo Funcionário com bloqueio de preços: ignora alteração de preço/custo
+  const modo = await getModo()
+  const precoBloqueado = modo.funcionario && modo.bloqueios.includes('precos')
 
   const { error } = await service.from('products').update({
     name: payload.name.trim(),
-    price: payload.price,
-    cost_price: payload.costPrice || 0,
+    price: precoBloqueado ? existing.price : payload.price,
+    cost_price: precoBloqueado ? existing.cost_price : (payload.costPrice || 0),
     tipo_produto: payload.tipoProduto || null,
     ncm: payload.ncm || null,
     grife: payload.grife?.trim() || null,

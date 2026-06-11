@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { getModo } from '@/lib/auth/modo'
 import { Topbar } from '@/components/orbi/topbar'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart } from '@/components/orbi/dashboard-charts'
@@ -20,6 +21,8 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
+  const modo = await getModo()
+  const ocultar = modo.funcionario && modo.bloqueios.includes('faturamento')
   const { data: userRow } = await service.from('users').select('name').eq('id', user!.id).single()
   const { data: companyRow } = await service.from('companies').select('name').eq('id', companyId).single()
   const companyName = companyRow?.name ?? 'Minha Ótica'
@@ -137,8 +140,8 @@ export default async function DashboardPage() {
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
         {/* 5 KPIs coloridos */}
-        <div className="grid grid-cols-5 gap-4">
-          {kpis.map(k => (
+        <div className={`grid gap-4 ${ocultar ? 'grid-cols-3' : 'grid-cols-5'}`}>
+          {kpis.filter(k => !ocultar || !['Contas a Receber', 'Contas a Pagar'].includes(k.label)).map(k => (
             <Link key={k.label} href={k.href}
               className="rounded-2xl p-4 text-white relative overflow-hidden transition-transform hover:scale-[1.02] active:scale-[0.98]"
               style={{ background: k.bg, boxShadow: `0 4px 20px ${k.color}40` }}>
@@ -157,13 +160,13 @@ export default async function DashboardPage() {
         </div>
 
         {/* 4 cards de visão geral */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className={`grid gap-4 ${ocultar ? 'grid-cols-3' : 'grid-cols-4'}`}>
           {[
             { label: 'Vendas Totais', value: fmt(vendasTotais), sub: 'Total de faturamento', icon: DollarSign, color: '#0DB57A', bg: '#E6F9F3' },
             { label: 'Total de Clientes', value: String(totalClientes), sub: 'Clientes cadastrados', icon: Users, color: '#1A56FF', bg: '#EEF2FF' },
             { label: 'Agendamentos', value: String(totalAgendamentos), sub: 'Total de agendamentos', icon: Calendar, color: '#F59E0B', bg: '#FEF3C7' },
             { label: 'Clientes Novos', value: String(clientesNovosHoje), sub: 'Novos hoje', icon: UserPlus, color: '#8B5CF6', bg: '#F5F3FF' },
-          ].map(m => (
+          ].filter(m => !ocultar || m.label !== 'Vendas Totais').map(m => (
             <GlowCard key={m.label}>
               <div className="p-4 flex items-center justify-between">
                 <div>
@@ -180,13 +183,13 @@ export default async function DashboardPage() {
         </div>
 
         {/* Relatório Mensal com seletor de mês */}
-        <RelatorioMensal
+        {!ocultar && <RelatorioMensal
           transactions={txList as never}
           appointments={(appointments ?? []) as never}
-        />
+        />}
 
         {/* Top Clientes */}
-        <GlowCard>
+        {!ocultar && <GlowCard>
           <div className="p-5">
             <div className="flex items-center gap-2 mb-4">
               <Award className="size-4 text-[#F59E0B]" strokeWidth={1.5} />
@@ -217,10 +220,10 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
-        </GlowCard>
+        </GlowCard>}
 
         {/* Receita por forma de pagamento (mês atual) */}
-        {porForma.length > 0 && (
+        {!ocultar && porForma.length > 0 && (
           <GlowCard>
             <div className="p-5">
               <div className="flex items-center justify-between mb-4">
@@ -254,7 +257,7 @@ export default async function DashboardPage() {
         {/* Linha de gráficos */}
         <div className="grid grid-cols-3 gap-4">
           {/* Evolução de vendas */}
-          <GlowCard className="col-span-2">
+          {!ocultar && <GlowCard className="col-span-2">
             <div className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -265,10 +268,10 @@ export default async function DashboardPage() {
               </div>
               <EvolucaoVendasChart data={evolucao} />
             </div>
-          </GlowCard>
+          </GlowCard>}
 
           {/* Estoque donut */}
-          <GlowCard>
+          <GlowCard className={ocultar ? 'col-span-3' : ''}>
             <div className="p-5">
               <div className="flex items-center gap-2 mb-4">
                 <Glasses className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />

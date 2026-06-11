@@ -1,9 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { guardModo } from '@/lib/auth/modo'
 import { Topbar } from '@/components/orbi/topbar'
 import { FinanceiroRedesignClient } from './financeiro-redesign-client'
 
 export default async function FinanceiroPage() {
+  await guardModo('financeiro')
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
   const { data: companyRow } = await service.from('companies').select('slug').eq('id', companyId).single()

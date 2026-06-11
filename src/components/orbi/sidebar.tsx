@@ -13,6 +13,15 @@ import { useRouter } from 'next/navigation'
 import { useState, useRef } from 'react'
 import { Camera, Loader2 } from 'lucide-react'
 import { saveCompanyLogo } from '@/lib/actions/empresa'
+import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
+
+// menus que somem quando o bloqueio correspondente está ativo
+const BLOQUEIO_POR_HREF: Record<string, string> = {
+  '/dashboard/financeiro': 'financeiro',
+  '/dashboard/caixa': 'caixa',
+  '/dashboard/relatorios': 'relatorios',
+  '/dashboard/vendedores': 'vendedores',
+}
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -34,9 +43,17 @@ const navItems = [
   { href: '/dashboard/ia', label: 'Inteligência IA', icon: Bot },
 ]
 
-export function Sidebar({ companyName, logoUrl, canEditLogo = true }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean }) {
+type ModoProps = { funcionario: boolean; bloqueios: string[]; temPin: boolean }
+
+export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps }) {
   const pathname = usePathname()
   const router = useRouter()
+  const m = modo ?? { funcionario: false, bloqueios: [], temPin: false }
+  const visibleNav = navItems.filter(item => {
+    if (!m.funcionario) return true
+    const bloq = BLOQUEIO_POR_HREF[item.href]
+    return !(bloq && m.bloqueios.includes(bloq))
+  })
   const [logo, setLogo] = useState<string | null>(logoUrl ?? null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -108,7 +125,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true }: { companyN
       <nav className="relative z-10 flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         <p className="text-[10px] font-bold text-white/35 uppercase tracking-[2px] px-3 pb-2 pt-1"
           style={{ fontFamily: 'Barlow, sans-serif' }}>Menu</p>
-        {navItems.map((item) => {
+        {visibleNav.map((item) => {
           const active = isActive(item.href, item.exact)
           return (
             <Link key={item.href} href={item.href}
@@ -127,24 +144,29 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true }: { companyN
 
       {/* Bottom */}
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
-        <Link href="/dashboard/plano"
-          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            isActive('/dashboard/plano') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
-          <Crown className="size-4 shrink-0 text-[#F59E0B]" strokeWidth={1.5} />
-          Seu Plano
-        </Link>
-        <Link href="/dashboard/parametros"
-          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
-          <SlidersHorizontal className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
-          Parâmetros
-        </Link>
-        <Link href="/dashboard/settings"
-          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
-          <Settings className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
-          Configurações
-        </Link>
+        {canEditLogo && <ModoFuncionario funcionario={m.funcionario} bloqueios={m.bloqueios} temPin={m.temPin} />}
+        {!m.funcionario && (
+          <>
+            <Link href="/dashboard/plano"
+              className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                isActive('/dashboard/plano') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+              <Crown className="size-4 shrink-0 text-[#F59E0B]" strokeWidth={1.5} />
+              Seu Plano
+            </Link>
+            <Link href="/dashboard/parametros"
+              className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+              <SlidersHorizontal className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
+              Parâmetros
+            </Link>
+            <Link href="/dashboard/settings"
+              className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+              <Settings className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
+              Configurações
+            </Link>
+          </>
+        )}
         <button onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all">
           <LogOut className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId, getImpersonation } from '@/lib/auth/company'
+import { getModo } from '@/lib/auth/modo'
 import { Sidebar } from '@/components/orbi/sidebar'
 import { SubscriptionManager } from '@/components/orbi/subscription-manager'
 import { ImpersonationBanner } from '@/components/orbi/impersonation-banner'
@@ -20,6 +21,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq('id', companyId)
     .single()
 
+  const modo = await getModo()
+
   // Novo usuário só vale para a própria conta (não em modo suporte)
   const { data: userRow } = await service.from('users').select('created_at').eq('id', user.id).single()
   const isNewUser = !impersonation && userRow?.created_at
@@ -28,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation} />
+      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation} modo={modo} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
         {!impersonation && (
