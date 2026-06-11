@@ -34,6 +34,15 @@ export async function registrarVenda(payload: {
 
   const service = createServiceClient()
 
+  // SEGURANÇA: se um cliente foi informado, valida que pertence a esta empresa
+  // (impede vincular a venda a um contato de outra ótica)
+  let contactIdValido = payload.contactId
+  if (contactIdValido) {
+    const { data: contact } = await service
+      .from('contacts').select('id').eq('id', contactIdValido).eq('company_id', companyId).single()
+    if (!contact) return { error: 'Cliente não encontrado.' }
+  }
+
   // 1. Valida produtos e estoque
   for (const item of payload.itens) {
     const { data: prod } = await service
@@ -74,7 +83,7 @@ export async function registrarVenda(payload: {
   // 5. Cria a venda
   const { error: vendaError } = await service.from('vendas').insert({
     company_id: companyId, numero,
-    contact_id: payload.contactId,
+    contact_id: contactIdValido,
     cliente_nome: payload.clienteNome?.trim() || null,
     vendedor: payload.vendedor?.trim() || null,
     itens: payload.itens, total,
@@ -96,7 +105,7 @@ export async function registrarVenda(payload: {
 
   // 7. Transação paga (faturamento)
   await service.from('transactions').insert({
-    company_id: companyId, contact_id: payload.contactId, amount: total,
+    company_id: companyId, contact_id: contactIdValido, amount: total,
     status: 'paid', paid_at: dataISO, created_at: dataISO,
     forma_pagamento: payload.formaPagamento,
     notes: `Venda #${numero} — produtos`,

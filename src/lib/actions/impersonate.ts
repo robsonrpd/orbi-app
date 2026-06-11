@@ -11,7 +11,8 @@ export async function acessarComo(companyId: string) {
 
   const cookieStore = await cookies()
   cookieStore.set(IMPERSONATE_COOKIE, companyId, {
-    httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 4, // 4h
+    httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
+    path: '/', maxAge: 60 * 60 * 4, // 4h
   })
   redirect('/dashboard')
 }
