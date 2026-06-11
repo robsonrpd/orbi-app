@@ -14,14 +14,7 @@ import { useState, useRef } from 'react'
 import { Camera, Loader2 } from 'lucide-react'
 import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
-
-// menus que somem quando o bloqueio correspondente está ativo
-const BLOQUEIO_POR_HREF: Record<string, string> = {
-  '/dashboard/financeiro': 'financeiro',
-  '/dashboard/caixa': 'caixa',
-  '/dashboard/relatorios': 'relatorios',
-  '/dashboard/vendedores': 'vendedores',
-}
+import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },

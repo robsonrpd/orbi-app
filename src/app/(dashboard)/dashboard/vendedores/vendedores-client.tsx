@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createVendedor, updateVendedor, deleteVendedor } from '@/lib/actions/vendedores'
 import { Users, Plus, Phone, Mail, Trash2, Loader2, X, Check, Edit2, ShieldCheck, Lock } from 'lucide-react'
+import { PERMISSOES as AREAS } from '@/lib/permissoes'
 
 type Vendedor = {
   id: string; nome: string; telefone: string | null; email: string | null
@@ -13,15 +14,6 @@ type Vendedor = {
   bloqueios: string[] | null; active: boolean
 }
 
-// Áreas que o vendedor pode (ou não) acessar
-const AREAS = [
-  { key: 'faturamento', label: 'Ver faturamento e valores (Dashboard)' },
-  { key: 'financeiro', label: 'Acessar o Financeiro' },
-  { key: 'caixa', label: 'Acessar o Caixa' },
-  { key: 'relatorios', label: 'Acessar Relatórios' },
-  { key: 'vendedores', label: 'Gerenciar Vendedores' },
-  { key: 'precos', label: 'Alterar preços de produtos' },
-]
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
 export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
@@ -224,9 +216,18 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
 
               {/* Permissões */}
               <div className="rounded-xl border border-[#EAE8E1] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <ShieldCheck className="size-4 text-[#1A56FF]" />
-                  <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">O que esse vendedor PODE acessar</p>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="size-4 text-[#1A56FF]" />
+                    <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">O que esse vendedor PODE acessar</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => setPodeAcessar(new Set(AREAS.map(a => a.key)))}
+                      className="text-[11px] font-semibold text-[#0DB57A] hover:underline">Marcar todos</button>
+                    <span className="text-[#EAE8E1]">·</span>
+                    <button type="button" onClick={() => setPodeAcessar(new Set())}
+                      className="text-[11px] font-semibold text-[#8C8880] hover:underline">Limpar</button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {AREAS.map(a => (
