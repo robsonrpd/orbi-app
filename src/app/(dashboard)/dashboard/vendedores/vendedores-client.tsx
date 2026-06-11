@@ -3,7 +3,8 @@
 import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createVendedor, updateVendedor, deleteVendedor } from '@/lib/actions/vendedores'
-import { Users, Plus, Phone, Mail, Trash2, Loader2, X, Check, Edit2, ShieldCheck, Lock } from 'lucide-react'
+import { criarLoginVendedor, removerLoginVendedor } from '@/lib/actions/vendedor-login'
+import { Users, Plus, Phone, Mail, Trash2, Loader2, X, Check, Edit2, ShieldCheck, Lock, KeyRound, LogIn } from 'lucide-react'
 import { PERMISSOES as AREAS } from '@/lib/permissoes'
 
 type Vendedor = {
@@ -11,7 +12,7 @@ type Vendedor = {
   data_nascimento: string | null; cep: string | null; endereco: string | null
   numero: string | null; complemento: string | null; bairro: string | null
   cidade: string | null; uf: string | null; notes: string | null
-  bloqueios: string[] | null; active: boolean
+  bloqueios: string[] | null; active: boolean; temLogin?: boolean
 }
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
@@ -26,17 +27,40 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
   // permissões: conjunto de áreas que o vendedor PODE acessar
   const [podeAcessar, setPodeAcessar] = useState<Set<string>>(new Set(AREAS.map(a => a.key)))
   const formRef = useRef<HTMLFormElement>(null)
+  // acesso/login
+  const [senhaLogin, setSenhaLogin] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginMsg, setLoginMsg] = useState<{ ok?: string; err?: string } | null>(null)
+
+  async function criarLogin() {
+    if (!editing) return
+    setLoginLoading(true); setLoginMsg(null)
+    const r = await criarLoginVendedor(editing.id, senhaLogin)
+    setLoginLoading(false)
+    if (r?.error) { setLoginMsg({ err: r.error }); return }
+    setLoginMsg({ ok: 'Acesso criado! As credenciais foram enviadas por e-mail.' })
+    setEditing({ ...editing, temLogin: true }); setSenhaLogin('')
+  }
+  async function removerLogin() {
+    if (!editing) return
+    setLoginLoading(true); setLoginMsg(null)
+    const r = await removerLoginVendedor(editing.id)
+    setLoginLoading(false)
+    if (r?.error) { setLoginMsg({ err: r.error }); return }
+    setLoginMsg({ ok: 'Acesso removido.' })
+    setEditing({ ...editing, temLogin: false })
+  }
 
   function openNew() {
     setEditing(null)
     setPodeAcessar(new Set(AREAS.map(a => a.key)))
-    setError(null); setModalOpen(true)
+    setError(null); setLoginMsg(null); setSenhaLogin(''); setModalOpen(true)
   }
   function openEdit(v: Vendedor) {
     setEditing(v)
     const bloq = new Set(v.bloqueios ?? [])
     setPodeAcessar(new Set(AREAS.filter(a => !bloq.has(a.key)).map(a => a.key)))
-    setError(null); setModalOpen(true)
+    setError(null); setLoginMsg(null); setSenhaLogin(''); setModalOpen(true)
   }
   function togglePerm(key: string) {
     setPodeAcessar(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -122,9 +146,16 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                         </button>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold ${nBloq === 0 ? 'bg-[#E6F9F3] text-[#0DB57A]' : 'bg-[#FEF3C7] text-[#F59E0B]'}`}>
-                      {nBloq === 0 ? <><ShieldCheck className="size-3" /> Acesso total</> : <><Lock className="size-3" /> {nBloq} área{nBloq > 1 ? 's' : ''} bloqueada{nBloq > 1 ? 's' : ''}</>}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold ${nBloq === 0 ? 'bg-[#E6F9F3] text-[#0DB57A]' : 'bg-[#FEF3C7] text-[#F59E0B]'}`}>
+                        {nBloq === 0 ? <><ShieldCheck className="size-3" /> Acesso total</> : <><Lock className="size-3" /> {nBloq} bloqueada{nBloq > 1 ? 's' : ''}</>}
+                      </span>
+                      {v.temLogin && (
+                        <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold bg-[#EEF2FF] text-[#1A56FF]">
+                          <KeyRound className="size-3" /> com login
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </GlowCard>
               )
@@ -242,6 +273,48 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 </div>
                 <p className="text-[11px] text-[#C8C5BB] mt-2">Verde = pode acessar. Desmarque o que ele NÃO deve ver.</p>
               </div>
+
+              {/* Acesso ao sistema (login próprio) — só na edição */}
+              {editing && (
+                <div className="rounded-xl border border-[#EAE8E1] p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <KeyRound className="size-4 text-[#1A56FF]" />
+                    <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">Acesso ao sistema (login próprio)</p>
+                  </div>
+                  {editing.temLogin ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-1.5 text-sm text-[#0DB57A] font-semibold">
+                        <Check className="size-4" /> Esse vendedor já entra com o e-mail dele.
+                      </span>
+                      <button type="button" onClick={removerLogin} disabled={loginLoading}
+                        className="text-xs font-semibold text-red-500 hover:underline shrink-0">
+                        {loginLoading ? '...' : 'Remover acesso'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-[#8C8880]">
+                        {editing.email
+                          ? <>Vai entrar com <strong>{editing.email}</strong>. Defina uma senha inicial:</>
+                          : <span className="text-amber-600">Cadastre um e-mail acima e salve antes de criar o acesso.</span>}
+                      </p>
+                      {editing.email && (
+                        <div className="flex gap-2">
+                          <input value={senhaLogin} onChange={e => setSenhaLogin(e.target.value)} type="text"
+                            placeholder="Senha inicial (mín. 6)" className={inputCls} />
+                          <button type="button" onClick={criarLogin} disabled={loginLoading || senhaLogin.length < 6}
+                            className="shrink-0 px-4 h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold text-white disabled:opacity-50"
+                            style={{ background: '#0DB57A' }}>
+                            {loginLoading ? <Loader2 className="size-4 animate-spin" /> : <><LogIn className="size-4" /> Criar</>}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {loginMsg?.ok && <p className="text-xs text-[#0DB57A] mt-2">{loginMsg.ok}</p>}
+                  {loginMsg?.err && <p className="text-xs text-red-500 mt-2">{loginMsg.err}</p>}
+                </div>
+              )}
 
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setModalOpen(false)} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>

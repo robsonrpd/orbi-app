@@ -33,7 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation} modo={modo} vendedores={vendedoresList ?? []} />
+      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
         {!impersonation && (

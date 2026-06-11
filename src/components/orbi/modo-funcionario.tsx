@@ -19,9 +19,10 @@ type Props = {
   vendedorNome: string | null
   temPin: boolean
   vendedores: VendedorMini[]
+  fonte?: 'login' | 'cookie' | null
 }
 
-export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores }: Props) {
+export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores, fonte }: Props) {
   const [listaOpen, setListaOpen] = useState(false)
   const [pinOpen, setPinOpen] = useState(false)
   const [cfgOpen, setCfgOpen] = useState(false)
@@ -75,6 +76,16 @@ export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores 
     setLoading(false)
     if (r?.error) { setError(r.error); return }
     setCfgOpen(false); setNovoPin('')
+  }
+
+  // Vendedor com login próprio: só um aviso (sai pelo botão "Sair")
+  if (fonte === 'login') {
+    return (
+      <div className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-[#93AAFF] bg-white/5">
+        <UserCog className="size-4 shrink-0" strokeWidth={1.5} />
+        <span className="truncate">Vendedor: {vendedorNome}</span>
+      </div>
+    )
   }
 
   return (
