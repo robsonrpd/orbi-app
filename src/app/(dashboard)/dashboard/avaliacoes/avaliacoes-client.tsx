@@ -2,14 +2,19 @@
 
 import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { Star, MessageSquare, Eye, AlertTriangle, Search, CheckCircle, XCircle } from 'lucide-react'
+import { toggleReviewVisible, deleteReview } from '@/lib/actions/reviews'
+import {
+  Star, MessageSquare, Eye, EyeOff, AlertTriangle, Search, CheckCircle, XCircle,
+  Link2, Copy, Check, Share2, Trash2, Loader2,
+} from 'lucide-react'
 
 type Review = {
   id: string; rating: number; comment: string | null; visible: boolean; created_at: string
+  author_name: string | null
   contacts: { name: string | null; phone: string } | null
 }
 
-type Props = { reviews: Review[] }
+type Props = { reviews: Review[]; slug: string }
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -21,9 +26,36 @@ function StarRating({ rating }: { rating: number }) {
   )
 }
 
-export function AvaliacoesClient({ reviews }: Props) {
+export function AvaliacoesClient({ reviews, slug }: Props) {
   const [tab, setTab] = useState<'todas' | 'visiveis' | 'analise'>('todas')
   const [search, setSearch] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  const linkAvaliacao = typeof window !== 'undefined' ? `${window.location.origin}/avaliar/${slug}` : `/avaliar/${slug}`
+
+  function copiarLink() {
+    navigator.clipboard.writeText(linkAvaliacao)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function compartilharWhats() {
+    const texto = encodeURIComponent(`Olá! Que tal avaliar sua experiência com a gente? Leva 10 segundos 💙\n${linkAvaliacao}`)
+    window.open(`https://wa.me/?text=${texto}`, '_blank')
+  }
+
+  async function publicar(id: string, visible: boolean) {
+    setBusyId(id)
+    await toggleReviewVisible(id, visible)
+    setBusyId(null)
+  }
+
+  async function excluir(id: string) {
+    setBusyId(id)
+    await deleteReview(id)
+    setBusyId(null)
+  }
 
   const visible = reviews.filter(r => r.visible)
   const inReview = reviews.filter(r => !r.visible)
@@ -33,7 +65,7 @@ export function AvaliacoesClient({ reviews }: Props) {
 
   const filtered = reviews
     .filter(r => tab === 'todas' ? true : tab === 'visiveis' ? r.visible : !r.visible)
-    .filter(r => !search || (r.contacts?.name ?? r.contacts?.phone ?? '').toLowerCase().includes(search.toLowerCase()))
+    .filter(r => !search || (r.author_name ?? r.contacts?.name ?? r.contacts?.phone ?? '').toLowerCase().includes(search.toLowerCase()))
 
   const metrics = [
     { label: 'MÉDIA GERAL', value: avgRating, icon: Star, color: '#F59E0B', bg: '#FEF3C7' },
@@ -49,6 +81,31 @@ export function AvaliacoesClient({ reviews }: Props) {
           Avaliações dos Clientes
         </h2>
         <p className="text-sm text-[#8C8880] mt-0.5">Visualize e gerencie as avaliações recebidas</p>
+      </div>
+
+      {/* Link de avaliação para clientes */}
+      <div className="rounded-2xl p-5 flex items-center justify-between gap-4"
+        style={{ background: 'linear-gradient(135deg, #0A0F1E, #1A3A6E)' }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+            <Link2 className="size-5 text-[#93AAFF]" strokeWidth={1.5} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white">Link de avaliação da loja</p>
+            <p className="text-xs text-white/50 truncate">{linkAvaliacao}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={copiarLink}
+            className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors">
+            {copied ? <><Check className="size-4 text-[#0DB57A]" /> Copiado</> : <><Copy className="size-4" /> Copiar</>}
+          </button>
+          <button onClick={compartilharWhats}
+            className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-white text-sm font-bold transition-all"
+            style={{ background: '#0DB57A' }}>
+            <Share2 className="size-4" /> WhatsApp
+          </button>
+        </div>
       </div>
 
       {/* Métricas */}
@@ -109,11 +166,11 @@ export function AvaliacoesClient({ reviews }: Props) {
               <div key={r.id} className="px-5 py-4 flex items-start justify-between hover:bg-[#F7F6F3] transition-colors">
                 <div className="flex items-start gap-4">
                   <div className="w-10 h-10 rounded-full bg-[#EEF2FF] flex items-center justify-center text-sm font-bold text-[#1A56FF] shrink-0">
-                    {(r.contacts?.name ?? r.contacts?.phone ?? '?')[0].toUpperCase()}
+                    {(r.author_name ?? r.contacts?.name ?? r.contacts?.phone ?? '?')[0].toUpperCase()}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-semibold text-[#1C1B18]">{r.contacts?.name ?? r.contacts?.phone ?? 'Anônimo'}</p>
+                      <p className="text-sm font-semibold text-[#1C1B18]">{r.author_name ?? r.contacts?.name ?? r.contacts?.phone ?? 'Anônimo'}</p>
                       <StarRating rating={r.rating} />
                     </div>
                     {r.comment && <p className="text-sm text-[#8C8880]">{r.comment}</p>}
@@ -128,6 +185,16 @@ export function AvaliacoesClient({ reviews }: Props) {
                     {r.visible ? <CheckCircle className="size-3" /> : <XCircle className="size-3" />}
                     {r.visible ? 'Visível' : 'Em Análise'}
                   </span>
+                  <button onClick={() => publicar(r.id, !r.visible)} disabled={busyId === r.id}
+                    title={r.visible ? 'Ocultar' : 'Publicar'}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] border border-[#EAE8E1] hover:bg-[#F7F6F3] transition-colors">
+                    {busyId === r.id ? <Loader2 className="size-3.5 animate-spin" /> : r.visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </button>
+                  <button onClick={() => excluir(r.id)} disabled={busyId === r.id}
+                    title="Excluir"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 border border-[#EAE8E1] hover:bg-red-50 transition-colors">
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </div>
               </div>
             ))}

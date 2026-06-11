@@ -43,11 +43,13 @@ export async function updateService(id: string, formData: FormData) {
   const name = formData.get('name') as string
   const price = parseFloat((formData.get('price') as string)?.replace(',', '.') ?? '0')
   const duration = parseInt(formData.get('duration') as string ?? '60')
+  const imageUrl = (formData.get('image_url') as string) || null
 
   const { error } = await service.from('services').update({
     name: name.trim(),
     price,
     duration_minutes: duration,
+    image_url: imageUrl,
   }).eq('id', id).eq('company_id', companyId)
 
   if (error) return { error: 'Erro ao atualizar serviço.' }

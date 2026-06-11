@@ -14,11 +14,13 @@ export default async function AvaliacoesPage() {
     reviews = data ?? []
   } catch { reviews = [] }
 
+  const { data: company } = await service.from('companies').select('slug').eq('id', companyId).single()
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
       <Topbar title="Avaliações" subtitle="Visualize e gerencie as avaliações recebidas" />
       <div className="flex-1 overflow-y-auto p-6">
-        <AvaliacoesClient reviews={reviews as never} />
+        <AvaliacoesClient reviews={reviews as never} slug={company?.slug ?? ''} />
       </div>
     </div>
   )

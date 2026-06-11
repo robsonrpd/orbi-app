@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { createService, deleteService } from '@/lib/actions/services'
+import { createService, updateService, deleteService } from '@/lib/actions/services'
 import { FotoUpload } from '@/components/orbi/foto-upload'
 import { Plus, Clock, DollarSign, Edit2, Trash2, Scissors, X, Loader2, Check } from 'lucide-react'
 
@@ -12,6 +12,7 @@ type Service = {
   duration_minutes: number
   price: number
   active: boolean
+  image_url: string | null
 }
 
 const QUICK_SUGGESTIONS = [
@@ -45,6 +46,7 @@ export function ServicosClient({ services }: { services: Service[] }) {
     setName(s.name)
     setPrice(String(s.price))
     setDuration(String(s.duration_minutes))
+    setImageUrl(s.image_url ?? null)
     setError(null)
     setModalOpen(true)
   }
@@ -54,11 +56,14 @@ export function ServicosClient({ services }: { services: Service[] }) {
     setLoading(true); setError(null)
     const fd = new FormData()
     fd.set('name', name); fd.set('price', price); fd.set('duration', duration)
-    if (imageUrl) fd.set('image_url', imageUrl)
-    const result = await createService(fd)
+    fd.set('image_url', imageUrl ?? '')
+    const result = editingService
+      ? await updateService(editingService.id, fd)
+      : await createService(fd)
     setLoading(false)
     if (result?.error) { setError(result.error); return }
-    setModalOpen(false); setName(''); setPrice(''); setDuration('60'); setImageUrl(null)
+    setModalOpen(false); setEditingService(null)
+    setName(''); setPrice(''); setDuration('60'); setImageUrl(null)
   }
 
   async function handleDelete(id: string) {
@@ -107,10 +112,12 @@ export function ServicosClient({ services }: { services: Service[] }) {
           {services.map((s, i) => (
             <GlowCard key={s.id}>
               <div className="p-5">
-                {/* Ícone */}
-                <div className="w-full h-28 rounded-xl flex items-center justify-center text-5xl mb-4"
+                {/* Foto ou ícone */}
+                <div className="w-full h-40 rounded-xl flex items-center justify-center text-5xl mb-4 overflow-hidden"
                   style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
-                  {icon(i)}
+                  {s.image_url
+                    ? <img src={s.image_url} alt={s.name} className="w-full h-full object-contain" />
+                    : icon(i)}
                 </div>
 
                 {/* Info */}
