@@ -56,6 +56,40 @@ export async function createProduct(payload: {
   return { success: true }
 }
 
+export async function updateProduct(id: string, payload: {
+  name: string
+  price: number
+  costPrice: number
+  tipoProduto: string
+  ncm: string
+  grife: string
+  controlaEstoque: boolean
+  imageUrl?: string | null
+}) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!payload.name?.trim()) return { error: 'Nome obrigatório.' }
+
+  const service = createServiceClient()
+  const { data: existing } = await service.from('products').select('id').eq('id', id).eq('company_id', companyId).single()
+  if (!existing) return { error: 'Produto não encontrado.' }
+
+  const { error } = await service.from('products').update({
+    name: payload.name.trim(),
+    price: payload.price,
+    cost_price: payload.costPrice || 0,
+    tipo_produto: payload.tipoProduto || null,
+    ncm: payload.ncm || null,
+    grife: payload.grife?.trim() || null,
+    controla_estoque: payload.controlaEstoque,
+    image_url: payload.imageUrl ?? null,
+  }).eq('id', id).eq('company_id', companyId)
+
+  if (error) return { error: 'Erro ao atualizar produto.' }
+  revalidatePath('/dashboard/produtos')
+  return { success: true }
+}
+
 export async function deleteProduct(id: string) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }

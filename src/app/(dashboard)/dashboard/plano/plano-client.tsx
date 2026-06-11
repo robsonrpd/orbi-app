@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { Zap, Users, Infinity as InfinityIcon, Check, ArrowRight, Loader2, Crown, Clock } from 'lucide-react'
+import { Zap, Users, Infinity as InfinityIcon, Check, Crown, Clock, MessageCircle } from 'lucide-react'
 
 const PLANS = [
   {
@@ -27,14 +26,12 @@ const PLANS = [
 const STATUS_LABEL: Record<string, string> = { trial: 'Em teste grátis', active: 'Ativo', overdue: 'Pagamento atrasado', cancelled: 'Cancelado' }
 
 export function PlanoClient({ status, planoAtual, trialEndsAt }: { status: string; planoAtual: string | null; trialEndsAt: string | null }) {
-  const [loading, setLoading] = useState<string | null>(null)
   const diasTrial = trialEndsAt ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000)) : 0
 
-  async function assinar(key: string) {
-    setLoading(key)
-    await new Promise(r => setTimeout(r, 800))
-    setLoading(null)
-    alert('Em breve: pagamento via Asaas. Por enquanto, fale com o suporte para ativar seu plano.')
+  function assinar(key: string) {
+    const planoNome = PLANS.find(p => p.key === key)?.label ?? key
+    const texto = encodeURIComponent(`Olá, gostaria de alterar meu plano no Orbi para o ${planoNome}.`)
+    window.open(`https://wa.me/5585999035302?text=${texto}`, '_blank')
   }
 
   return (
@@ -106,17 +103,16 @@ export function PlanoClient({ status, planoAtual, trialEndsAt }: { status: strin
                   </div>
                 ))}
               </div>
-              <button onClick={() => assinar(plan.key)} disabled={!!loading || atual}
+              <button onClick={() => assinar(plan.key)} disabled={atual}
                 className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-60"
                 style={{
                   fontFamily: 'Barlow, sans-serif',
-                  background: plan.highlight ? 'linear-gradient(135deg,#1A56FF,#1445DD)' : '#F7F6F3',
-                  color: plan.highlight ? 'white' : '#1A56FF',
-                  boxShadow: plan.highlight ? '0 4px 16px rgba(26,86,255,0.35)' : 'none',
+                  background: atual ? '#E6F9F3' : plan.highlight ? 'linear-gradient(135deg,#1A56FF,#1445DD)' : '#F7F6F3',
+                  color: atual ? '#0DB57A' : plan.highlight ? 'white' : '#1A56FF',
+                  boxShadow: plan.highlight && !atual ? '0 4px 16px rgba(26,86,255,0.35)' : 'none',
                 }}>
-                {loading === plan.key ? <Loader2 className="size-4 animate-spin" />
-                  : atual ? 'Plano atual'
-                  : <>Assinar Agora <ArrowRight className="size-4" /></>}
+                {atual ? 'Plano atual'
+                  : <><MessageCircle className="size-4" /> Assinar pelo WhatsApp</>}
               </button>
             </div>
           )

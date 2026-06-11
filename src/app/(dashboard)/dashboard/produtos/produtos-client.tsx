@@ -5,6 +5,7 @@ import { GlowCard } from '@/components/orbi/glow-card'
 import { createProduct, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
 import { PDV } from '@/components/orbi/pdv'
 import { FotoUpload } from '@/components/orbi/foto-upload'
+import { EditarProdutoModal } from '@/components/orbi/editar-produto-modal'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, AlertTriangle,
@@ -69,6 +70,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [movProduct, setMovProduct] = useState<Product | null>(null)
+  const [editProduct, setEditProduct] = useState<Product | null>(null)
 
   // Form fields
   const [name, setName] = useState('')
@@ -212,10 +214,10 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                 return (
                   <GlowCard key={p.id}>
                     <div className="p-4">
-                      <div className="relative w-full h-28 rounded-xl mb-3 flex items-center justify-center text-4xl overflow-hidden"
+                      <div className="relative w-full h-40 rounded-xl mb-3 flex items-center justify-center text-5xl overflow-hidden"
                         style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
                         {p.image_url
-                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-contain" />
                           : emojiFor(p.tipo_produto)}
                         {(isLow || isOut) && (
                           <span className="absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white"
@@ -232,10 +234,14 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                           ? <span className="text-xs text-[#8C8880]">{p.stock} un.</span>
                           : <span className="text-[10px] text-[#C8C5BB]">sem controle</span>}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5">
                         <button onClick={() => setMovProduct(p)}
                           className="flex-1 flex items-center justify-center gap-1 h-8 rounded-lg text-xs font-semibold text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] transition-colors">
                           <RefreshCw className="size-3" /> Movimentar
+                        </button>
+                        <button onClick={() => setEditProduct(p)}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] border border-[#EAE8E1] hover:bg-[#F7F6F3] transition-colors">
+                          <Edit2 className="size-3.5" />
                         </button>
                         <button onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}
                           className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 border border-[#EAE8E1] hover:bg-red-50 transition-colors">
@@ -432,6 +438,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
 
       {/* Modal de movimentação */}
       {movProduct && <MovimentacaoModal product={movProduct} onClose={() => setMovProduct(null)} />}
+      {editProduct && <EditarProdutoModal product={editProduct} onClose={() => setEditProduct(null)} />}
     </div>
   )
 }
