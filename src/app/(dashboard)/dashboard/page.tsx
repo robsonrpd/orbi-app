@@ -3,10 +3,11 @@ import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart } from '@/components/orbi/dashboard-charts'
+import { RelatorioMensal } from '@/components/orbi/relatorio-mensal'
 import {
   ArrowUpCircle, ArrowDownCircle, Gift, PackageCheck, Eye,
   TrendingUp, Glasses, FileText, ChevronRight, Cake,
-  Users, ShoppingBag, DollarSign
+  Users, DollarSign, Calendar, UserPlus, Award
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -33,14 +34,15 @@ export default async function DashboardPage() {
   // Busca paralela de tudo
   const [
     { data: transactions }, { data: contasPagar }, { data: contacts },
-    { data: ordens }, { data: receitas }, { data: products },
+    { data: ordens }, { data: receitas }, { data: products }, { data: appointments },
   ] = await Promise.all([
     service.from('transactions').select('amount, status, created_at, paid_at, forma_pagamento, contact_id').eq('company_id', companyId),
     service.from('contas_pagar' as never).select('valor, status').eq('company_id', companyId),
-    service.from('contacts').select('id, name, phone, data_nascimento').eq('company_id', companyId),
+    service.from('contacts').select('id, name, phone, data_nascimento, created_at').eq('company_id', companyId),
     service.from('ordens_servico').select('status, total, created_at').eq('company_id', companyId),
     service.from('receitas').select('id, data_receita, contact_id, contacts(name, phone)').eq('company_id', companyId).lt('data_receita', umAnoAtras.split('T')[0]),
     service.from('products' as never).select('tipo_produto, stock').eq('company_id', companyId).eq('active', true),
+    service.from('appointments').select('start_at, status').eq('company_id', companyId),
   ])
 
   // KPI 1 — Contas a receber
@@ -57,25 +59,31 @@ export default async function DashboardPage() {
   // KPI 5 — Receitas vencidas
   const receitasVencidas = receitas ?? []
 
-  // Faturamento do mês + comparação com mês anterior
+  // Faturamento do mês (para o breakdown por forma)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
   type Tx = { amount: number; status: string; created_at: string; paid_at: string | null; forma_pagamento: string | null; contact_id: string | null }
   const txList = (transactions ?? []) as Tx[]
   const dataRef = (t: Tx) => (t.paid_at ?? t.created_at)
-
   const pagasMes = txList.filter(t => t.status === 'paid' && dataRef(t) >= monthStart)
-  const pagasMesAnterior = txList.filter(t => t.status === 'paid' && dataRef(t) >= lastMonthStart && dataRef(t) < monthStart)
   const faturamento = pagasMes.reduce((s, t) => s + Number(t.amount), 0)
-  const faturamentoAnterior = pagasMesAnterior.reduce((s, t) => s + Number(t.amount), 0)
-  const trendFatur = faturamentoAnterior > 0 ? Math.round(((faturamento - faturamentoAnterior) / faturamentoAnterior) * 100) : (faturamento > 0 ? 100 : 0)
 
-  // Ticket médio + nº vendas + média de clientes/dia (mês atual)
-  const numVendasMes = pagasMes.length
-  const ticketMedio = numVendasMes > 0 ? faturamento / numVendasMes : 0
-  const diaDoMes = now.getDate()
-  const clientesUnicosMes = new Set(pagasMes.map(t => t.contact_id).filter(Boolean)).size
-  const mediaClientesDia = diaDoMes > 0 ? (clientesUnicosMes / diaDoMes) : 0
+  // 4 cards de visão geral
+  const vendasTotais = txList.filter(t => t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0)
+  const totalClientes = (contacts ?? []).length
+  const totalAgendamentos = (appointments ?? []).length
+  const hojeStr = now.toISOString().split('T')[0]
+  const clientesNovosHoje = (contacts ?? []).filter(c => (c.created_at ?? '').startsWith(hojeStr)).length
+
+  // Top clientes (por total gasto em transações pagas)
+  const gastoPorCliente: Record<string, number> = {}
+  txList.filter(t => t.status === 'paid' && t.contact_id).forEach(t => {
+    gastoPorCliente[t.contact_id!] = (gastoPorCliente[t.contact_id!] ?? 0) + Number(t.amount)
+  })
+  const contactMap = new Map((contacts ?? []).map(c => [c.id, c]))
+  const topClientes = Object.entries(gastoPorCliente)
+    .map(([id, gasto]) => ({ id, gasto, contact: contactMap.get(id) }))
+    .filter(x => x.contact)
+    .sort((a, b) => b.gasto - a.gasto).slice(0, 5)
 
   // Receita por forma de pagamento (mês atual)
   const formaLabel: Record<string, string> = { dinheiro: 'Dinheiro', pix: 'PIX', cartao_credito: 'Crédito', cartao_debito: 'Débito', boleto: 'Boleto', outro: 'Outro' }
@@ -148,34 +156,68 @@ export default async function DashboardPage() {
           ))}
         </div>
 
-        {/* Relatório do Mês — visão geral de faturamento */}
+        {/* 4 cards de visão geral */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: 'Faturamento do Mês', value: fmt(faturamento), trend: trendFatur, icon: TrendingUp, color: '#0DB57A', bg: '#E6F9F3' },
-            { label: 'Ticket Médio', value: fmt(ticketMedio), sub: `${numVendasMes} venda${numVendasMes !== 1 ? 's' : ''} no mês`, icon: DollarSign, color: '#1A56FF', bg: '#EEF2FF' },
-            { label: 'Média Clientes/Dia', value: mediaClientesDia.toFixed(1), sub: `${clientesUnicosMes} clientes no mês`, icon: Users, color: '#F59E0B', bg: '#FEF3C7' },
-            { label: 'Vendas no Mês', value: String(numVendasMes), sub: 'Pagamentos recebidos', icon: ShoppingBag, color: '#8B5CF6', bg: '#F5F3FF' },
+            { label: 'Vendas Totais', value: fmt(vendasTotais), sub: 'Total de faturamento', icon: DollarSign, color: '#0DB57A', bg: '#E6F9F3' },
+            { label: 'Total de Clientes', value: String(totalClientes), sub: 'Clientes cadastrados', icon: Users, color: '#1A56FF', bg: '#EEF2FF' },
+            { label: 'Agendamentos', value: String(totalAgendamentos), sub: 'Total de agendamentos', icon: Calendar, color: '#F59E0B', bg: '#FEF3C7' },
+            { label: 'Clientes Novos', value: String(clientesNovosHoje), sub: 'Novos hoje', icon: UserPlus, color: '#8B5CF6', bg: '#F5F3FF' },
           ].map(m => (
             <GlowCard key={m.label}>
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: m.bg }}>
-                    <m.icon className="size-4.5" style={{ color: m.color }} strokeWidth={1.5} />
-                  </div>
-                  {'trend' in m && m.trend !== undefined && (
-                    <span className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${m.trend >= 0 ? 'bg-[#E6F9F3] text-[#0DB57A]' : 'bg-red-50 text-red-500'}`}>
-                      {m.trend >= 0 ? '↑' : '↓'} {Math.abs(m.trend)}%
-                    </span>
-                  )}
+              <div className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1.5" style={{ fontFamily: 'Barlow, sans-serif' }}>{m.label}</p>
+                  <p className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>{m.value}</p>
+                  <p className="text-[10px] text-[#C8C5BB] mt-0.5">{m.sub}</p>
                 </div>
-                <p className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>{m.value}</p>
-                <p className="text-[11px] text-[#8C8880] mt-0.5">{m.label}</p>
-                {'sub' in m && m.sub && <p className="text-[10px] text-[#C8C5BB] mt-0.5">{m.sub}</p>}
-                {'trend' in m && <p className="text-[10px] text-[#C8C5BB] mt-0.5">vs mês anterior</p>}
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: m.bg }}>
+                  <m.icon className="size-5" style={{ color: m.color }} strokeWidth={1.5} />
+                </div>
               </div>
             </GlowCard>
           ))}
         </div>
+
+        {/* Relatório Mensal com seletor de mês */}
+        <RelatorioMensal
+          transactions={txList as never}
+          appointments={(appointments ?? []) as never}
+        />
+
+        {/* Top Clientes */}
+        <GlowCard>
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Award className="size-4 text-[#F59E0B]" strokeWidth={1.5} />
+              <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Top Clientes</h2>
+            </div>
+            {topClientes.length === 0 ? (
+              <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhuma compra registrada ainda</p>
+            ) : (
+              <div className="space-y-2">
+                {topClientes.map((c, i) => {
+                  const ct = c.contact as { name: string | null; phone: string } | undefined
+                  return (
+                    <div key={c.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F7F6F3] transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                          style={{ background: i === 0 ? 'linear-gradient(135deg,#F59E0B,#D97706)' : 'linear-gradient(135deg,#93AAFF,#1A56FF)' }}>
+                          {(ct?.name ?? ct?.phone ?? '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-[#1C1B18]">{ct?.name ?? ct?.phone}</p>
+                          <p className="text-xs text-[#C8C5BB]">#{i + 1} maior cliente</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(c.gasto)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </GlowCard>
 
         {/* Receita por forma de pagamento (mês atual) */}
         {porForma.length > 0 && (

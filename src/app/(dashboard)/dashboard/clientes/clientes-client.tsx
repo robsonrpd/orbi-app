@@ -1,26 +1,33 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { UserPlus, Download, Phone, Tag, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NovoClienteModal } from '@/components/orbi/novo-cliente-modal'
+import { ClienteDetalheModal } from '@/components/orbi/cliente-detalhe-modal'
 
 type Contact = {
   id: string
   name: string | null
   phone: string
+  email: string | null
+  data_nascimento: string | null
   tags: string[]
   notes: string | null
   created_at: string
+  cep?: string | null; endereco?: string | null; numero?: string | null
+  bairro?: string | null; cidade?: string | null; uf?: string | null
 }
+type Stats = { totalGasto: number; numAgendamentos: number; numCompras: number }
 
 function formatDate(str: string) {
   return new Date(str).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export function ClientesClient({ contacts }: { contacts: Contact[] }) {
+export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats: Record<string, Stats> }) {
   const [modalOpen, setModalOpen] = useState(false)
+  const [detalhe, setDetalhe] = useState<Contact | null>(null)
+  const statsFor = (id: string): Stats => stats[id] ?? { totalGasto: 0, numAgendamentos: 0, numCompras: 0 }
 
   return (
     <>
@@ -67,7 +74,7 @@ export function ClientesClient({ contacts }: { contacts: Contact[] }) {
               </tr>
             ) : (
               contacts.map((c) => (
-                <tr key={c.id} className="hover:bg-[#F7F6F3] transition-colors group">
+                <tr key={c.id} onClick={() => setDetalhe(c)} className="hover:bg-[#EEF2FF] cursor-pointer transition-colors group">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-[#EEF2FF] flex items-center justify-center text-xs font-bold text-[#1A56FF] shrink-0">
@@ -98,10 +105,9 @@ export function ClientesClient({ contacts }: { contacts: Contact[] }) {
                   </td>
                   <td className="px-5 py-3.5 text-sm text-[#8C8880]">{formatDate(c.created_at)}</td>
                   <td className="px-5 py-3.5">
-                    <Link href={`/dashboard/clientes/${c.id}`}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-[#1A56FF] font-medium">
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-[#1A56FF] font-medium">
                       Ver ficha <ChevronRight className="size-3.5" />
-                    </Link>
+                    </span>
                   </td>
                 </tr>
               ))
@@ -111,6 +117,7 @@ export function ClientesClient({ contacts }: { contacts: Contact[] }) {
       </div>
 
       <NovoClienteModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      {detalhe && <ClienteDetalheModal contact={detalhe} stats={statsFor(detalhe.id)} onClose={() => setDetalhe(null)} />}
     </>
   )
 }

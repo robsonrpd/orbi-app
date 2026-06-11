@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { createContact } from '@/lib/actions/contacts'
 import {
   Loader2, UserPlus, X, User, Phone, Mail, MapPin,
-  Check, ShieldCheck, Tag
+  Check, ShieldCheck, Tag, Cake
 } from 'lucide-react'
 
 type Props = { open: boolean; onClose: () => void }
@@ -108,9 +108,15 @@ export function NovoClienteModal({ open, onClose }: Props) {
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}><Mail className="size-3" /> E-mail</label>
-            <input name="email" type="email" placeholder="cliente@email.com" className={inputCls} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}><Mail className="size-3" /> E-mail</label>
+              <input name="email" type="email" placeholder="cliente@email.com" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}><Cake className="size-3" /> Data de nascimento</label>
+              <input name="data_nascimento" type="date" max={new Date().toISOString().split('T')[0]} className={inputCls} />
+            </div>
           </div>
 
           {/* Endereço */}

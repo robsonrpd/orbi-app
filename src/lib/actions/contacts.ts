@@ -25,6 +25,7 @@ function extractFields(formData: FormData) {
     bairro: get('bairro'),
     cidade: get('cidade'),
     uf: get('uf'),
+    data_nascimento: get('data_nascimento'),
     notes: get('notes'),
     tags,
     lgpd_consent: lgpd,
