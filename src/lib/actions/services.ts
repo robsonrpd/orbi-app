@@ -11,7 +11,7 @@ export async function createService(formData: FormData) {
   const name = formData.get('name') as string
   const price = parseFloat((formData.get('price') as string)?.replace(',', '.') ?? '0')
   const duration = parseInt(formData.get('duration') as string ?? '60')
-  const description = formData.get('description') as string
+  const imageUrl = (formData.get('image_url') as string) || null
 
   if (!name?.trim()) return { error: 'Nome é obrigatório.' }
   if (isNaN(price) || price < 0) return { error: 'Preço inválido.' }
@@ -23,6 +23,7 @@ export async function createService(formData: FormData) {
     name: name.trim(),
     price,
     duration_minutes: duration,
+    image_url: imageUrl,
     active: true,
   })
 

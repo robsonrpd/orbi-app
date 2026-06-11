@@ -76,3 +76,19 @@ export async function updateContact(id: string, formData: FormData) {
   revalidatePath(`/dashboard/clientes/${id}`)
   return { success: true }
 }
+
+export async function deleteContact(id: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
+  const { data: existing } = await service
+    .from('contacts').select('id').eq('id', id).eq('company_id', companyId).single()
+  if (!existing) return { error: 'Cliente não encontrado.' }
+
+  const { error } = await service.from('contacts').delete().eq('id', id).eq('company_id', companyId)
+  if (error) return { error: 'Erro ao excluir. O cliente pode ter vendas/agendamentos vinculados.' }
+
+  revalidatePath('/dashboard/clientes')
+  return { success: true }
+}

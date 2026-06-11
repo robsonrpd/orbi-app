@@ -3,7 +3,8 @@
 import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createService, deleteService } from '@/lib/actions/services'
-import { Plus, Clock, DollarSign, Edit2, Trash2, Scissors, X, Loader2, Check, Eye, EyeOff } from 'lucide-react'
+import { FotoUpload } from '@/components/orbi/foto-upload'
+import { Plus, Clock, DollarSign, Edit2, Trash2, Scissors, X, Loader2, Check } from 'lucide-react'
 
 type Service = {
   id: string
@@ -30,11 +31,12 @@ export function ServicosClient({ services }: { services: Service[] }) {
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [duration, setDuration] = useState('60')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
 
   function openNew() {
     setEditingService(null)
-    setName(''); setPrice(''); setDuration('60'); setError(null)
+    setName(''); setPrice(''); setDuration('60'); setImageUrl(null); setError(null)
     setModalOpen(true)
   }
 
@@ -52,10 +54,11 @@ export function ServicosClient({ services }: { services: Service[] }) {
     setLoading(true); setError(null)
     const fd = new FormData()
     fd.set('name', name); fd.set('price', price); fd.set('duration', duration)
+    if (imageUrl) fd.set('image_url', imageUrl)
     const result = await createService(fd)
     setLoading(false)
     if (result?.error) { setError(result.error); return }
-    setModalOpen(false); setName(''); setPrice(''); setDuration('60')
+    setModalOpen(false); setName(''); setPrice(''); setDuration('60'); setImageUrl(null)
   }
 
   async function handleDelete(id: string) {
@@ -184,6 +187,10 @@ export function ServicosClient({ services }: { services: Service[] }) {
                   {error}
                 </div>
               )}
+
+              <div className="flex justify-center">
+                <FotoUpload value={imageUrl} onChange={setImageUrl} size="sm" />
+              </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>

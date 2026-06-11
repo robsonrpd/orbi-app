@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { updateContact } from '@/lib/actions/contacts'
+import { updateContact, deleteContact } from '@/lib/actions/contacts'
 import {
-  X, Phone, Mail, Cake, DollarSign, Calendar, Clock,
-  Edit2, Loader2, Check, MapPin
+  X, Phone, Mail, Cake, Clock,
+  Edit2, Loader2, Check, MapPin, Trash2
 } from 'lucide-react'
 
 type Contact = {
@@ -25,8 +25,18 @@ function fmtDate(s: string | null) {
 export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Contact; stats: Stats; onClose: () => void }) {
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
+
+  async function handleDelete() {
+    setDeleting(true); setError(null)
+    const result = await deleteContact(contact.id)
+    setDeleting(false)
+    if (result?.error) { setError(result.error); setConfirmDel(false); return }
+    onClose()
+  }
 
   const diasCliente = Math.max(0, Math.floor((Date.now() - new Date(contact.created_at).getTime()) / (1000 * 60 * 60 * 24)))
 
@@ -121,11 +131,27 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
               </div>
             )}
 
-            <button onClick={() => setEditing(true)}
-              className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
-              style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-              <Edit2 className="size-4" /> Editar Cliente
-            </button>
+            {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
+
+            <div className="flex gap-3">
+              <button onClick={() => setEditing(true)}
+                className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+                <Edit2 className="size-4" /> Editar Cliente
+              </button>
+              {confirmDel ? (
+                <button onClick={handleDelete} disabled={deleting}
+                  className="px-4 h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-colors">
+                  {deleting ? <Loader2 className="size-4 animate-spin" /> : <><Check className="size-4" /> Confirmar</>}
+                </button>
+              ) : (
+                <button onClick={() => setConfirmDel(true)}
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-red-500 border border-[#EAE8E1] hover:bg-red-50 transition-colors">
+                  <Trash2 className="size-4" />
+                </button>
+              )}
+            </div>
+            {confirmDel && <p className="text-xs text-red-500 text-center">Clique em Confirmar para excluir definitivamente este cliente.</p>}
           </div>
         )}
       </div>

@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createProduct, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
 import { PDV } from '@/components/orbi/pdv'
+import { FotoUpload } from '@/components/orbi/foto-upload'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
-  BarChart2, X, Loader2, Check, Camera, AlertTriangle,
+  BarChart2, X, Loader2, Check, AlertTriangle,
   DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, Glasses
 } from 'lucide-react'
 
@@ -14,7 +15,7 @@ type Product = {
   id: string; name: string; price: number; cost_price: number
   stock: number; active: boolean; created_at: string
   tipo_produto: string | null; ncm: string | null; grife: string | null
-  controla_estoque: boolean | null; categoria: string | null
+  controla_estoque: boolean | null; categoria: string | null; image_url: string | null
 }
 
 function fmt(v: number) {
@@ -78,6 +79,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
   const [grife, setGrife] = useState('')
   const [controla, setControla] = useState(true)
   const [categoria, setCategoria] = useState<'otica' | 'diversos'>('otica')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'otica' | 'diversos'>('todos')
 
   const filtered = products.filter(p => {
@@ -98,13 +100,13 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
     const result = await createProduct({
       name, price: parseFloat(price.replace(',', '.')) || 0,
       costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
-      stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria,
+      stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria, imageUrl,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
     setSaved(true)
     setTimeout(() => { setSaved(false); setTab('estoque') }, 1200)
-    setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true)
+    setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true); setImageUrl(null)
   }
 
   async function handleDelete(id: string) {
@@ -212,7 +214,9 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                     <div className="p-4">
                       <div className="relative w-full h-28 rounded-xl mb-3 flex items-center justify-center text-4xl overflow-hidden"
                         style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
-                        {emojiFor(p.tipo_produto)}
+                        {p.image_url
+                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                          : emojiFor(p.tipo_produto)}
                         {(isLow || isOut) && (
                           <span className="absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white"
                             style={{ fontFamily: 'Barlow, sans-serif', background: isOut ? '#EF4444' : '#F59E0B' }}>
@@ -347,10 +351,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
               </div>
 
               <div className="flex justify-center">
-                <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-[#EAE8E1] flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#1A56FF] transition-all">
-                  <Camera className="size-5 text-[#C8C5BB]" strokeWidth={1.5} />
-                  <p className="text-[10px] text-[#C8C5BB] text-center">Adicionar foto</p>
-                </div>
+                <FotoUpload value={imageUrl} onChange={setImageUrl} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

@@ -14,6 +14,7 @@ export async function createProduct(payload: {
   grife: string
   controlaEstoque: boolean
   categoria?: 'otica' | 'diversos'
+  imageUrl?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
@@ -33,6 +34,7 @@ export async function createProduct(payload: {
     grife: payload.grife?.trim() || null,
     controla_estoque: payload.controlaEstoque,
     categoria: payload.categoria ?? 'otica',
+    image_url: payload.imageUrl ?? null,
     active: true,
   }).select().single()
 

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Calendar, Users, DollarSign,
   Bot, MessageSquare, Settings, LogOut, Eye,
-  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal,
+  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal, Crown,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -88,6 +88,12 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
+        <Link href="/dashboard/plano"
+          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+            isActive('/dashboard/plano') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+          <Crown className="size-4 shrink-0 text-[#F59E0B]" strokeWidth={1.5} />
+          Seu Plano
+        </Link>
         <Link href="/dashboard/parametros"
           className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
             isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
