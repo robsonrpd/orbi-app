@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { updateCompanyStatus, updateCompanyPlan, extendTrial } from '@/lib/actions/founder'
+import { acessarComo } from '@/lib/actions/impersonate'
 import {
   Eye, Building2, Clock, CheckCircle2, AlertTriangle,
   Search, MoreVertical, Loader2, Calendar, DollarSign, Ban, Check,
-  Sun, Moon, Mail, MessageCircle, Download, X
+  Sun, Moon, Mail, MessageCircle, Download, X, LogIn
 } from 'lucide-react'
 
 type Company = {
@@ -255,6 +256,13 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
         <div className="fixed z-50 w-56 rounded-xl shadow-2xl overflow-hidden"
           style={{ top: menu.y + 4, left: Math.min(menu.x - 224, window.innerWidth - 240), background: t.menuBg, border: `1px solid ${t.menuBorder}` }}
           onClick={e => e.stopPropagation()}>
+
+          {/* Acessar como (suporte) */}
+          <button onClick={() => acessarComo(menu.company.id)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[#F59E0B]/10" style={{ color: '#F59E0B' }}>
+            <LogIn className="size-3.5" /> Acessar como esta ótica
+          </button>
+          <div style={{ borderTop: `1px solid ${t.menuBorder}` }} />
 
           {menu.company.subscription_status !== 'active' && (
             <button onClick={() => act(() => updateCompanyStatus(menu.company.id, 'active'))}

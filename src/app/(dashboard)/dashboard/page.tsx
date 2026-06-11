@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart } from '@/components/orbi/dashboard-charts'
@@ -16,10 +17,11 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id, name, companies(name)').eq('id', user!.id).single()
-  const companyId = userData?.company_id
-  const companyName = (userData?.companies as { name?: string } | null)?.name ?? 'Minha Ótica'
-  const firstName = userData?.name?.split(' ')[0] ?? 'usuário'
+  const companyId = await getEffectiveCompanyId()
+  const { data: userRow } = await service.from('users').select('name').eq('id', user!.id).single()
+  const { data: companyRow } = await service.from('companies').select('name').eq('id', companyId).single()
+  const companyName = companyRow?.name ?? 'Minha Ótica'
+  const firstName = userRow?.name?.split(' ')[0] ?? 'usuário'
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 

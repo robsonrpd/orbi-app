@@ -1,17 +1,16 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { ServicosClient } from './servicos-client'
 
 export default async function ServicosPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id').eq('id', user!.id).single()
+  const companyId = await getEffectiveCompanyId()
 
   const { data: services } = await service
     .from('services')
     .select('*')
-    .eq('company_id', userData?.company_id)
+    .eq('company_id', companyId)
     .eq('active', true)
     .order('created_at')
 

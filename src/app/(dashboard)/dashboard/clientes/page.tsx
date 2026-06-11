@@ -1,14 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
-import { createClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { ClientesClient } from './clientes-client'
 
 export default async function ClientesPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id').eq('id', user!.id).single()
-  const companyId = userData?.company_id
+  const companyId = await getEffectiveCompanyId()
 
   const { data: contacts } = await service
     .from('contacts')

@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
-import { createClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { AppointmentBadge, TransactionBadge } from '@/components/orbi/status-badge'
 import { notFound } from 'next/navigation'
@@ -20,27 +20,16 @@ function formatDateTime(s: string) {
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) notFound()
-
   const service = createServiceClient()
-
-  // Busca company_id do usuário logado
-  const { data: userData } = await service
-    .from('users')
-    .select('company_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!userData) notFound()
+  const companyId = await getEffectiveCompanyId()
+  if (!companyId) notFound()
 
   // SEGURANÇA: valida que o contato pertence à empresa do usuário logado
   const { data: contact } = await service
     .from('contacts')
     .select('*')
     .eq('id', id)
-    .eq('company_id', userData.company_id) // isolamento multi-tenant
+    .eq('company_id', companyId) // isolamento multi-tenant
     .single()
 
   if (!contact) notFound() // 404 para contatos de outras empresas também
@@ -49,13 +38,13 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
     service.from('appointments')
       .select('*, services(name)')
       .eq('contact_id', id)
-      .eq('company_id', userData.company_id) // reforço multi-tenant
+      .eq('company_id', companyId) // reforço multi-tenant
       .order('start_at', { ascending: false })
       .limit(10),
     service.from('transactions')
       .select('*')
       .eq('contact_id', id)
-      .eq('company_id', userData.company_id) // reforço multi-tenant
+      .eq('company_id', companyId) // reforço multi-tenant
       .order('created_at', { ascending: false })
       .limit(10),
   ])

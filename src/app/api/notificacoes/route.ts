@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 
 export async function GET() {
   const supabase = await createClient()
@@ -7,8 +8,7 @@ export async function GET() {
   if (!user) return NextResponse.json([], { status: 401 })
 
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id').eq('id', user.id).single()
-  const companyId = userData?.company_id
+  const companyId = await getEffectiveCompanyId()
 
   const notifs: unknown[] = []
   const mesAtual = new Date().getMonth() + 1

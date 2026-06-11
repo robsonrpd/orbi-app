@@ -1,15 +1,13 @@
 import { createServiceClient } from '@/lib/supabase/server'
-import { createClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { FinanceiroRedesignClient } from './financeiro-redesign-client'
 
 export default async function FinanceiroPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id, companies(slug)').eq('id', user!.id).single()
-  const companyId = userData?.company_id
-  const companySlug = (userData?.companies as { slug?: string } | null)?.slug ?? 'minha-otica'
+  const companyId = await getEffectiveCompanyId()
+  const { data: companyRow } = await service.from('companies').select('slug').eq('id', companyId).single()
+  const companySlug = companyRow?.slug ?? 'minha-otica'
 
   const [{ data: transactions }, { data: contacts }, { data: contasPagar }] = await Promise.all([
     service.from('transactions').select('id, amount, status, due_date, created_at, paid_at, notes, contacts(id, name, phone)')

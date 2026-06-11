@@ -1,13 +1,11 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { CaixaClient } from './caixa-client'
 
 export default async function CaixaPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id').eq('id', user!.id).single()
-  const companyId = userData?.company_id
+  const companyId = await getEffectiveCompanyId()
 
   const { data: caixaAberto } = await service
     .from('caixas').select('*').eq('company_id', companyId).eq('status', 'aberto').limit(1).single()

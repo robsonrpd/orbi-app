@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
-import { createClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { Bot, User, AlertTriangle, MessageSquare } from 'lucide-react'
 
@@ -11,11 +11,8 @@ function formatDate(s: string) {
 }
 
 export default async function ConversasPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
   const service = createServiceClient()
-  const { data: userData } = await service.from('users').select('company_id').eq('id', user!.id).single()
-  const companyId = userData?.company_id
+  const companyId = await getEffectiveCompanyId()
 
   const { data: conversations } = await service
     .from('conversations')

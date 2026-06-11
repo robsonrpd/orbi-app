@@ -1,19 +1,10 @@
 'use server'
 
 import { createServiceClient } from '@/lib/supabase/server'
-import { createClient } from '@/lib/supabase/server'
+import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { revalidatePath } from 'next/cache'
 
 const MAX_TRANSACTION_AMOUNT = 1_000_000
-
-async function getCompanyId(): Promise<string | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const service = createServiceClient()
-  const { data } = await service.from('users').select('company_id').eq('id', user.id).single()
-  return data?.company_id ?? null
-}
 
 export async function createTransaction(formData: FormData) {
   const companyId = await getCompanyId()
