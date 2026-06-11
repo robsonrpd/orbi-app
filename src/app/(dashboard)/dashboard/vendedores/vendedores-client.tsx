@@ -27,6 +27,7 @@ const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','P
 export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Vendedor | null>(null)
+  const [viewing, setViewing] = useState<Vendedor | null>(null)
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +107,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
               const nBloq = (v.bloqueios ?? []).length
               return (
                 <GlowCard key={v.id}>
-                  <div className="p-5">
+                  <div onClick={() => setViewing(v)} className="p-5 cursor-pointer">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white"
@@ -120,10 +121,10 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(v)} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8C8880] hover:bg-[#F7F6F3] transition-colors">
+                        <button onClick={(e) => { e.stopPropagation(); openEdit(v) }} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8C8880] hover:bg-[#F7F6F3] transition-colors">
                           <Edit2 className="size-3.5" />
                         </button>
-                        <button onClick={() => handleDelete(v.id)} disabled={deletingId === v.id}
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(v.id) }} disabled={deletingId === v.id}
                           className="w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors">
                           {deletingId === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                         </button>
@@ -139,6 +140,50 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
           </div>
         )}
       </div>
+
+      {/* Modal visualizar permissões */}
+      {viewing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-[#EAE8E1]">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full flex items-center justify-center text-base font-bold text-white" style={{ background: 'linear-gradient(135deg,#1A56FF,#0D3ACC)' }}>
+                  {viewing.nome[0].toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{viewing.nome}</p>
+                  <p className="text-xs text-[#8C8880]">{[viewing.telefone, viewing.email].filter(Boolean).join(' · ') || 'Vendedor'}</p>
+                </div>
+              </div>
+              <button onClick={() => setViewing(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] hover:bg-[#F7F6F3]"><X className="size-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-[#1A56FF]" />
+                <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">Permissões de acesso</p>
+              </div>
+              <div className="space-y-2">
+                {AREAS.map(a => {
+                  const liberado = !(viewing.bloqueios ?? []).includes(a.key)
+                  return (
+                    <div key={a.key} className={`flex items-center justify-between px-3 h-11 rounded-xl border ${liberado ? 'bg-[#E6F9F3] border-[#0DB57A]/20' : 'bg-[#FEF2F2] border-red-100'}`}>
+                      <span className="text-sm text-[#2E2D29]">{a.label}</span>
+                      <span className={`flex items-center gap-1 text-xs font-bold ${liberado ? 'text-[#0DB57A]' : 'text-red-500'}`}>
+                        {liberado ? <><Check className="size-3.5" strokeWidth={3} /> Liberado</> : <><Lock className="size-3" /> Bloqueado</>}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <button onClick={() => { const v = viewing; setViewing(null); openEdit(v) }}
+                className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+                <Edit2 className="size-4" /> Editar Vendedor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal criar/editar */}
       {modalOpen && (
