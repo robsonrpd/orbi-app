@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { operarComoVendedor, sairComoVendedor, salvarPinDono } from '@/lib/actions/modo'
-import { Lock, X, Loader2, Check, UserCog, KeyRound, ChevronDown } from 'lucide-react'
+import { operarComoVendedor, sairComoVendedor, salvarPinDono, solicitarCodigoPin, resetarPinComCodigo } from '@/lib/actions/modo'
+import { Lock, X, Loader2, Check, UserCog, KeyRound, ChevronDown, Mail } from 'lucide-react'
 
 // Renderiza fora da sidebar (que tem stacking context próprio via position:sticky),
 // senão os modais aparecem ATRÁS do conteúdo do dashboard.
@@ -29,6 +29,33 @@ export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores 
   const [novoPin, setNovoPin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // fluxo "esqueci o PIN"
+  const [recuperar, setRecuperar] = useState(false)
+  const [emailMasc, setEmailMasc] = useState<string | null>(null)
+  const [codigo, setCodigo] = useState('')
+  const [pinReset, setPinReset] = useState('')
+
+  async function enviarCodigo() {
+    setLoading(true); setError(null)
+    const r = await solicitarCodigoPin()
+    setLoading(false)
+    if (r?.error) { setError(r.error); return }
+    setEmailMasc(r.email ?? null)
+  }
+  async function confirmarReset() {
+    if (codigo.length < 6) { setError('Digite o código de 6 dígitos.'); return }
+    if (pinReset.length < 4) { setError('O novo PIN precisa de 4 a 6 dígitos.'); return }
+    setLoading(true); setError(null)
+    const r = await resetarPinComCodigo(codigo, pinReset)
+    setLoading(false)
+    if (r?.error) { setError(r.error); return }
+    // sucesso: já saiu do modo vendedor (cookie limpo no servidor)
+    setPinOpen(false); setRecuperar(false); setEmailMasc(null); setCodigo(''); setPinReset(''); setPinInput('')
+  }
+  function fecharSair() {
+    setPinOpen(false); setError(null); setPinInput('')
+    setRecuperar(false); setEmailMasc(null); setCodigo(''); setPinReset('')
+  }
 
   async function operar(id: string) {
     setLoading(true); setListaOpen(false)
@@ -91,19 +118,54 @@ export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores 
       {pinOpen && (
         <Portal><div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
           <div className="w-full max-w-xs bg-white rounded-2xl shadow-2xl p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center mx-auto mb-3"><Lock className="size-6 text-[#1A56FF]" strokeWidth={1.5} /></div>
-            <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Voltar para visão de Dono</p>
-            <p className="text-sm text-[#8C8880] mt-1 mb-4">Digite o PIN do dono.</p>
-            <input value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))} autoFocus inputMode="numeric" placeholder="• • • •"
-              onKeyDown={e => { if (e.key === 'Enter') sair() }}
-              className="w-full h-12 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-center text-lg tracking-[0.5em] outline-none focus:border-[#1A56FF] transition-all" />
-            {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => { setPinOpen(false); setError(null); setPinInput('') }} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>
-              <button onClick={sair} disabled={loading} className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
-                {loading ? <Loader2 className="size-4 animate-spin" /> : 'Liberar'}
-              </button>
-            </div>
+            {!recuperar ? (
+              <>
+                <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center mx-auto mb-3"><Lock className="size-6 text-[#1A56FF]" strokeWidth={1.5} /></div>
+                <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Voltar para visão de Dono</p>
+                <p className="text-sm text-[#8C8880] mt-1 mb-4">Digite o PIN do dono.</p>
+                <input value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))} autoFocus inputMode="numeric" placeholder="• • • •"
+                  onKeyDown={e => { if (e.key === 'Enter') sair() }}
+                  className="w-full h-12 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-center text-lg tracking-[0.5em] outline-none focus:border-[#1A56FF] transition-all" />
+                {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+                <div className="flex gap-2 mt-4">
+                  <button onClick={fecharSair} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>
+                  <button onClick={sair} disabled={loading} className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
+                    {loading ? <Loader2 className="size-4 animate-spin" /> : 'Liberar'}
+                  </button>
+                </div>
+                <button onClick={() => { setError(null); setRecuperar(true) }} className="mt-3 text-xs font-semibold text-[#1A56FF] hover:underline">Esqueci o PIN</button>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center mx-auto mb-3"><Mail className="size-6 text-[#1A56FF]" strokeWidth={1.5} /></div>
+                <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Esqueci o PIN</p>
+                {!emailMasc ? (
+                  <>
+                    <p className="text-sm text-[#8C8880] mt-1 mb-4">Vamos enviar um código de recuperação para o e-mail do dono.</p>
+                    {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+                    <button onClick={enviarCodigo} disabled={loading}
+                      className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
+                      {loading ? <Loader2 className="size-4 animate-spin" /> : <><Mail className="size-4" /> Enviar código</>}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#8C8880] mt-1 mb-3">Enviamos um código para <strong>{emailMasc}</strong>. Digite-o e crie um novo PIN.</p>
+                    <input value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="Código (6 dígitos)" autoFocus
+                      className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-center text-base tracking-[0.3em] outline-none focus:border-[#1A56FF] transition-all mb-2" />
+                    <input value={pinReset} onChange={e => setPinReset(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="Novo PIN (4-6 dígitos)"
+                      className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-center text-base tracking-[0.3em] outline-none focus:border-[#1A56FF] transition-all" />
+                    {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+                    <button onClick={confirmarReset} disabled={loading}
+                      className="w-full h-11 mt-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#0DB57A' }}>
+                      {loading ? <Loader2 className="size-4 animate-spin" /> : <><Check className="size-4" /> Redefinir e entrar</>}
+                    </button>
+                    <button onClick={enviarCodigo} disabled={loading} className="mt-2 text-xs text-[#8C8880] hover:underline">Reenviar código</button>
+                  </>
+                )}
+                <button onClick={() => { setRecuperar(false); setError(null) }} className="mt-3 block mx-auto text-xs font-semibold text-[#8C8880] hover:underline">Voltar</button>
+              </>
+            )}
           </div>
         </div></Portal>
       )}
