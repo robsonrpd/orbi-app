@@ -5,7 +5,8 @@ import { GlowCard } from '@/components/orbi/glow-card'
 import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart } from '@/components/orbi/dashboard-charts'
 import {
   ArrowUpCircle, ArrowDownCircle, Gift, PackageCheck, Eye,
-  TrendingUp, Glasses, FileText, ChevronRight, Cake
+  TrendingUp, Glasses, FileText, ChevronRight, Cake,
+  Users, ShoppingBag, DollarSign
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -34,7 +35,7 @@ export default async function DashboardPage() {
     { data: transactions }, { data: contasPagar }, { data: contacts },
     { data: ordens }, { data: receitas }, { data: products },
   ] = await Promise.all([
-    service.from('transactions').select('amount, status, created_at, paid_at').eq('company_id', companyId),
+    service.from('transactions').select('amount, status, created_at, paid_at, forma_pagamento, contact_id').eq('company_id', companyId),
     service.from('contas_pagar' as never).select('valor, status').eq('company_id', companyId),
     service.from('contacts').select('id, name, phone, data_nascimento').eq('company_id', companyId),
     service.from('ordens_servico').select('status, total, created_at').eq('company_id', companyId),
@@ -56,9 +57,33 @@ export default async function DashboardPage() {
   // KPI 5 — Receitas vencidas
   const receitasVencidas = receitas ?? []
 
-  // Faturamento do mês
+  // Faturamento do mês + comparação com mês anterior
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const faturamento = (transactions ?? []).filter(t => t.status === 'paid' && (t.paid_at ?? t.created_at) >= monthStart).reduce((s, t) => s + Number(t.amount), 0)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+  type Tx = { amount: number; status: string; created_at: string; paid_at: string | null; forma_pagamento: string | null; contact_id: string | null }
+  const txList = (transactions ?? []) as Tx[]
+  const dataRef = (t: Tx) => (t.paid_at ?? t.created_at)
+
+  const pagasMes = txList.filter(t => t.status === 'paid' && dataRef(t) >= monthStart)
+  const pagasMesAnterior = txList.filter(t => t.status === 'paid' && dataRef(t) >= lastMonthStart && dataRef(t) < monthStart)
+  const faturamento = pagasMes.reduce((s, t) => s + Number(t.amount), 0)
+  const faturamentoAnterior = pagasMesAnterior.reduce((s, t) => s + Number(t.amount), 0)
+  const trendFatur = faturamentoAnterior > 0 ? Math.round(((faturamento - faturamentoAnterior) / faturamentoAnterior) * 100) : (faturamento > 0 ? 100 : 0)
+
+  // Ticket médio + nº vendas + média de clientes/dia (mês atual)
+  const numVendasMes = pagasMes.length
+  const ticketMedio = numVendasMes > 0 ? faturamento / numVendasMes : 0
+  const diaDoMes = now.getDate()
+  const clientesUnicosMes = new Set(pagasMes.map(t => t.contact_id).filter(Boolean)).size
+  const mediaClientesDia = diaDoMes > 0 ? (clientesUnicosMes / diaDoMes) : 0
+
+  // Receita por forma de pagamento (mês atual)
+  const formaLabel: Record<string, string> = { dinheiro: 'Dinheiro', pix: 'PIX', cartao_credito: 'Crédito', cartao_debito: 'Débito', boleto: 'Boleto', outro: 'Outro' }
+  const formaCor: Record<string, string> = { dinheiro: '#0DB57A', pix: '#1A56FF', cartao_credito: '#8B5CF6', cartao_debito: '#06B6D4', boleto: '#F59E0B', outro: '#8C8880' }
+  const porForma = ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'boleto', 'outro'].map(f => ({
+    forma: f, label: formaLabel[f], cor: formaCor[f],
+    valor: pagasMes.filter(t => t.forma_pagamento === f).reduce((s, t) => s + Number(t.amount), 0),
+  })).filter(x => x.valor > 0)
 
   // Gráfico: evolução de faturamento (6 meses, atual vs ano anterior simulado)
   const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -122,6 +147,67 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
+
+        {/* Relatório do Mês — visão geral de faturamento */}
+        <div className="grid grid-cols-4 gap-4">
+          {[
+            { label: 'Faturamento do Mês', value: fmt(faturamento), trend: trendFatur, icon: TrendingUp, color: '#0DB57A', bg: '#E6F9F3' },
+            { label: 'Ticket Médio', value: fmt(ticketMedio), sub: `${numVendasMes} venda${numVendasMes !== 1 ? 's' : ''} no mês`, icon: DollarSign, color: '#1A56FF', bg: '#EEF2FF' },
+            { label: 'Média Clientes/Dia', value: mediaClientesDia.toFixed(1), sub: `${clientesUnicosMes} clientes no mês`, icon: Users, color: '#F59E0B', bg: '#FEF3C7' },
+            { label: 'Vendas no Mês', value: String(numVendasMes), sub: 'Pagamentos recebidos', icon: ShoppingBag, color: '#8B5CF6', bg: '#F5F3FF' },
+          ].map(m => (
+            <GlowCard key={m.label}>
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: m.bg }}>
+                    <m.icon className="size-4.5" style={{ color: m.color }} strokeWidth={1.5} />
+                  </div>
+                  {'trend' in m && m.trend !== undefined && (
+                    <span className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${m.trend >= 0 ? 'bg-[#E6F9F3] text-[#0DB57A]' : 'bg-red-50 text-red-500'}`}>
+                      {m.trend >= 0 ? '↑' : '↓'} {Math.abs(m.trend)}%
+                    </span>
+                  )}
+                </div>
+                <p className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>{m.value}</p>
+                <p className="text-[11px] text-[#8C8880] mt-0.5">{m.label}</p>
+                {'sub' in m && m.sub && <p className="text-[10px] text-[#C8C5BB] mt-0.5">{m.sub}</p>}
+                {'trend' in m && <p className="text-[10px] text-[#C8C5BB] mt-0.5">vs mês anterior</p>}
+              </div>
+            </GlowCard>
+          ))}
+        </div>
+
+        {/* Receita por forma de pagamento (mês atual) */}
+        {porForma.length > 0 && (
+          <GlowCard>
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+                  <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Receita por Forma de Pagamento</h2>
+                </div>
+                <span className="text-xs text-[#8C8880]">Este mês · {fmt(faturamento)}</span>
+              </div>
+              {/* Barra proporcional */}
+              <div className="flex h-3 rounded-full overflow-hidden mb-3">
+                {porForma.map(f => (
+                  <div key={f.forma} style={{ width: `${(f.valor / faturamento) * 100}%`, background: f.cor }} title={f.label} />
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {porForma.map(f => (
+                  <div key={f.forma} className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: f.cor }} />
+                    <div>
+                      <p className="text-xs text-[#8C8880]">{f.label}</p>
+                      <p className="text-sm font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(f.valor)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </GlowCard>
+        )}
 
         {/* Linha de gráficos */}
         <div className="grid grid-cols-3 gap-4">
