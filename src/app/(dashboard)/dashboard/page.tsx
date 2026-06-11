@@ -133,6 +133,25 @@ export default async function DashboardPage() {
     { label: 'Receitas Vencidas', value: String(receitasVencidas.length), icon: Eye, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/receitas' },
   ]
 
+  const donutCard = (
+    <GlowCard>
+      <div className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Glasses className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+          <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Estoque por Tipo</h2>
+        </div>
+        <EstoqueDonut data={estoqueData} />
+        <div className="flex items-center justify-center gap-4 mt-2">
+          {estoqueData.map(d => (
+            <span key={d.name} className="flex items-center gap-1 text-[10px] text-[#8C8880]">
+              <span className="w-2 h-2 rounded-full" style={{ background: d.color }} /> {d.name}
+            </span>
+          ))}
+        </div>
+      </div>
+    </GlowCard>
+  )
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
       <Topbar title="Dashboard" subtitle={`${greeting}, ${firstName}! — ${companyName}`} />
@@ -254,45 +273,30 @@ export default async function DashboardPage() {
           </GlowCard>
         )}
 
-        {/* Linha de gráficos */}
-        <div className="grid grid-cols-3 gap-4">
-          {/* Evolução de vendas */}
-          {!ocultar && <GlowCard className="col-span-2">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
-                  <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Evolução de Faturamento</h2>
+        {/* Linha de gráficos (Evolução + Estoque) — só na visão de dono */}
+        {!ocultar && (
+          <div className="grid grid-cols-3 gap-4">
+            <GlowCard className="col-span-2">
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+                    <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Evolução de Faturamento</h2>
+                  </div>
+                  <span className="text-xs text-[#8C8880]">Últimos 6 meses</span>
                 </div>
-                <span className="text-xs text-[#8C8880]">Últimos 6 meses</span>
+                <EvolucaoVendasChart data={evolucao} />
               </div>
-              <EvolucaoVendasChart data={evolucao} />
-            </div>
-          </GlowCard>}
+            </GlowCard>
+            {donutCard}
+          </div>
+        )}
 
-          {/* Estoque donut */}
-          <GlowCard className={ocultar ? 'col-span-3' : ''}>
-            <div className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Glasses className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
-                <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Estoque por Tipo</h2>
-              </div>
-              <EstoqueDonut data={estoqueData} />
-              <div className="flex items-center justify-center gap-4 mt-2">
-                {estoqueData.map(d => (
-                  <span key={d.name} className="flex items-center gap-1 text-[10px] text-[#8C8880]">
-                    <span className="w-2 h-2 rounded-full" style={{ background: d.color }} /> {d.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </GlowCard>
-        </div>
-
-        {/* Segunda linha */}
+        {/* Segunda linha — no modo vendedor inclui o Estoque para equilibrar */}
         <div className="grid grid-cols-3 gap-4">
+          {ocultar && donutCard}
           {/* Funil de produção */}
-          <GlowCard className="col-span-2">
+          <GlowCard className={ocultar ? '' : 'col-span-2'}>
             <div className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
