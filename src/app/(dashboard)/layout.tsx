@@ -16,7 +16,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const { data: company } = await service
     .from('companies')
-    .select('name, trial_ends_at, subscription_status, subscription_plan')
+    .select('name, trial_ends_at, subscription_status, subscription_plan, logo_url')
     .eq('id', companyId)
     .single()
 
@@ -28,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-      <Sidebar />
+      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
         {!impersonation && (

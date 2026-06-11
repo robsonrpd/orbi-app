@@ -4,16 +4,19 @@ import { useState, useRef } from 'react'
 import { updateContact, deleteContact } from '@/lib/actions/contacts'
 import {
   X, Phone, Mail, Cake, Clock,
-  Edit2, Loader2, Check, MapPin, Trash2
+  Edit2, Loader2, Check, MapPin, Trash2, AlertCircle, CreditCard, ShoppingBag
 } from 'lucide-react'
 
 type Contact = {
   id: string; name: string | null; phone: string; email: string | null
-  data_nascimento: string | null; created_at: string
+  data_nascimento: string | null; created_at: string; origem?: string | null
   cep?: string | null; endereco?: string | null; numero?: string | null
   bairro?: string | null; cidade?: string | null; uf?: string | null
 }
-type Stats = { totalGasto: number; numAgendamentos: number; numCompras: number }
+type Stats = {
+  totalGasto: number; numAgendamentos: number; numCompras: number
+  devendo?: number; formas?: Record<string, number>; produtos?: string[]
+}
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 function fmtDate(s: string | null) {
@@ -79,6 +82,14 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
               <div><label className={labelCls}>WhatsApp *</label><input name="phone" required defaultValue={contact.phone} className={inputCls} /></div>
               <div><label className={labelCls}>E-mail</label><input name="email" type="email" defaultValue={contact.email ?? ''} className={inputCls} /></div>
               <div><label className={labelCls}>Nascimento</label><input name="data_nascimento" type="date" defaultValue={contact.data_nascimento?.split('T')[0] ?? ''} className={inputCls} /></div>
+              <div className="col-span-2">
+                <label className={labelCls}>Origem (como nos conheceu)</label>
+                <select name="origem" defaultValue={contact.origem ?? ''} className={inputCls}>
+                  <option value="">Não informado</option>
+                  {['Instagram','Facebook','Google','Indicação de amigo','Indicação médica','Passou em frente','Já era cliente','WhatsApp','Outro'].map(o =>
+                    <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
             {/* preserva endereço/lgpd existentes */}
             <input type="hidden" name="cep" defaultValue={contact.cep ?? ''} />
@@ -104,6 +115,29 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
               {contact.data_nascimento && <span className="flex items-center gap-1.5 text-[#2E2D29]"><Cake className="size-3.5 text-[#C8C5BB]" /> {fmtDate(contact.data_nascimento)}</span>}
             </div>
 
+            {/* Origem + status financeiro */}
+            <div className="flex flex-wrap items-center gap-2">
+              {contact.origem && (
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#EEF2FF] text-[#1A56FF] font-semibold">
+                  <MapPin className="size-3" /> Veio por: {contact.origem}
+                </span>
+              )}
+              {(stats.devendo ?? 0) > 0 ? (
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-500 font-bold">
+                  <AlertCircle className="size-3" /> Devendo {fmt(stats.devendo ?? 0)}
+                </span>
+              ) : stats.numCompras > 0 ? (
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#E6F9F3] text-[#0DB57A] font-bold">
+                  <Check className="size-3" /> Em dia
+                </span>
+              ) : null}
+              {stats.formas && Object.keys(stats.formas).length > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#F7F6F3] text-[#8C8880] font-semibold">
+                  <CreditCard className="size-3" /> Paga via {Object.entries(stats.formas).sort((a, b) => b[1] - a[1])[0][0]}
+                </span>
+              )}
+            </div>
+
             {/* Stats */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-xl bg-[#F7F6F3] p-3 text-center">
@@ -119,6 +153,20 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
                 <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mt-0.5" style={{ fontFamily: 'Barlow, sans-serif' }}>Compras</p>
               </div>
             </div>
+
+            {/* Produtos comprados */}
+            {(stats.produtos?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1.5 flex items-center gap-1" style={{ fontFamily: 'Barlow, sans-serif' }}>
+                  <ShoppingBag className="size-3" /> Produtos que já comprou
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {stats.produtos!.map((p, i) => (
+                    <span key={i} className="text-xs px-2 py-1 rounded-lg bg-[#F7F6F3] text-[#2E2D29] border border-[#EAE8E1]">{p}</span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Endereço */}
             {(contact.endereco || contact.cidade) && (

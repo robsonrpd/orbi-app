@@ -10,6 +10,9 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useState, useRef } from 'react'
+import { Camera, Loader2 } from 'lucide-react'
+import { saveCompanyLogo } from '@/lib/actions/empresa'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -30,9 +33,29 @@ const navItems = [
   { href: '/dashboard/ia', label: 'Inteligência IA', icon: Bot },
 ]
 
-export function Sidebar() {
+export function Sidebar({ companyName, logoUrl, canEditLogo = true }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [logo, setLogo] = useState<string | null>(logoUrl ?? null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingLogo(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        setLogo(data.url)
+        await saveCompanyLogo(data.url)
+      }
+    } catch { /* ignora */ }
+    setUploadingLogo(false)
+  }
 
   function isActive(href: string, exact?: boolean) {
     if (exact) return pathname === href
@@ -51,16 +74,31 @@ export function Sidebar() {
       <div className="absolute inset-0 opacity-[0.025] pointer-events-none"
         style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
 
-      {/* Logo */}
-      <div className="relative z-10 px-5 py-5 border-b border-white/5">
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: '#1A56FF', boxShadow: '0 0 16px rgba(26,86,255,0.5)' }}>
-            <Eye className="size-4 text-white" strokeWidth={1.5} />
-          </div>
-          <span className="text-2xl font-black text-white tracking-tight"
-            style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
-            Orbi<span style={{ color: '#1A56FF' }}>.</span>
+      {/* Logo da loja (upload) */}
+      <div className="relative z-10 px-4 pt-4 pb-3 border-b border-white/5">
+        <div
+          onClick={() => canEditLogo && !uploadingLogo && logoInputRef.current?.click()}
+          className={`group relative rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center h-20 ${canEditLogo ? 'cursor-pointer hover:border-[#1A56FF]/60' : ''} transition-colors`}>
+          {logo ? (
+            <img src={logo} alt={companyName ?? 'Logo'} className="w-full h-full object-contain p-2" />
+          ) : (
+            <div className="flex flex-col items-center gap-1 text-white/40">
+              {uploadingLogo ? <Loader2 className="size-5 animate-spin" />
+                : <><Camera className="size-5" strokeWidth={1.5} /><span className="text-[10px]">Adicionar logo</span></>}
+            </div>
+          )}
+          {canEditLogo && logo && (
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+              {uploadingLogo ? <Loader2 className="size-5 animate-spin text-white" />
+                : <span className="flex items-center gap-1 text-[11px] font-semibold text-white"><Camera className="size-3.5" /> Trocar</span>}
+            </div>
+          )}
+          <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+        </div>
+        {companyName && <p className="text-center text-xs font-semibold text-white/70 mt-2 truncate">{companyName}</p>}
+        <Link href="/dashboard" className="flex items-center justify-center gap-1 mt-1.5">
+          <span className="text-sm font-black text-white/40 tracking-tight" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
+            <Eye className="size-3 inline mb-0.5 mr-0.5" strokeWidth={2} />Orbi<span style={{ color: '#1A56FF' }}>.</span>
           </span>
         </Link>
       </div>

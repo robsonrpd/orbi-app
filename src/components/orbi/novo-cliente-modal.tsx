@@ -119,6 +119,22 @@ export function NovoClienteModal({ open, onClose }: Props) {
             </div>
           </div>
 
+          <div>
+            <label className={labelCls}><MapPin className="size-3" /> Como nos conheceu? (origem)</label>
+            <select name="origem" className={inputCls} defaultValue="">
+              <option value="">Selecione...</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Facebook">Facebook</option>
+              <option value="Google">Google</option>
+              <option value="Indicação de amigo">Indicação de amigo</option>
+              <option value="Indicação médica">Indicação médica</option>
+              <option value="Passou em frente">Passou em frente à loja</option>
+              <option value="Já era cliente">Já era cliente</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+
           {/* Endereço */}
           <div className="rounded-xl border border-[#EAE8E1] p-4 space-y-3">
             <div className="flex items-center gap-2">

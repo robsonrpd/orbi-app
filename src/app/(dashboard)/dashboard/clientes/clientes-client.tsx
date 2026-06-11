@@ -12,13 +12,17 @@ type Contact = {
   phone: string
   email: string | null
   data_nascimento: string | null
+  origem: string | null
   tags: string[]
   notes: string | null
   created_at: string
   cep?: string | null; endereco?: string | null; numero?: string | null
   bairro?: string | null; cidade?: string | null; uf?: string | null
 }
-type Stats = { totalGasto: number; numAgendamentos: number; numCompras: number }
+type Stats = {
+  totalGasto: number; numAgendamentos: number; numCompras: number
+  devendo?: number; formas?: Record<string, number>; produtos?: string[]
+}
 
 function formatDate(str: string) {
   return new Date(str).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -27,7 +31,7 @@ function formatDate(str: string) {
 export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats: Record<string, Stats> }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [detalhe, setDetalhe] = useState<Contact | null>(null)
-  const statsFor = (id: string): Stats => stats[id] ?? { totalGasto: 0, numAgendamentos: 0, numCompras: 0 }
+  const statsFor = (id: string): Stats => stats[id] ?? { totalGasto: 0, numAgendamentos: 0, numCompras: 0, devendo: 0, formas: {}, produtos: [] }
 
   return (
     <>
