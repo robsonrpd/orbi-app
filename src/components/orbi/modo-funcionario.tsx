@@ -1,8 +1,16 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { operarComoVendedor, sairComoVendedor, salvarPinDono } from '@/lib/actions/modo'
 import { Lock, X, Loader2, Check, UserCog, KeyRound, ChevronDown } from 'lucide-react'
+
+// Renderiza fora da sidebar (que tem stacking context próprio via position:sticky),
+// senão os modais aparecem ATRÁS do conteúdo do dashboard.
+function Portal({ children }: { children: React.ReactNode }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(children, document.body)
+}
 
 type VendedorMini = { id: string; nome: string }
 
@@ -81,7 +89,7 @@ export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores 
 
       {/* Modal PIN para sair */}
       {pinOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+        <Portal><div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
           <div className="w-full max-w-xs bg-white rounded-2xl shadow-2xl p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center mx-auto mb-3"><Lock className="size-6 text-[#1A56FF]" strokeWidth={1.5} /></div>
             <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Voltar para visão de Dono</p>
@@ -97,12 +105,12 @@ export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores 
               </button>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
 
       {/* Modal config PIN do dono */}
       {cfgOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+        <Portal><div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
           <div className="w-full max-w-xs bg-white rounded-2xl shadow-2xl p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center mx-auto mb-3"><KeyRound className="size-6 text-[#1A56FF]" strokeWidth={1.5} /></div>
             <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>PIN do Dono</p>
@@ -118,7 +126,7 @@ export function ModoFuncionario({ funcionario, vendedorNome, temPin, vendedores 
               </button>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
     </>
   )
