@@ -33,7 +33,10 @@ export async function submitReview(payload: {
     visible: false,
   } as never)
 
-  if (error) return { error: 'Erro ao enviar avaliação. Tente novamente.' }
+  if (error) {
+    console.error('submitReview:', error)
+    return { error: `Erro: ${error.message}` }
+  }
   return { success: true }
 }
 
