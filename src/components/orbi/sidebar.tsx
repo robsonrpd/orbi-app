@@ -43,12 +43,13 @@ const navItems = [
   { href: '/dashboard/ia', label: 'Inteligência IA', icon: Bot },
 ]
 
-type ModoProps = { funcionario: boolean; bloqueios: string[]; temPin: boolean }
+type ModoProps = { funcionario: boolean; bloqueios: string[]; temPin: boolean; vendedorNome: string | null }
+type VendedorMini = { id: string; nome: string }
 
-export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps }) {
+export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vendedores = [] }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps; vendedores?: VendedorMini[] }) {
   const pathname = usePathname()
   const router = useRouter()
-  const m = modo ?? { funcionario: false, bloqueios: [], temPin: false }
+  const m = modo ?? { funcionario: false, bloqueios: [], temPin: false, vendedorNome: null }
   const visibleNav = navItems.filter(item => {
     if (!m.funcionario) return true
     const bloq = BLOQUEIO_POR_HREF[item.href]
@@ -144,7 +145,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo }: { co
 
       {/* Bottom */}
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
-        {canEditLogo && <ModoFuncionario funcionario={m.funcionario} bloqueios={m.bloqueios} temPin={m.temPin} />}
+        {canEditLogo && <ModoFuncionario funcionario={m.funcionario} vendedorNome={m.vendedorNome} temPin={m.temPin} vendedores={vendedores} />}
         {!m.funcionario && (
           <>
             <Link href="/dashboard/plano"

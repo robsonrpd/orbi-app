@@ -22,6 +22,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .single()
 
   const modo = await getModo()
+  const { data: vendedoresList } = await service
+    .from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome')
 
   // Novo usuário só vale para a própria conta (não em modo suporte)
   const { data: userRow } = await service.from('users').select('created_at').eq('id', user.id).single()
@@ -31,7 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation} modo={modo} />
+      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation} modo={modo} vendedores={vendedoresList ?? []} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
         {!impersonation && (

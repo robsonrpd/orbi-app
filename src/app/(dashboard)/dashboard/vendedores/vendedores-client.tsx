@@ -2,29 +2,63 @@
 
 import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { createVendedor, deleteVendedor } from '@/lib/actions/vendedores'
-import { Users, Plus, Phone, Percent, Trash2, Loader2, X, Check, Award } from 'lucide-react'
+import { createVendedor, updateVendedor, deleteVendedor } from '@/lib/actions/vendedores'
+import { Users, Plus, Phone, Mail, Trash2, Loader2, X, Check, Edit2, ShieldCheck, Lock } from 'lucide-react'
 
 type Vendedor = {
-  id: string; nome: string; telefone: string | null
-  comissao_percent: number; active: boolean
+  id: string; nome: string; telefone: string | null; email: string | null
+  data_nascimento: string | null; cep: string | null; endereco: string | null
+  numero: string | null; complemento: string | null; bairro: string | null
+  cidade: string | null; uf: string | null; notes: string | null
+  bloqueios: string[] | null; active: boolean
 }
+
+// Áreas que o vendedor pode (ou não) acessar
+const AREAS = [
+  { key: 'faturamento', label: 'Ver faturamento e valores (Dashboard)' },
+  { key: 'financeiro', label: 'Acessar o Financeiro' },
+  { key: 'caixa', label: 'Acessar o Caixa' },
+  { key: 'relatorios', label: 'Acessar Relatórios' },
+  { key: 'vendedores', label: 'Gerenciar Vendedores' },
+  { key: 'precos', label: 'Alterar preços de produtos' },
+]
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
 export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
   const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Vendedor | null>(null)
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // permissões: conjunto de áreas que o vendedor PODE acessar
+  const [podeAcessar, setPodeAcessar] = useState<Set<string>>(new Set(AREAS.map(a => a.key)))
   const formRef = useRef<HTMLFormElement>(null)
+
+  function openNew() {
+    setEditing(null)
+    setPodeAcessar(new Set(AREAS.map(a => a.key)))
+    setError(null); setModalOpen(true)
+  }
+  function openEdit(v: Vendedor) {
+    setEditing(v)
+    const bloq = new Set(v.bloqueios ?? [])
+    setPodeAcessar(new Set(AREAS.filter(a => !bloq.has(a.key)).map(a => a.key)))
+    setError(null); setModalOpen(true)
+  }
+  function togglePerm(key: string) {
+    setPodeAcessar(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true); setError(null)
-    const result = await createVendedor(new FormData(formRef.current!))
+    const fd = new FormData(formRef.current!)
+    // bloqueios = áreas NÃO marcadas
+    fd.set('bloqueios', AREAS.filter(a => !podeAcessar.has(a.key)).map(a => a.key).join(','))
+    const result = editing ? await updateVendedor(editing.id, fd) : await createVendedor(fd)
     setLoading(false)
     if (result?.error) { setError(result.error); return }
-    formRef.current?.reset()
-    setModalOpen(false)
+    setModalOpen(false); setEditing(null)
   }
 
   async function handleDelete(id: string) {
@@ -33,19 +67,18 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
     setDeletingId(null)
   }
 
-  const inputCls = "w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all placeholder:text-[#C8C5BB]"
+  const inputCls = "w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]"
+  const labelCls = "text-[11px] font-bold text-[#2E2D29] uppercase tracking-wider block mb-1"
 
   return (
     <>
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
-              Vendedores
-            </h2>
-            <p className="text-sm text-[#8C8880] mt-0.5">Equipe de vendas e comissões</p>
+            <h2 className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>Vendedores</h2>
+            <p className="text-sm text-[#8C8880] mt-0.5">Equipe de vendas e permissões de acesso</p>
           </div>
-          <button onClick={() => setModalOpen(true)}
+          <button onClick={openNew}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
             style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
             <Plus className="size-4" /> Novo Vendedor
@@ -60,96 +93,113 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
               </div>
               <div className="text-center">
                 <p className="text-base font-bold text-[#1C1B18]">Nenhum vendedor cadastrado</p>
-                <p className="text-sm text-[#8C8880] mt-1">Cadastre sua equipe para acompanhar comissões e ranking.</p>
+                <p className="text-sm text-[#8C8880] mt-1">Cadastre sua equipe e defina o que cada um pode acessar.</p>
               </div>
-              <button onClick={() => setModalOpen(true)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white"
-                style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+              <button onClick={openNew} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
                 <Plus className="size-4" /> Cadastrar vendedor
               </button>
             </div>
           </GlowCard>
         ) : (
           <div className="grid grid-cols-3 gap-4">
-            {vendedores.map((v, i) => (
-              <GlowCard key={v.id}>
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white"
-                        style={{ background: i === 0 ? 'linear-gradient(135deg,#1A56FF,#0D3ACC)' : 'linear-gradient(135deg,#93AAFF,#1A56FF)' }}>
-                        {v.nome[0].toUpperCase()}
+            {vendedores.map((v, i) => {
+              const nBloq = (v.bloqueios ?? []).length
+              return (
+                <GlowCard key={v.id}>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white"
+                          style={{ background: i === 0 ? 'linear-gradient(135deg,#1A56FF,#0D3ACC)' : 'linear-gradient(135deg,#93AAFF,#1A56FF)' }}>
+                          {v.nome[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-[#1C1B18]">{v.nome}</p>
+                          {v.telefone && <p className="text-xs text-[#8C8880] flex items-center gap-1 mt-0.5"><Phone className="size-3" /> {v.telefone}</p>}
+                          {v.email && <p className="text-xs text-[#C8C5BB] flex items-center gap-1 mt-0.5"><Mail className="size-3" /> {v.email}</p>}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-[#1C1B18]">{v.nome}</p>
-                        {v.telefone && (
-                          <p className="text-xs text-[#8C8880] flex items-center gap-1 mt-0.5">
-                            <Phone className="size-3" /> {v.telefone}
-                          </p>
-                        )}
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(v)} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8C8880] hover:bg-[#F7F6F3] transition-colors">
+                          <Edit2 className="size-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(v.id)} disabled={deletingId === v.id}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors">
+                          {deletingId === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                        </button>
                       </div>
                     </div>
-                    <button onClick={() => handleDelete(v.id)} disabled={deletingId === v.id}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors">
-                      {deletingId === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#E6F9F3] text-[#0DB57A] font-semibold">
-                      <Percent className="size-3" strokeWidth={2.5} /> {Number(v.comissao_percent)}% comissão
+                    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold ${nBloq === 0 ? 'bg-[#E6F9F3] text-[#0DB57A]' : 'bg-[#FEF3C7] text-[#F59E0B]'}`}>
+                      {nBloq === 0 ? <><ShieldCheck className="size-3" /> Acesso total</> : <><Lock className="size-3" /> {nBloq} área{nBloq > 1 ? 's' : ''} bloqueada{nBloq > 1 ? 's' : ''}</>}
                     </span>
-                    {i === 0 && (
-                      <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#FEF3C7] text-[#F59E0B] font-semibold">
-                        <Award className="size-3" /> Top
-                      </span>
-                    )}
                   </div>
-                </div>
-              </GlowCard>
-            ))}
+                </GlowCard>
+              )
+            })}
           </div>
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal criar/editar */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4"
-              style={{ background: 'linear-gradient(135deg, #0A0F1E, #1A56FF)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ background: 'linear-gradient(135deg, #0A0F1E, #1A56FF)' }}>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                  <Users className="size-4 text-white" strokeWidth={1.5} />
-                </div>
-                <p className="text-sm font-bold text-white">Novo Vendedor</p>
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center"><Users className="size-4 text-white" strokeWidth={1.5} /></div>
+                <p className="text-sm font-bold text-white">{editing ? 'Editar Vendedor' : 'Novo Vendedor'}</p>
               </div>
-              <button onClick={() => setModalOpen(false)} className="text-white/50 hover:text-white transition-colors">
-                <X className="size-5" />
-              </button>
+              <button onClick={() => setModalOpen(false)} className="text-white/50 hover:text-white"><X className="size-5" /></button>
             </div>
-            <form ref={formRef} onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form ref={formRef} onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
               {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>Nome <span className="text-red-400">*</span></label>
-                <input name="nome" required placeholder="Nome do vendedor" className={inputCls} />
-              </div>
+
+              {/* Dados pessoais */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>Telefone</label>
-                  <input name="telefone" placeholder="85 99999-9999" className={inputCls} />
+                <div className="col-span-2"><label className={labelCls}>Nome *</label><input name="nome" required defaultValue={editing?.nome ?? ''} placeholder="Nome completo" className={inputCls} /></div>
+                <div><label className={labelCls}>WhatsApp</label><input name="telefone" defaultValue={editing?.telefone ?? ''} placeholder="85 99999-9999" className={inputCls} /></div>
+                <div><label className={labelCls}>E-mail</label><input name="email" type="email" defaultValue={editing?.email ?? ''} placeholder="email@exemplo.com" className={inputCls} /></div>
+                <div><label className={labelCls}>Nascimento</label><input name="data_nascimento" type="date" defaultValue={editing?.data_nascimento?.split('T')[0] ?? ''} className={inputCls} /></div>
+                <div><label className={labelCls}>CEP</label><input name="cep" defaultValue={editing?.cep ?? ''} placeholder="00000-000" className={inputCls} /></div>
+              </div>
+              <div className="rounded-xl border border-[#EAE8E1] p-4 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2"><label className={labelCls}>Endereço</label><input name="endereco" defaultValue={editing?.endereco ?? ''} placeholder="Rua, avenida..." className={inputCls} /></div>
+                  <div><label className={labelCls}>Número</label><input name="numero" defaultValue={editing?.numero ?? ''} placeholder="123" className={inputCls} /></div>
+                  <div><label className={labelCls}>Compl.</label><input name="complemento" defaultValue={editing?.complemento ?? ''} placeholder="Apto 4" className={inputCls} /></div>
+                  <div><label className={labelCls}>Bairro</label><input name="bairro" defaultValue={editing?.bairro ?? ''} placeholder="Centro" className={inputCls} /></div>
+                  <div><label className={labelCls}>Cidade</label><input name="cidade" defaultValue={editing?.cidade ?? ''} placeholder="Fortaleza" className={inputCls} /></div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>Comissão (%)</label>
-                  <input name="comissao" type="number" min="0" max="100" step="0.5" placeholder="5" className={inputCls} />
+                <div className="w-28"><label className={labelCls}>UF</label>
+                  <select name="uf" defaultValue={editing?.uf ?? ''} className={inputCls}>
+                    <option value="">--</option>{UFS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
                 </div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setModalOpen(false)}
-                  className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880] hover:text-[#2E2D29] transition-colors">Cancelar</button>
-                <button type="submit" disabled={loading}
-                  className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all"
-                  style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+
+              {/* Permissões */}
+              <div className="rounded-xl border border-[#EAE8E1] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <ShieldCheck className="size-4 text-[#1A56FF]" />
+                  <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">O que esse vendedor PODE acessar</p>
+                </div>
+                <div className="space-y-2">
+                  {AREAS.map(a => (
+                    <button key={a.key} type="button" onClick={() => togglePerm(a.key)}
+                      className="w-full flex items-center justify-between px-3 h-10 rounded-lg bg-[#F7F6F3] border border-[#EAE8E1] hover:border-[#1A56FF]/40 transition-colors">
+                      <span className="text-sm text-[#2E2D29] text-left">{a.label}</span>
+                      <span className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors ${podeAcessar.has(a.key) ? 'bg-[#0DB57A]' : 'bg-white border border-[#EAE8E1]'}`}>
+                        {podeAcessar.has(a.key) && <Check className="size-3.5 text-white" strokeWidth={3} />}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-[#C8C5BB] mt-2">Verde = pode acessar. Desmarque o que ele NÃO deve ver.</p>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>
+                <button type="submit" disabled={loading} className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#1A56FF', fontFamily: 'Barlow, sans-serif' }}>
                   {loading ? <Loader2 className="size-4 animate-spin" /> : <><Check className="size-4" /> Salvar</>}
                 </button>
               </div>
