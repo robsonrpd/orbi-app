@@ -21,15 +21,19 @@ export async function submitReview(payload: {
   const rating = Math.round(Number(payload.rating))
   if (!rating || rating < 1 || rating > 5) return { error: 'Selecione de 1 a 5 estrelas.' }
 
+  // Limites de tamanho (endpoint público — evita spam/textos gigantes)
+  const authorName = (payload.authorName ?? '').trim().slice(0, 80) || null
+  const comment = (payload.comment ?? '').trim().slice(0, 1000) || null
+
   const service = createServiceClient()
   const { data: company } = await service.from('companies').select('id').eq('slug', slug).single()
   if (!company) return { error: 'Loja não encontrada.' }
 
   const { error } = await service.from('reviews' as never).insert({
     company_id: company.id,
-    author_name: (payload.authorName ?? '').trim() || null,
+    author_name: authorName,
     rating,
-    comment: (payload.comment ?? '').trim() || null,
+    comment,
     visible: false,
   } as never)
 

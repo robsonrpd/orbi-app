@@ -18,10 +18,10 @@ export async function criarIndicacao(payload: {
   const service = createServiceClient()
   const { error } = await service.from('indicacoes' as never).insert({
     company_id: companyId,
-    colaborador: payload.colaborador?.trim() || null,
-    indicado_nome: payload.indicadoNome.trim(),
-    indicado_email: payload.indicadoEmail?.trim() || null,
-    indicado_telefone: (payload.indicadoTelefone ?? '').replace(/\D/g, '') || null,
+    colaborador: (payload.colaborador ?? '').trim().slice(0, 120) || null,
+    indicado_nome: payload.indicadoNome.trim().slice(0, 120),
+    indicado_email: (payload.indicadoEmail ?? '').trim().slice(0, 160) || null,
+    indicado_telefone: (payload.indicadoTelefone ?? '').replace(/\D/g, '').slice(0, 15) || null,
     status: 'novo',
   } as never)
 
