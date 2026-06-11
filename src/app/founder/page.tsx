@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSuperAdmin } from '@/lib/auth/super-admin'
 import { FounderClient } from './founder-client'
@@ -5,7 +6,11 @@ import { FounderClient } from './founder-client'
 const PLAN_PRICE: Record<string, number> = { individual: 97, equipe: 197, ilimitado: 297 }
 
 export default async function FounderPage() {
+  // SEGURANÇA: só super-admins podem ver o painel do fundador.
+  // Sem este guard, qualquer usuário logado veria os dados de TODAS as empresas.
   const admin = await getSuperAdmin()
+  if (!admin) notFound()
+
   const service = createServiceClient()
 
   const { data: companies } = await service
