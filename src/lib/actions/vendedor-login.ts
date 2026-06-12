@@ -41,10 +41,11 @@ export async function criarLoginVendedor(vendedorId: string, senha: string) {
 
   const { error: uErr } = await service.from('users').insert({
     id: created.user.id, company_id: a.companyId, email: v.email,
-    name: v.nome, role: 'vendedor', vendedor_id: vendedorId,
+    name: v.nome, role: 'staff', vendedor_id: vendedorId,
   })
   if (uErr) {
     await service.auth.admin.deleteUser(created.user.id)
+    console.error('vincular acesso:', uErr)
     return { error: 'Erro ao vincular o acesso.' }
   }
 

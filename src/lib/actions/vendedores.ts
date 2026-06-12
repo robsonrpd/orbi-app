@@ -36,13 +36,13 @@ export async function createVendedor(formData: FormData) {
   if (!f.nome) return { error: 'Nome é obrigatório.' }
 
   const service = createServiceClient()
-  const { error } = await service.from('vendedores').insert({
+  const { data, error } = await service.from('vendedores').insert({
     company_id: companyId, ...f, active: true,
-  } as never)
+  } as never).select('id').single()
   if (error) return { error: 'Erro ao cadastrar vendedor.' }
 
   revalidatePath('/dashboard/vendedores')
-  return { success: true }
+  return { success: true, id: (data as { id: string }).id }
 }
 
 export async function updateVendedor(id: string, formData: FormData) {

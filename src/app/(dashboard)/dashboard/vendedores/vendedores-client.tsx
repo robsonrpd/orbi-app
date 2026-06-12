@@ -32,15 +32,6 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginMsg, setLoginMsg] = useState<{ ok?: string; err?: string } | null>(null)
 
-  async function criarLogin() {
-    if (!editing) return
-    setLoginLoading(true); setLoginMsg(null)
-    const r = await criarLoginVendedor(editing.id, senhaLogin)
-    setLoginLoading(false)
-    if (r?.error) { setLoginMsg({ err: r.error }); return }
-    setLoginMsg({ ok: 'Acesso criado! As credenciais foram enviadas por e-mail.' })
-    setEditing({ ...editing, temLogin: true }); setSenhaLogin('')
-  }
   async function removerLogin() {
     if (!editing) return
     setLoginLoading(true); setLoginMsg(null)
@@ -73,9 +64,19 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
     // bloqueios = áreas NÃO marcadas
     fd.set('bloqueios', AREAS.filter(a => !podeAcessar.has(a.key)).map(a => a.key).join(','))
     const result = editing ? await updateVendedor(editing.id, fd) : await createVendedor(fd)
+    if (result?.error) { setLoading(false); setError(result.error); return }
+
+    // Cria o login junto, se foi informada uma senha (e ainda não tem acesso)
+    const vendId = editing?.id ?? (result as { id?: string }).id
+    if (!editing?.temLogin && senhaLogin.length >= 6 && vendId) {
+      const emailVal = (fd.get('email') as string)?.trim()
+      if (!emailVal) { setLoading(false); setError('Para criar o login, preencha o e-mail do vendedor.'); return }
+      const lr = await criarLoginVendedor(vendId, senhaLogin)
+      if (lr?.error) { setLoading(false); setError('Vendedor salvo, mas o login falhou: ' + lr.error); return }
+    }
+
     setLoading(false)
-    if (result?.error) { setError(result.error); return }
-    setModalOpen(false); setEditing(null)
+    setModalOpen(false); setEditing(null); setSenhaLogin('')
   }
 
   async function handleDelete(id: string) {
@@ -274,47 +275,34 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 <p className="text-[11px] text-[#C8C5BB] mt-2">Verde = pode acessar. Desmarque o que ele NÃO deve ver.</p>
               </div>
 
-              {/* Acesso ao sistema (login próprio) — só na edição */}
-              {editing && (
-                <div className="rounded-xl border border-[#EAE8E1] p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <KeyRound className="size-4 text-[#1A56FF]" />
-                    <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">Acesso ao sistema (login próprio)</p>
-                  </div>
-                  {editing.temLogin ? (
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="flex items-center gap-1.5 text-sm text-[#0DB57A] font-semibold">
-                        <Check className="size-4" /> Esse vendedor já entra com o e-mail dele.
-                      </span>
-                      <button type="button" onClick={removerLogin} disabled={loginLoading}
-                        className="text-xs font-semibold text-red-500 hover:underline shrink-0">
-                        {loginLoading ? '...' : 'Remover acesso'}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-xs text-[#8C8880]">
-                        {editing.email
-                          ? <>Vai entrar com <strong>{editing.email}</strong>. Defina uma senha inicial:</>
-                          : <span className="text-amber-600">Cadastre um e-mail acima e salve antes de criar o acesso.</span>}
-                      </p>
-                      {editing.email && (
-                        <div className="flex gap-2">
-                          <input value={senhaLogin} onChange={e => setSenhaLogin(e.target.value)} type="text"
-                            placeholder="Senha inicial (mín. 6)" className={inputCls} />
-                          <button type="button" onClick={criarLogin} disabled={loginLoading || senhaLogin.length < 6}
-                            className="shrink-0 px-4 h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold text-white disabled:opacity-50"
-                            style={{ background: '#0DB57A' }}>
-                            {loginLoading ? <Loader2 className="size-4 animate-spin" /> : <><LogIn className="size-4" /> Criar</>}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {loginMsg?.ok && <p className="text-xs text-[#0DB57A] mt-2">{loginMsg.ok}</p>}
-                  {loginMsg?.err && <p className="text-xs text-red-500 mt-2">{loginMsg.err}</p>}
+              {/* Acesso ao sistema (login próprio) */}
+              <div className="rounded-xl border border-[#EAE8E1] p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <KeyRound className="size-4 text-[#1A56FF]" />
+                  <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">Acesso ao sistema (login próprio)</p>
                 </div>
-              )}
+                {editing?.temLogin ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-1.5 text-sm text-[#0DB57A] font-semibold">
+                      <Check className="size-4" /> Já entra com o e-mail dele.
+                    </span>
+                    <button type="button" onClick={removerLogin} disabled={loginLoading}
+                      className="text-xs font-semibold text-red-500 hover:underline shrink-0">
+                      {loginLoading ? '...' : 'Remover acesso'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-[#8C8880]">
+                      <LogIn className="size-3 inline mb-0.5 mr-0.5" /> Defina uma senha para o vendedor entrar com o <strong>e-mail</strong> informado acima. Deixe em branco se não quiser criar agora.
+                    </p>
+                    <input value={senhaLogin} onChange={e => setSenhaLogin(e.target.value)} type="text"
+                      placeholder="Senha de acesso (mín. 6) — opcional" className={inputCls} />
+                  </div>
+                )}
+                {loginMsg?.ok && <p className="text-xs text-[#0DB57A] mt-2">{loginMsg.ok}</p>}
+                {loginMsg?.err && <p className="text-xs text-red-500 mt-2">{loginMsg.err}</p>}
+              </div>
 
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setModalOpen(false)} className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>

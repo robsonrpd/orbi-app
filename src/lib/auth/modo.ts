@@ -23,7 +23,7 @@ export async function getModo(): Promise<ModoInfo> {
   const { data: u } = await service.from('users').select('role, vendedor_id').eq('id', user.id).single()
 
   // 1) Vendedor com LOGIN PRÓPRIO — permissões aplicadas automaticamente, sem PIN
-  if (u?.role === 'vendedor' && u.vendedor_id) {
+  if (u?.role === 'staff' && u.vendedor_id) {
     const { data: v } = await service.from('vendedores').select('nome, bloqueios').eq('id', u.vendedor_id).single()
     // vendedor nunca gerencia a equipe
     const bloqueios = Array.from(new Set([...((v?.bloqueios as string[]) ?? []), 'vendedores']))

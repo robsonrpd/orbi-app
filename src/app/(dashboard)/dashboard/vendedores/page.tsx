@@ -11,7 +11,7 @@ export default async function VendedoresPage() {
 
   const [{ data: vendedores }, { data: logins }] = await Promise.all([
     service.from('vendedores').select('*').eq('company_id', companyId).eq('active', true).order('created_at'),
-    service.from('users').select('vendedor_id').eq('company_id', companyId).eq('role', 'vendedor'),
+    service.from('users').select('vendedor_id').eq('company_id', companyId).eq('role', 'staff'),
   ])
   const comLogin = new Set((logins ?? []).map(l => l.vendedor_id).filter(Boolean))
   const lista = (vendedores ?? []).map(v => ({ ...v, temLogin: comLogin.has(v.id) }))
