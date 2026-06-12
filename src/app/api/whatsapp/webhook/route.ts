@@ -24,12 +24,15 @@ export async function POST(req: NextRequest) {
 
   // QR atualizado → guarda o base64 para o painel exibir
   if (evento.includes('qrcode')) {
-    const d = raw as { qrcode?: { base64?: string }; base64?: string } | null
-    const base64 = d?.qrcode?.base64 ?? d?.base64 ?? null
-    if (base64) {
-      const settings = { ...(company.settings as Record<string, unknown>), wa_qr: base64 }
-      await service.from('companies').update({ settings }).eq('id', company.id)
-    }
+    const d = raw as { qrcode?: { base64?: string; code?: string } | string; base64?: string; code?: string } | null
+    const base64 =
+      (typeof d?.qrcode === 'object' ? d?.qrcode?.base64 : undefined)
+      ?? d?.base64
+      ?? (typeof d?.qrcode === 'string' ? d.qrcode : undefined)
+      ?? null
+    const settings: Record<string, unknown> = { ...(company.settings as Record<string, unknown>), wa_qr_debug: JSON.stringify(d).slice(0, 350) }
+    if (base64) settings.wa_qr = base64
+    await service.from('companies').update({ settings }).eq('id', company.id)
     return NextResponse.json({ ok: true })
   }
 
