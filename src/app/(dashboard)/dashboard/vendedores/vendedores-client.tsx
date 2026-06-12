@@ -31,6 +31,8 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
   const [senhaLogin, setSenhaLogin] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginMsg, setLoginMsg] = useState<{ ok?: string; err?: string } | null>(null)
+  const [credenciais, setCredenciais] = useState<{ email: string; senha: string } | null>(null)
+  const [copiado, setCopiado] = useState(false)
 
   async function removerLogin() {
     if (!editing) return
@@ -73,6 +75,10 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
       if (!emailVal) { setLoading(false); setError('Para criar o login, preencha o e-mail do vendedor.'); return }
       const lr = await criarLoginVendedor(vendId, senhaLogin)
       if (lr?.error) { setLoading(false); setError('Vendedor salvo, mas o login falhou: ' + lr.error); return }
+      // mostra as credenciais na tela (não fecha o modal) para o dono copiar
+      setLoading(false)
+      setCredenciais({ email: emailVal, senha: senhaLogin })
+      return
     }
 
     setLoading(false)
@@ -204,6 +210,29 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
                 <Edit2 className="size-4" /> Editar Vendedor
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credenciais criadas */}
+      {credenciais && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-[#E6F9F3] flex items-center justify-center mx-auto mb-3"><Check className="size-6 text-[#0DB57A]" strokeWidth={2} /></div>
+            <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Acesso criado! 🎉</p>
+            <p className="text-sm text-[#8C8880] mt-1 mb-4">Entregue estas credenciais ao vendedor. Ele entra em <strong>/login</strong>.</p>
+            <div className="rounded-xl bg-[#F7F6F3] border border-[#EAE8E1] p-3 text-left text-sm space-y-1 mb-3">
+              <p><span className="text-[#8C8880]">E-mail:</span> <strong className="text-[#1C1B18] break-all">{credenciais.email}</strong></p>
+              <p><span className="text-[#8C8880]">Senha:</span> <strong className="text-[#1C1B18]">{credenciais.senha}</strong></p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { navigator.clipboard.writeText(`Acesso ao Orbi\nE-mail: ${credenciais.email}\nSenha: ${credenciais.senha}\nEntrar: ${typeof window !== 'undefined' ? window.location.origin : ''}/login`); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }}
+                className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#2E2D29] flex items-center justify-center gap-1.5">
+                {copiado ? <><Check className="size-4 text-[#0DB57A]" /> Copiado</> : <>Copiar</>}
+              </button>
+              <button onClick={() => { setCredenciais(null); setModalOpen(false); setEditing(null); setSenhaLogin('') }}
+                className="flex-1 h-11 rounded-xl text-sm font-bold text-white" style={{ background: '#1A56FF' }}>Concluir</button>
             </div>
           </div>
         </div>
