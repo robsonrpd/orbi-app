@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { SettingsForm } from './settings-form'
+import { NichoSelector } from '@/components/orbi/nicho-selector'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -17,7 +18,8 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Topbar title="Configurações" subtitle="Gerencie o seu negócio e conta" />
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <NichoSelector atual={company?.business_type ?? null} />
         <SettingsForm userData={userData} userEmail={user?.email ?? ''} />
       </div>
     </div>

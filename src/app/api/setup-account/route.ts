@@ -21,7 +21,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
     }
 
-    const { name, companyName, phone } = await req.json()
+    const { name, companyName, phone, businessType } = await req.json()
+    const NICHOS_VALIDOS = ['otica', 'barbearia', 'loja', 'clinica']
+    const ramo = NICHOS_VALIDOS.includes(businessType) ? businessType : 'otica'
 
     const service = createServiceClient()
 
@@ -46,6 +48,7 @@ export async function POST(req: NextRequest) {
       .insert({
         name: companyName || 'Minha Empresa',
         slug,
+        business_type: ramo,
         settings: ownerPhone ? { owner_phone: ownerPhone } : {},
       })
       .select()

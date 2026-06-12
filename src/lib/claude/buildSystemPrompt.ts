@@ -9,6 +9,7 @@ const NICHO_LABEL: Record<string, string> = {
   otica: 'ótica',
   salao: 'salão de beleza',
   barbearia: 'barbearia',
+  loja: 'loja',
   clinica: 'clínica',
   outro: 'negócio',
 }

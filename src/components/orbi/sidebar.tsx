@@ -39,11 +39,14 @@ const navItems = [
 type ModoProps = { funcionario: boolean; bloqueios: string[]; temPin: boolean; vendedorNome: string | null; fonte?: 'login' | 'cookie' | null }
 type VendedorMini = { id: string; nome: string }
 
-export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vendedores = [] }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps; vendedores?: VendedorMini[] }) {
+export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vendedores = [], esconderNicho = [] }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps; vendedores?: VendedorMini[]; esconderNicho?: string[] }) {
   const pathname = usePathname()
   const router = useRouter()
   const m = modo ?? { funcionario: false, bloqueios: [], temPin: false, vendedorNome: null, fonte: null }
   const visibleNav = navItems.filter(item => {
+    // 1) módulos que não pertencem ao nicho da empresa
+    if (esconderNicho.includes(item.href)) return false
+    // 2) módulos bloqueados para o vendedor logado
     if (!m.funcionario) return true
     const bloq = BLOQUEIO_POR_HREF[item.href]
     return !(bloq && m.bloqueios.includes(bloq))

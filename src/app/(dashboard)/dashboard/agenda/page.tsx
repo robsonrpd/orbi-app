@@ -1,9 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { guardNicho } from '@/lib/auth/nicho'
 import { Topbar } from '@/components/orbi/topbar'
 import { AgendaRedesignClient } from './agenda-redesign-client'
 
 export default async function AgendaPage() {
+  await guardNicho('/dashboard/agenda')
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 

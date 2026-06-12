@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId, getImpersonation } from '@/lib/auth/company'
 import { getModo } from '@/lib/auth/modo'
+import { nichoEsconde } from '@/lib/nichos'
 import { Sidebar } from '@/components/orbi/sidebar'
 import { SubscriptionManager } from '@/components/orbi/subscription-manager'
 import { ImpersonationBanner } from '@/components/orbi/impersonation-banner'
@@ -17,9 +18,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const { data: company } = await service
     .from('companies')
-    .select('name, trial_ends_at, subscription_status, subscription_plan, logo_url')
+    .select('name, trial_ends_at, subscription_status, subscription_plan, logo_url, business_type')
     .eq('id', companyId)
     .single()
+  const esconderNicho = nichoEsconde(company?.business_type)
 
   const modo = await getModo()
   const { data: vendedoresList } = await service
@@ -33,7 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-      <Sidebar companyName={company?.name ?? 'Minha Ótica'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} />
+      <Sidebar companyName={company?.name ?? 'Minha Empresa'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} esconderNicho={esconderNicho} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
         {!impersonation && (
