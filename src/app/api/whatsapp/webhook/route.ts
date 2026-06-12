@@ -24,9 +24,8 @@ export async function POST(req: NextRequest) {
 
   // debug: registra o último evento recebido (para diagnóstico da conexão)
   if (!evento.includes('messages')) {
-    const keys = raw && typeof raw === 'object' ? Object.keys(raw as object).join(',') : String(typeof raw)
     await service.from('companies')
-      .update({ settings: { ...(company.settings as Record<string, unknown>), wa_last_event: `${evento || 'sem-event'} [${keys}]` } })
+      .update({ settings: { ...(company.settings as Record<string, unknown>), wa_last_event: `${evento || 'sem-event'}: ${JSON.stringify(raw).slice(0, 200)}` } })
       .eq('id', company.id)
   }
 

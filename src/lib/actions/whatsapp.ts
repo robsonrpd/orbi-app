@@ -37,11 +37,14 @@ export async function conectarWhatsApp() {
   const r = await criarInstancia(instance, wh)
   await setWebhook(instance, wh)
 
-  // limpa QR antigo e guarda o nome da instância; o QR chega via webhook (qrcode.updated)
+  // limpa QR antigo e guarda o nome da instância; o QR pode vir na criação ou via webhook
   const service = createServiceClient()
   const settings = { ...(c.settings ?? {}), wa_instance: instance } as Record<string, unknown>
+  delete settings.wa_qr
+  delete settings.wa_last_event
+  // debug: guarda a resposta completa da criação (é onde costuma vir o QR no v2)
+  settings.wa_create_debug = JSON.stringify((r as { createData?: unknown }).createData ?? r.raw).slice(0, 600)
   if (r.qr) settings.wa_qr = r.qr
-  else delete settings.wa_qr
   await service.from('companies').update({ settings }).eq('id', c.id)
 
   return { aguardando: true, qr: r.qr ?? null }
@@ -63,9 +66,10 @@ export async function obterQR() {
     const conn = await conectar(c.slug)
     qr = conn.qr
   }
-  // debug: o que o webhook capturou (para diagnóstico)
-  const sd = s as { wa_qr_debug?: string; wa_last_event?: string }
-  return { qr, state: st.state as 'connecting' | 'close', debug: qr ? undefined : (sd.wa_qr_debug ?? sd.wa_last_event ?? 'nenhum evento recebido ainda') }
+  // debug: o que o webhook/criação capturou (para diagnóstico)
+  const sd = s as { wa_qr_debug?: string; wa_last_event?: string; wa_create_debug?: string }
+  const debug = qr ? undefined : `CREATE=${sd.wa_create_debug ?? '?'} | EVENT=${sd.wa_last_event ?? '?'}`
+  return { qr, state: st.state as 'connecting' | 'close', debug }
 }
 
 /** Gera um novo QR (refresh) recriando a instância. */
