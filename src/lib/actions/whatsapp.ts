@@ -31,7 +31,8 @@ export async function conectarWhatsApp() {
     // pode já estar conectado
     const st = await statusInstancia(instance)
     if (st.state === 'open') return { conectado: true }
-    return { error: 'Não foi possível gerar o QR. Tente novamente.' }
+    const debug = JSON.stringify({ createStatus: (r as { createStatus?: number }).createStatus, createData: (r as { createData?: unknown }).createData, connect: (r as { raw?: unknown }).raw }).slice(0, 600)
+    return { error: `Sem QR. Resposta do Evolution: ${debug}` }
   }
 
   const service = createServiceClient()

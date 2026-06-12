@@ -23,7 +23,7 @@ async function call(path: string, init?: RequestInit) {
 /** Cria a instância (se não existir) e já configura o webhook. Retorna o QR code (base64). */
 export async function criarInstancia(instance: string, webhookUrl: string) {
   // tenta criar; se já existir, o connect retorna o QR
-  await call('/instance/create', {
+  const created = await call('/instance/create', {
     method: 'POST',
     body: JSON.stringify({
       instanceName: instance,
@@ -37,7 +37,13 @@ export async function criarInstancia(instance: string, webhookUrl: string) {
       },
     }),
   })
-  return conectar(instance)
+  // a própria resposta do create já pode trazer o QR
+  const cd = created.data as { qrcode?: { base64?: string }; base64?: string } | null
+  const qrCreate = cd?.qrcode?.base64 ?? cd?.base64 ?? null
+  if (qrCreate) return { ok: true, qr: qrCreate, raw: created.data }
+
+  const conn = await conectar(instance)
+  return { ...conn, createStatus: created.status, createData: created.data }
 }
 
 /** Retorna o QR code (base64) para escanear. */
