@@ -46,3 +46,15 @@ export function nichoEsconde(businessType: string | null | undefined): string[] 
 export function nichoLabel(businessType: string | null | undefined): string {
   return NICHOS.find(x => x.key === (businessType ?? NICHO_DEFAULT))?.label ?? 'Negócio'
 }
+
+// Sugestões rápidas de serviços por ramo
+export const SUGESTOES_SERVICO: Record<string, string[]> = {
+  otica: ['Consulta de óculos', 'Ajuste de armação', 'Troca de lentes', 'Exame de vista', 'Limpeza de óculos', 'Montagem de óculos', 'Adaptação de lente de contato', 'Revisão de óculos'],
+  barbearia: ['Corte de cabelo', 'Barba', 'Corte + Barba', 'Sobrancelha', 'Pezinho', 'Hidratação', 'Coloração', 'Escova / Progressiva', 'Luzes / Mechas', 'Corte infantil', 'Manicure', 'Pedicure'],
+  clinica: ['Limpeza de pele', 'Massagem relaxante', 'Drenagem linfática', 'Depilação', 'Design de sobrancelha', 'Peeling', 'Avaliação', 'Microagulhamento', 'Botox / Preenchimento', 'Massagem modeladora'],
+  loja: ['Montagem / Entrega', 'Assistência técnica', 'Garantia estendida', 'Instalação'],
+}
+
+export function sugestoesServico(businessType: string | null | undefined): string[] {
+  return SUGESTOES_SERVICO[businessType ?? NICHO_DEFAULT] ?? SUGESTOES_SERVICO.otica
+}

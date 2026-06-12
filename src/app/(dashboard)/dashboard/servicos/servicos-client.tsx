@@ -15,15 +15,9 @@ type Service = {
   image_url: string | null
 }
 
-const QUICK_SUGGESTIONS = [
-  'Consulta de óculos', 'Ajuste de armação', 'Troca de lentes',
-  'Exame de vista', 'Limpeza de óculos', 'Montagem de óculos',
-  'Adaptação de lente de contato', 'Revisão de óculos',
-]
-
 const SERVICE_ICONS = ['👓', '🔭', '🩺', '✨', '🔧', '📋', '💎', '⚡']
 
-export function ServicosClient({ services }: { services: Service[] }) {
+export function ServicosClient({ services, sugestoes = [] }: { services: Service[]; sugestoes?: string[] }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [loading, setLoading] = useState(false)
@@ -204,7 +198,7 @@ export function ServicosClient({ services }: { services: Service[] }) {
                   Nome do serviço <span className="text-red-400">*</span>
                 </label>
                 <input value={name} onChange={e => setName(e.target.value)} required
-                  placeholder="Ex: Troca de lentes, Consulta de óculos..."
+                  placeholder={sugestoes.length ? `Ex: ${sugestoes[0]}, ${sugestoes[1] ?? ''}...` : 'Nome do serviço...'}
                   className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] outline-none focus:border-[#1A56FF] focus:ring-4 focus:ring-[#1A56FF]/10 transition-all placeholder:text-[#C8C5BB]" />
               </div>
 
@@ -239,7 +233,7 @@ export function ServicosClient({ services }: { services: Service[] }) {
                   ⚡ Sugestões rápidas
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {QUICK_SUGGESTIONS.map(s => (
+                  {sugestoes.map(s => (
                     <button key={s} type="button" onClick={() => setName(s)}
                       className="px-3 py-1 rounded-full text-xs font-medium border border-[#EAE8E1] text-[#8C8880] hover:border-[#1A56FF] hover:text-[#1A56FF] hover:bg-[#EEF2FF] transition-all">
                       {s}
