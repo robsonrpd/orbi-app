@@ -3,12 +3,15 @@ import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { IAConfigForm } from './ia-config-form'
 import { IAPlayground } from '@/components/orbi/ia-playground'
+import { WhatsappConnect } from '@/components/orbi/whatsapp-connect'
+import { statusWhatsApp } from '@/lib/actions/whatsapp'
 
 export default async function IAPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
   const { data: company } = await service.from('companies').select('*').eq('id', companyId).single()
+  const wa = await statusWhatsApp()
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
@@ -16,7 +19,8 @@ export default async function IAPage() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-2 gap-6 items-start">
           {/* Configuração */}
-          <div>
+          <div className="space-y-6">
+            <WhatsappConnect stateInicial={wa.state} />
             <IAConfigForm company={company} />
           </div>
           {/* Playground de teste */}
