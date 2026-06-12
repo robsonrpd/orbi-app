@@ -38,12 +38,13 @@ export async function criarInstancia(instance: string, webhookUrl: string) {
     }),
   })
   // a própria resposta do create já pode trazer o QR
-  const cd = created.data as { qrcode?: { base64?: string }; base64?: string } | null
-  const qrCreate = cd?.qrcode?.base64 ?? cd?.base64 ?? null
-  if (qrCreate) return { ok: true, qr: qrCreate, raw: created.data }
-
-  const conn = await conectar(instance)
-  return { ...conn, createStatus: created.status, createData: created.data }
+  const cd = created.data as { qrcode?: { base64?: string } | string; base64?: string } | null
+  const qrCreate =
+    (typeof cd?.qrcode === 'object' ? cd?.qrcode?.base64 : undefined)
+    ?? cd?.base64
+    ?? (typeof cd?.qrcode === 'string' ? cd.qrcode : undefined)
+    ?? null
+  return { ok: created.ok, qr: qrCreate, createStatus: created.status, createData: created.data }
 }
 
 /** (Re)configura o webhook de uma instância existente. */

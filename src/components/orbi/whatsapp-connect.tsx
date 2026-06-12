@@ -11,6 +11,7 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
   const [estado, setEstado] = useState<Estado>(stateInicial === 'open' ? 'open' : stateInicial === 'nao_configurado' ? 'nao_configurado' : 'idle')
   const [qr, setQr] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [createDbg, setCreateDbg] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function pararPoll() { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
@@ -36,7 +37,8 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
     if (r?.error) { setErro(r.error); setEstado('erro'); return }
     if (r?.conectado) { setEstado('open'); return }
     if (r?.qr) { setQr(r.qr); setEstado('qr'); return }
-    // QR ainda não veio — entra em modo de espera (o polling vai pegar pelo webhook)
+    // QR ainda não veio — mostra a resposta da criação e aguarda o webhook
+    setCreateDbg((r as { createDebug?: string })?.createDebug ?? null)
     setEstado('connecting')
   }
 
@@ -104,6 +106,7 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
           <div className="flex flex-col items-center gap-2 py-8">
             <Loader2 className="size-6 animate-spin text-[#0DB57A]" />
             <p className="text-sm text-[#8C8880]">Gerando QR Code… aguarde alguns segundos</p>
+            {createDbg && <p className="text-[11px] text-blue-400 text-center max-w-md break-all px-4">{createDbg}</p>}
             {erro && <p className="text-[11px] text-red-400 text-center max-w-md break-all px-4">{erro}</p>}
           </div>
         )}

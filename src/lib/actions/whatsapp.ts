@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { evolutionConfigurado, criarInstancia, conectar, setWebhook, statusInstancia, desconectarInstancia, deletarInstancia } from '@/lib/evolution'
+import { evolutionConfigurado, criarInstancia, setWebhook, statusInstancia, desconectarInstancia, deletarInstancia } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 function webhookUrl() {
@@ -37,17 +37,17 @@ export async function conectarWhatsApp() {
   const r = await criarInstancia(instance, wh)
   await setWebhook(instance, wh)
 
-  // limpa QR antigo e guarda o nome da instância; o QR pode vir na criação ou via webhook
+  // limpa QR antigo e guarda o nome da instância
   const service = createServiceClient()
   const settings = { ...(c.settings ?? {}), wa_instance: instance } as Record<string, unknown>
   delete settings.wa_qr
   delete settings.wa_last_event
-  // debug: guarda a resposta completa da criação (é onde costuma vir o QR no v2)
-  settings.wa_create_debug = JSON.stringify((r as { createData?: unknown }).createData ?? r.raw).slice(0, 600)
   if (r.qr) settings.wa_qr = r.qr
   await service.from('companies').update({ settings }).eq('id', c.id)
 
-  return { aguardando: true, qr: r.qr ?? null }
+  // retorna a resposta crua da criação direto (sem corrida no banco)
+  const createDebug = JSON.stringify((r as { createData?: unknown }).createData).slice(0, 700)
+  return { aguardando: true, qr: r.qr ?? null, createDebug }
 }
 
 /** Busca o QR (webhook OU connect direto) + o estado da conexão. */
@@ -58,18 +58,10 @@ export async function obterQR() {
   const st = await statusInstancia(c.slug)
   if (st.state === 'open') return { qr: null, state: 'open' as const }
 
-  // 1) QR recebido via webhook
-  const s = (c.settings ?? {}) as { wa_qr?: string; wa_qr_debug?: string }
-  let qr = s.wa_qr ?? null
-  // 2) fallback: pede o QR direto no connect
-  if (!qr) {
-    const conn = await conectar(c.slug)
-    qr = conn.qr
-  }
-  // debug: o que o webhook/criação capturou (para diagnóstico)
-  const sd = s as { wa_qr_debug?: string; wa_last_event?: string; wa_create_debug?: string }
-  const debug = qr ? undefined : `CREATE=${sd.wa_create_debug ?? '?'} | EVENT=${sd.wa_last_event ?? '?'}`
-  return { qr, state: st.state as 'connecting' | 'close', debug }
+  // QR recebido via webhook (qrcode.updated)
+  const s = (c.settings ?? {}) as { wa_qr?: string; wa_last_event?: string }
+  const qr = s.wa_qr ?? null
+  return { qr, state: st.state as 'connecting' | 'close', debug: qr ? undefined : `EVENT=${s.wa_last_event ?? 'aguardando'}` }
 }
 
 /** Gera um novo QR (refresh) recriando a instância. */
