@@ -21,7 +21,8 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
       pollRef.current = setInterval(async () => {
         const s = await obterQR()
         if (s.state === 'open') { setEstado('open'); setQr(null); pararPoll(); return }
-        if (s.qr) { setQr(s.qr); setEstado('qr') }
+        if (s.qr) { setQr(s.qr); setEstado('qr'); setErro(null) }
+        else if (s.debug) setErro(`connect: ${s.debug}`)
       }, 2500)
       return pararPoll
     }
@@ -103,6 +104,7 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
           <div className="flex flex-col items-center gap-2 py-8">
             <Loader2 className="size-6 animate-spin text-[#0DB57A]" />
             <p className="text-sm text-[#8C8880]">Gerando QR Code… aguarde alguns segundos</p>
+            {erro && <p className="text-[11px] text-red-400 text-center max-w-md break-all px-4">{erro}</p>}
           </div>
         )}
 

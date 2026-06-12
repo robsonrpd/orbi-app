@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { evolutionConfigurado, criarInstancia, setWebhook, statusInstancia, desconectarInstancia, deletarInstancia } from '@/lib/evolution'
+import { evolutionConfigurado, criarInstancia, conectar, setWebhook, statusInstancia, desconectarInstancia, deletarInstancia } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 function webhookUrl() {
@@ -48,13 +48,24 @@ export async function conectarWhatsApp() {
   return { aguardando: true, qr: r.qr ?? null }
 }
 
-/** Busca o QR mais recente (recebido via webhook) + o estado da conexão. */
+/** Busca o QR (webhook OU connect direto) + o estado da conexão. */
 export async function obterQR() {
   const c = await getCompany()
   if (!c) return { qr: null, state: 'close' as const }
-  const qr = ((c.settings ?? {}) as { wa_qr?: string }).wa_qr ?? null
+
   const st = await statusInstancia(c.slug)
-  return { qr, state: st.state as 'open' | 'connecting' | 'close' }
+  if (st.state === 'open') return { qr: null, state: 'open' as const }
+
+  // 1) QR recebido via webhook
+  let qr = ((c.settings ?? {}) as { wa_qr?: string }).wa_qr ?? null
+  // 2) fallback: pede o QR direto no connect
+  let connRaw: unknown = null
+  if (!qr) {
+    const conn = await conectar(c.slug)
+    qr = conn.qr
+    connRaw = conn.raw
+  }
+  return { qr, state: st.state as 'connecting' | 'close', debug: qr ? undefined : JSON.stringify(connRaw).slice(0, 300) }
 }
 
 /** Gera um novo QR (refresh) recriando a instância. */
