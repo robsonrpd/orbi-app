@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Bot, Wifi, WifiOff, Save, Eye, Loader2, Zap } from 'lucide-react'
+import { salvarConfigIA } from '@/lib/actions/ia'
+import { Bot, Save, Eye, Loader2, Zap } from 'lucide-react'
 
 type Company = {
   id: string
@@ -18,9 +19,10 @@ export function IAConfigForm({ company }: { company: Company }) {
   const [aiName, setAiName] = useState(company?.ai_name ?? 'Assistente')
   const [aiContext, setAiContext] = useState(company?.ai_context ?? '')
   const [ownerPhone, setOwnerPhone] = useState((company?.settings?.owner_phone as string) ?? '')
-  const [active, setActive] = useState(true)
+  const [active, setActive] = useState(!(company?.settings?.ia_pausada as boolean))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
 
   const preview = `Você é um assistente virtual do negócio.
@@ -40,52 +42,35 @@ ${aiContext || 'Sem informações adicionais configuradas.'}
 5. Nunca mencione que você é uma IA, a menos que o cliente pergunte diretamente`
 
   async function handleSave() {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 800))
+    setSaving(true); setError(null)
+    const r = await salvarConfigIA({ aiName, aiContext, ownerPhone, ativa: active })
     setSaving(false)
+    if (r?.error) { setError(r.error); return }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
   return (
     <div className="max-w-3xl space-y-5">
-      {/* Status WhatsApp */}
-      <div className="bg-white rounded-xl border border-[#EAE8E1] p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${company?.whatsapp_instance ? 'bg-[#E6F9F3]' : 'bg-red-50'}`}>
-              {company?.whatsapp_instance ? (
-                <Wifi className="size-5 text-[#0DB57A]" />
-              ) : (
-                <WifiOff className="size-5 text-red-400" />
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[#1C1B18]">Status do WhatsApp</p>
-              <p className={`text-xs ${company?.whatsapp_instance ? 'text-[#0DB57A]' : 'text-red-500'}`}>
-                {company?.whatsapp_instance ? 'Conectado' : 'Desconectado — configure a instância nas configurações'}
-              </p>
-            </div>
+      {/* Configuração */}
+      <div className="bg-white rounded-xl border border-[#EAE8E1] p-5 space-y-5">
+        <div className="flex items-center justify-between pb-1 border-b border-[#EAE8E1]">
+          <div className="flex items-center gap-2">
+            <Bot className="size-4 text-[#1A56FF]" />
+            <h2 className="text-sm font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>
+              Configuração do assistente
+            </h2>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 pb-1">
             <span className="text-xs text-[#8C8880]">IA ativa</span>
             <button
               onClick={() => setActive(!active)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${active ? 'bg-[#1A56FF]' : 'bg-[#EAE8E1]'}`}
+              title={active ? 'IA respondendo automaticamente' : 'IA pausada (não responde no WhatsApp)'}
+              className={`relative w-10 h-5 rounded-full transition-colors ${active ? 'bg-[#0DB57A]' : 'bg-[#EAE8E1]'}`}
             >
               <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Configuração */}
-      <div className="bg-white rounded-xl border border-[#EAE8E1] p-5 space-y-5">
-        <div className="flex items-center gap-2 pb-1 border-b border-[#EAE8E1]">
-          <Bot className="size-4 text-[#1A56FF]" />
-          <h2 className="text-sm font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>
-            Configuração do assistente
-          </h2>
         </div>
 
         <div className="grid grid-cols-2 gap-5">
@@ -140,6 +125,7 @@ Quanto mais detalhado, melhor a IA responderá.`}
             {saving ? <Loader2 className="size-4 animate-spin" /> : saved ? '✓ Salvo!' : <><Save className="size-4" /> Salvar alterações</>}
           </Button>
         </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
 
         {showPreview && (
           <div className="bg-[#F7F6F3] rounded-lg p-4 border border-[#EAE8E1]">
