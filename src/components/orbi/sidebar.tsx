@@ -138,7 +138,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
 
       {/* Bottom */}
       <div className="relative z-10 px-3 py-4 border-t border-white/5 space-y-0.5">
-        {(canEditLogo || m.fonte === 'login') && <ModoFuncionario funcionario={m.funcionario} vendedorNome={m.vendedorNome} temPin={m.temPin} vendedores={vendedores} fonte={m.fonte} />}
+        {m.fonte === 'login' && <ModoFuncionario vendedorNome={m.vendedorNome} fonte={m.fonte} />}
         {!m.funcionario && (
           <>
             <Link href="/dashboard/plano"
