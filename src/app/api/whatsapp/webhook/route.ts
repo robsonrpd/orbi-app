@@ -22,6 +22,14 @@ export async function POST(req: NextRequest) {
     .eq('slug', instance).single()
   if (!company) return NextResponse.json({ ok: true })
 
+  // debug: registra o último evento recebido (para diagnóstico da conexão)
+  if (!evento.includes('messages')) {
+    const keys = raw && typeof raw === 'object' ? Object.keys(raw as object).join(',') : String(typeof raw)
+    await service.from('companies')
+      .update({ settings: { ...(company.settings as Record<string, unknown>), wa_last_event: `${evento || 'sem-event'} [${keys}]` } })
+      .eq('id', company.id)
+  }
+
   // QR atualizado → guarda o base64 para o painel exibir
   if (evento.includes('qrcode')) {
     const d = raw as { qrcode?: { base64?: string; code?: string } | string; base64?: string; code?: string } | null
