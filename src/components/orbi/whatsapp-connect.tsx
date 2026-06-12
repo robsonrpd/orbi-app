@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { conectarWhatsApp, renovarQR, statusWhatsApp, desconectarWhatsApp } from '@/lib/actions/whatsapp'
+import { conectarWhatsApp, renovarQR, obterQR, desconectarWhatsApp } from '@/lib/actions/whatsapp'
 import { MessageCircle, Loader2, CheckCircle2, RefreshCw, Power, QrCode, AlertTriangle } from 'lucide-react'
 
 type Estado = 'idle' | 'loading' | 'qr' | 'connecting' | 'open' | 'nao_configurado' | 'erro'
@@ -15,13 +15,14 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
 
   function pararPoll() { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
 
-  // enquanto mostra QR, verifica a cada 4s se conectou
+  // enquanto aguarda/mostra QR, busca o QR (vindo via webhook) + status a cada 2.5s
   useEffect(() => {
     if (estado === 'qr' || estado === 'connecting') {
       pollRef.current = setInterval(async () => {
-        const s = await statusWhatsApp()
-        if (s.state === 'open') { setEstado('open'); setQr(null); pararPoll() }
-      }, 4000)
+        const s = await obterQR()
+        if (s.state === 'open') { setEstado('open'); setQr(null); pararPoll(); return }
+        if (s.qr) { setQr(s.qr); setEstado('qr') }
+      }, 2500)
       return pararPoll
     }
   }, [estado])
@@ -29,17 +30,19 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
   useEffect(() => pararPoll, [])
 
   async function conectar() {
-    setEstado('loading'); setErro(null)
+    setEstado('loading'); setErro(null); setQr(null)
     const r = await conectarWhatsApp()
     if (r?.error) { setErro(r.error); setEstado('erro'); return }
     if (r?.conectado) { setEstado('open'); return }
     if (r?.qr) { setQr(r.qr); setEstado('qr'); return }
-    setErro('Não foi possível iniciar a conexão.'); setEstado('erro')
+    // QR ainda não veio — entra em modo de espera (o polling vai pegar pelo webhook)
+    setEstado('connecting')
   }
 
   async function novoQR() {
-    const r = await renovarQR()
-    if (r?.qr) setQr(r.qr)
+    setEstado('loading')
+    await renovarQR()
+    setEstado('connecting')
   }
 
   async function desconectar() {
@@ -94,6 +97,13 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
 
         {estado === 'loading' && (
           <div className="flex items-center justify-center py-8"><Loader2 className="size-6 animate-spin text-[#0DB57A]" /></div>
+        )}
+
+        {estado === 'connecting' && !qr && (
+          <div className="flex flex-col items-center gap-2 py-8">
+            <Loader2 className="size-6 animate-spin text-[#0DB57A]" />
+            <p className="text-sm text-[#8C8880]">Gerando QR Code… aguarde alguns segundos</p>
+          </div>
         )}
 
         {estado === 'qr' && qrSrc && (

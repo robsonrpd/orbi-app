@@ -16,17 +16,44 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
 
   const instance = (body.instance as string) || ''
+  const evento = ((body.event as string) || '').toLowerCase()
   const raw = body.data
-  const eventos = Array.isArray(raw) ? raw : raw ? [raw] : []
-  if (!instance || eventos.length === 0) return NextResponse.json({ ok: true })
+  if (!instance) return NextResponse.json({ ok: true })
 
   // identifica a empresa pela instância (= slug)
   const service = createServiceClient()
   const { data: company } = await service
     .from('companies')
-    .select('name, ai_name, ai_context, business_type, slug, settings')
+    .select('id, name, ai_name, ai_context, business_type, slug, settings')
     .eq('slug', instance).single()
   if (!company) return NextResponse.json({ ok: true })
+
+  // QR atualizado → guarda o base64 para o painel exibir
+  if (evento === 'qrcode.updated') {
+    const d = raw as { qrcode?: { base64?: string }; base64?: string } | null
+    const base64 = d?.qrcode?.base64 ?? d?.base64 ?? null
+    if (base64) {
+      const settings = { ...(company.settings as Record<string, unknown>), wa_qr: base64 }
+      await service.from('companies').update({ settings }).eq('id', company.id)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // conexão mudou → se abriu, limpa o QR
+  if (evento === 'connection.update') {
+    const d = raw as { state?: string } | null
+    if (d?.state === 'open') {
+      const s = { ...(company.settings as Record<string, unknown>) }
+      delete s.wa_qr
+      await service.from('companies').update({ settings: s }).eq('id', company.id)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // a partir daqui, só mensagens
+  if (evento && evento !== 'messages.upsert') return NextResponse.json({ ok: true })
+  const eventos = Array.isArray(raw) ? raw : raw ? [raw] : []
+  if (eventos.length === 0) return NextResponse.json({ ok: true })
 
   // IA pausada? (flag opcional em settings)
   if ((company.settings as { ia_pausada?: boolean })?.ia_pausada) return NextResponse.json({ ok: true })
