@@ -46,6 +46,22 @@ export async function criarInstancia(instance: string, webhookUrl: string) {
   return { ...conn, createStatus: created.status, createData: created.data }
 }
 
+/** (Re)configura o webhook de uma instância existente. */
+export async function setWebhook(instance: string, url: string) {
+  return call(`/webhook/set/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      webhook: {
+        enabled: true,
+        url,
+        byEvents: false,
+        base64: true,
+        events: ['MESSAGES_UPSERT'],
+      },
+    }),
+  })
+}
+
 /** Retorna o QR code (base64) para escanear. */
 export async function conectar(instance: string) {
   const r = await call(`/instance/connect/${instance}`)

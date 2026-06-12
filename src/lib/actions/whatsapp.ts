@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { evolutionConfigurado, criarInstancia, conectar, statusInstancia, desconectarInstancia } from '@/lib/evolution'
+import { evolutionConfigurado, criarInstancia, conectar, setWebhook, statusInstancia, desconectarInstancia } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 function webhookUrl() {
@@ -26,20 +26,28 @@ export async function conectarWhatsApp() {
   if (!c) return { error: 'Não autenticado.' }
 
   const instance = c.slug
-  const r = await criarInstancia(instance, webhookUrl())
-  if (!r.qr) {
-    // pode já estar conectado
+  const wh = webhookUrl()
+
+  // cria a instância (se não existir) e garante o webhook correto na existente
+  const r = await criarInstancia(instance, wh)
+  await setWebhook(instance, wh)
+
+  // o QR é gerado de forma assíncrona — tenta algumas vezes
+  let qr = r.qr ?? null
+  for (let i = 0; i < 5 && !qr; i++) {
     const st = await statusInstancia(instance)
     if (st.state === 'open') return { conectado: true }
-    const debug = JSON.stringify({ createStatus: (r as { createStatus?: number }).createStatus, createData: (r as { createData?: unknown }).createData, connect: (r as { raw?: unknown }).raw }).slice(0, 600)
-    return { error: `Sem QR. Resposta do Evolution: ${debug}` }
+    await new Promise(res => setTimeout(res, 1500))
+    const conn = await conectar(instance)
+    qr = conn.qr
   }
+  if (!qr) return { error: 'Não foi possível gerar o QR. Aguarde alguns segundos e clique em "Novo QR".' }
 
   const service = createServiceClient()
   const settings = { ...(c.settings ?? {}), wa_instance: instance }
   await service.from('companies').update({ settings }).eq('id', c.id)
 
-  return { qr: r.qr }
+  return { qr }
 }
 
 /** Gera um novo QR (refresh) sem recriar a instância. */
