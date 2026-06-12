@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { evolutionConfigurado, criarInstancia, conectar, setWebhook, statusInstancia, desconectarInstancia } from '@/lib/evolution'
+import { evolutionConfigurado, criarInstancia, conectar, setWebhook, statusInstancia, desconectarInstancia, deletarInstancia } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 function webhookUrl() {
@@ -28,20 +28,27 @@ export async function conectarWhatsApp() {
   const instance = c.slug
   const wh = webhookUrl()
 
-  // cria a instância (se não existir) e garante o webhook correto na existente
+  // se já está conectado, nada a fazer
+  const st0 = await statusInstancia(instance)
+  if (st0.state === 'open') return { conectado: true }
+
+  // apaga qualquer instância antiga travada e cria do zero (QR vem na criação)
+  await deletarInstancia(instance)
+  await new Promise(res => setTimeout(res, 1000))
   const r = await criarInstancia(instance, wh)
   await setWebhook(instance, wh)
 
-  // o QR é gerado de forma assíncrona — tenta algumas vezes
+  // o QR pode vir assíncrono — tenta algumas vezes
   let qr = r.qr ?? null
   for (let i = 0; i < 5 && !qr; i++) {
-    const st = await statusInstancia(instance)
-    if (st.state === 'open') return { conectado: true }
     await new Promise(res => setTimeout(res, 1500))
     const conn = await conectar(instance)
     qr = conn.qr
   }
-  if (!qr) return { error: 'Não foi possível gerar o QR. Aguarde alguns segundos e clique em "Novo QR".' }
+  if (!qr) {
+    const debug = JSON.stringify({ createStatus: (r as { createStatus?: number }).createStatus, createData: (r as { createData?: unknown }).createData ?? r.raw }).slice(0, 500)
+    return { error: `Sem QR após recriar. Evolution: ${debug}` }
+  }
 
   const service = createServiceClient()
   const settings = { ...(c.settings ?? {}), wa_instance: instance }

@@ -83,6 +83,12 @@ export async function desconectarInstancia(instance: string) {
   return call(`/instance/logout/${instance}`, { method: 'DELETE' })
 }
 
+/** Apaga a instância por completo (logout + delete). Usado para recriar do zero. */
+export async function deletarInstancia(instance: string) {
+  await call(`/instance/logout/${instance}`, { method: 'DELETE' })
+  return call(`/instance/delete/${instance}`, { method: 'DELETE' })
+}
+
 /** Envia uma mensagem de texto. number = só dígitos com DDI (ex: 5585999999999). */
 export async function enviarTexto(instance: string, number: string, text: string) {
   return call(`/message/sendText/${instance}`, {
