@@ -22,24 +22,18 @@ export async function POST(req: NextRequest) {
     .eq('slug', instance).single()
   if (!company) return NextResponse.json({ ok: true })
 
-  // debug: registra o último evento recebido (para diagnóstico da conexão)
-  if (!evento.includes('messages')) {
-    await service.from('companies')
-      .update({ settings: { ...(company.settings as Record<string, unknown>), wa_last_event: `${evento || 'sem-event'}: ${JSON.stringify(raw).slice(0, 200)}` } })
-      .eq('id', company.id)
-  }
-
   // QR atualizado → guarda o base64 para o painel exibir
   if (evento.includes('qrcode')) {
-    const d = raw as { qrcode?: { base64?: string; code?: string } | string; base64?: string; code?: string } | null
+    const d = raw as { qrcode?: { base64?: string } | string; base64?: string } | null
     const base64 =
       (typeof d?.qrcode === 'object' ? d?.qrcode?.base64 : undefined)
       ?? d?.base64
       ?? (typeof d?.qrcode === 'string' ? d.qrcode : undefined)
       ?? null
-    const settings: Record<string, unknown> = { ...(company.settings as Record<string, unknown>), wa_qr_debug: JSON.stringify(d).slice(0, 350) }
-    if (base64) settings.wa_qr = base64
-    await service.from('companies').update({ settings }).eq('id', company.id)
+    if (base64) {
+      const settings = { ...(company.settings as Record<string, unknown>), wa_qr: base64 }
+      await service.from('companies').update({ settings }).eq('id', company.id)
+    }
     return NextResponse.json({ ok: true })
   }
 
