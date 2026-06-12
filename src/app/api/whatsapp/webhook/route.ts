@@ -6,17 +6,11 @@ import { enviarTexto } from '@/lib/evolution'
 
 // Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
 export async function POST(req: NextRequest) {
-  // verificação opcional por token (?token=...)
-  const expected = process.env.EVOLUTION_WEBHOOK_TOKEN
-  if (expected && req.nextUrl.searchParams.get('token') !== expected) {
-    return NextResponse.json({ ok: false }, { status: 401 })
-  }
-
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
 
   const instance = (body.instance as string) || ''
-  const evento = ((body.event as string) || '').toLowerCase()
+  const evento = ((body.event as string) || '').toLowerCase().replace(/_/g, '.')
   const raw = body.data
   if (!instance) return NextResponse.json({ ok: true })
 
@@ -29,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!company) return NextResponse.json({ ok: true })
 
   // QR atualizado → guarda o base64 para o painel exibir
-  if (evento === 'qrcode.updated') {
+  if (evento.includes('qrcode')) {
     const d = raw as { qrcode?: { base64?: string }; base64?: string } | null
     const base64 = d?.qrcode?.base64 ?? d?.base64 ?? null
     if (base64) {
@@ -40,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
 
   // conexão mudou → se abriu, limpa o QR
-  if (evento === 'connection.update') {
+  if (evento.includes('connection')) {
     const d = raw as { state?: string } | null
     if (d?.state === 'open') {
       const s = { ...(company.settings as Record<string, unknown>) }
@@ -51,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   // a partir daqui, só mensagens
-  if (evento && evento !== 'messages.upsert') return NextResponse.json({ ok: true })
+  if (evento && !evento.includes('messages')) return NextResponse.json({ ok: true })
   const eventos = Array.isArray(raw) ? raw : raw ? [raw] : []
   if (eventos.length === 0) return NextResponse.json({ ok: true })
 

@@ -7,8 +7,7 @@ import { revalidatePath } from 'next/cache'
 
 function webhookUrl() {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
-  const token = process.env.EVOLUTION_WEBHOOK_TOKEN
-  return `${base}/api/whatsapp/webhook${token ? `?token=${token}` : ''}`
+  return `${base}/api/whatsapp/webhook`
 }
 
 async function getCompany() {
