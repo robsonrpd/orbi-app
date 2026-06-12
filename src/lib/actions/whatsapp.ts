@@ -56,8 +56,9 @@ export async function obterQR() {
   if (st.state === 'open') return { qr: null, state: 'open' as const }
 
   // QR recebido via webhook (qrcode.updated)
-  const qr = ((c.settings ?? {}) as { wa_qr?: string }).wa_qr ?? null
-  return { qr, state: st.state as 'connecting' | 'close' }
+  const s = (c.settings ?? {}) as { wa_qr?: string; wa_last_event?: string }
+  const qr = s.wa_qr ?? null
+  return { qr, state: st.state as 'connecting' | 'close', debug: qr ? undefined : s.wa_last_event }
 }
 
 /** Gera um novo QR (refresh) recriando a instância. */
