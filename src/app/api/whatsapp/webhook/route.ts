@@ -14,12 +14,16 @@ export async function POST(req: NextRequest) {
   const raw = body.data
   if (!instance) return NextResponse.json({ ok: true })
 
-  // identifica a empresa pela instância (= slug)
+  // identifica a empresa pela instância: primeiro por settings.wa_instance, depois pelo slug
+  type Comp = { id: string; name: string; ai_name: string | null; ai_context: string | null; business_type: string | null; slug: string; settings: Record<string, unknown> }
   const service = createServiceClient()
-  const { data: company } = await service
-    .from('companies')
-    .select('id, name, ai_name, ai_context, business_type, slug, settings')
-    .eq('slug', instance).single()
+  const sel = 'id, name, ai_name, ai_context, business_type, slug, settings'
+  const porInstance = await service.from('companies').select(sel).eq('settings->>wa_instance', instance).maybeSingle()
+  let company = porInstance.data as Comp | null
+  if (!company) {
+    const porSlug = await service.from('companies').select(sel).eq('slug', instance).maybeSingle()
+    company = porSlug.data as Comp | null
+  }
   if (!company) return NextResponse.json({ ok: true })
 
   // registra o último evento de conexão (para diagnóstico)
