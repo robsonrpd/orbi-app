@@ -88,10 +88,11 @@ export async function POST(req: NextRequest) {
     // CAPTURA AUTOMÁTICA: número novo vira lead no funil ("Novo Lead")
     let contactId = chave ? idPorChave.get(chave) : undefined
     if (chave && !contactId) {
-      const { data: novo } = await service.from('contacts').insert({
+      const { data: novo, error: capErr } = await service.from('contacts').insert({
         company_id: company.id, name: e.pushName?.trim() || null, phone: numero,
         origem: 'WhatsApp', funil_etapa: 'novo', active: true,
       } as never).select('id').single()
+      if (capErr) console.error('[wh capErr]', capErr.message)
       contactId = (novo as { id?: string })?.id
       if (contactId && chave) idPorChave.set(chave, contactId)
     }
@@ -151,8 +152,10 @@ async function salvarConversa(
   if (escalou) patch.escalated_at = new Date().toISOString()
 
   if (conv) {
-    await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
+    const { error } = await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
+    if (error) console.error('[wh convUpd]', error.message)
   } else {
-    await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, ...patch } as never)
+    const { error } = await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, ...patch } as never)
+    if (error) console.error('[wh convIns]', error.message)
   }
 }
