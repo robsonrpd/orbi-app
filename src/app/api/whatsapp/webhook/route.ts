@@ -61,25 +61,37 @@ export async function POST(req: NextRequest) {
   const eventos = Array.isArray(raw) ? raw : raw ? [raw] : []
   if (eventos.length === 0) return NextResponse.json({ ok: true })
 
-  // IA pausada? (flag opcional em settings)
-  if ((company.settings as { ia_pausada?: boolean })?.ia_pausada) return NextResponse.json({ ok: true })
-  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ ok: true })
+  const iaPausada = !!(company.settings as { ia_pausada?: boolean })?.ia_pausada
+  const claude = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null
 
-  const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  // contatos da empresa (para captura automática de leads, sem duplicar)
+  const { data: contatos } = await service.from('contacts').select('id, phone').eq('company_id', company.id)
+  const existentes = new Set((contatos ?? []).map(c => (c.phone ?? '').replace(/\D/g, '').slice(-8)).filter(Boolean))
 
   for (const ev of eventos) {
-    const e = ev as { key?: { remoteJid?: string; fromMe?: boolean }; message?: Record<string, unknown> }
+    const e = ev as { key?: { remoteJid?: string; fromMe?: boolean }; message?: Record<string, unknown>; pushName?: string }
     const jid = e.key?.remoteJid ?? ''
     if (e.key?.fromMe) continue              // ignora as próprias mensagens (evita loop)
     if (jid.endsWith('@g.us')) continue      // ignora grupos
     const numero = jid.split('@')[0]
     if (!numero) continue
 
+    // CAPTURA AUTOMÁTICA: número novo vira lead no funil ("Novo Lead")
+    const chave = numero.replace(/\D/g, '').slice(-8)
+    if (chave && !existentes.has(chave)) {
+      existentes.add(chave)
+      await service.from('contacts').insert({
+        company_id: company.id, name: e.pushName?.trim() || null, phone: numero,
+        origem: 'WhatsApp', funil_etapa: 'novo', active: true,
+      } as never)
+    }
+
     const msg = e.message ?? {}
     const texto = (msg.conversation as string)
       ?? (msg.extendedTextMessage as { text?: string })?.text
       ?? ''
     if (!texto.trim()) continue
+    if (iaPausada || !claude) continue       // captura o lead, mas não responde
 
     try {
       const resp = await claude.messages.create({

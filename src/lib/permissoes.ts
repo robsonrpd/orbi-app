@@ -3,6 +3,7 @@
 export const PERMISSOES: { key: string; label: string; href: string | null }[] = [
   { key: 'faturamento', label: 'Ver faturamento e valores (Dashboard)', href: null },
   { key: 'clientes', label: 'Clientes', href: '/dashboard/clientes' },
+  { key: 'funil', label: 'Funil de Leads', href: '/dashboard/funil' },
   { key: 'agenda', label: 'Agendamentos', href: '/dashboard/agenda' },
   { key: 'servicos', label: 'Serviços', href: '/dashboard/servicos' },
   { key: 'funcionamento', label: 'Funcionamento (horários)', href: '/dashboard/funcionamento' },
