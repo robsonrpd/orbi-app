@@ -14,16 +14,15 @@ export async function POST(req: NextRequest) {
   const raw = body.data
   if (!instance) return NextResponse.json({ ok: true })
 
-  // identifica a empresa pela instância: primeiro por settings.wa_instance, depois pelo slug
+  // identifica a empresa pela instância. O nome é "<slug>-<timestamp>" (timestamp sem hífen),
+  // então removo o último segmento pra obter o slug. Mantém fallback pro slug exato (legado).
   type Comp = { id: string; name: string; ai_name: string | null; ai_context: string | null; business_type: string | null; slug: string; settings: Record<string, unknown> }
   const service = createServiceClient()
   const sel = 'id, name, ai_name, ai_context, business_type, slug, settings'
-  const porInstance = await service.from('companies').select(sel).eq('settings->>wa_instance', instance).maybeSingle()
-  let company = porInstance.data as Comp | null
-  if (!company) {
-    const porSlug = await service.from('companies').select(sel).eq('slug', instance).maybeSingle()
-    company = porSlug.data as Comp | null
-  }
+  const slugCandidato = instance.replace(/-[a-z0-9]+$/i, '')
+
+  let company = (await service.from('companies').select(sel).eq('slug', slugCandidato).maybeSingle()).data as Comp | null
+  if (!company) company = (await service.from('companies').select(sel).eq('slug', instance).maybeSingle()).data as Comp | null
   if (!company) return NextResponse.json({ ok: true })
 
   // registra o último evento de conexão (para diagnóstico)
