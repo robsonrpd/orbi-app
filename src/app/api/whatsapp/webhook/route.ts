@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
   const instance = (body.instance as string) || ''
   const evento = ((body.event as string) || '').toLowerCase().replace(/_/g, '.')
   const raw = body.data
+  console.log('[wh]', evento, '| instance:', instance)
   if (!instance) return NextResponse.json({ ok: true })
 
   // identifica a empresa pela instância. O nome é "<slug>-<timestamp>" (timestamp sem hífen),
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
     const texto = (msg.conversation as string)
       ?? (msg.extendedTextMessage as { text?: string })?.text
       ?? ''
+    console.log('[wh msg]', numero, '|', texto.slice(0, 40))
     if (!texto.trim()) continue
 
     let reply: string | null = null
