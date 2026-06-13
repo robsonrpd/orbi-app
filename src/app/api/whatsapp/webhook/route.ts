@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase/server'
 import { buildSystemPrompt } from '@/lib/claude/buildSystemPrompt'
-import { enviarTexto } from '@/lib/evolution'
+import { enviarTexto, getMediaBase64 } from '@/lib/evolution'
 
 // Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
 export async function POST(req: NextRequest) {
@@ -91,20 +91,32 @@ export async function POST(req: NextRequest) {
       ?? (msg.extendedTextMessage as { text?: string })?.text
       ?? cap(msg.imageMessage) ?? cap(msg.videoMessage) ?? cap(msg.documentMessage)
       ?? ''
-    const media = msg.imageMessage ? '📷 Imagem'
-      : msg.videoMessage ? '🎥 Vídeo'
-      : (msg.audioMessage || msg.pttMessage) ? '🎤 Áudio'
-      : msg.documentMessage ? `📎 ${(msg.documentMessage as { fileName?: string })?.fileName || 'Documento'}`
+    const docNome = (msg.documentMessage as { fileName?: string })?.fileName
+    const midiaTipo = msg.imageMessage ? 'image'
+      : msg.videoMessage ? 'video'
+      : (msg.audioMessage || msg.pttMessage) ? 'audio'
+      : (msg.documentMessage ? 'document' : null)
+    const rotulo = midiaTipo === 'image' ? '📷 Imagem'
+      : midiaTipo === 'video' ? '🎥 Vídeo'
+      : midiaTipo === 'audio' ? '🎤 Áudio'
+      : midiaTipo === 'document' ? `📎 ${docNome || 'Documento'}`
       : msg.stickerMessage ? '😀 Figurinha'
       : msg.locationMessage ? '📍 Localização'
       : msg.contactMessage ? '👤 Contato'
       : null
-    const conteudo = texto.trim() || media
+    const conteudo = texto.trim() || rotulo
     if (!conteudo) continue
+
+    // baixa a mídia (se houver) e guarda no Storage → URL pública pra exibir no chat
+    let midia: Midia | undefined
+    if (midiaTipo) {
+      const url = await baixarMidia(service, company.id, instance, ev, msg, midiaTipo, docNome)
+      if (url) midia = { tipo: midiaTipo, url, nome: docNome }
+    }
 
     // mensagem enviada PELA LOJA (pelo celular ou pelo Orbi) → registra como saída sem duplicar o eco do Orbi
     if (e.key?.fromMe) {
-      await registrarSaida(service, company.id, numero, conteudo)
+      await registrarSaida(service, company.id, numero, conteudo, midia)
       continue
     }
 
@@ -142,18 +154,44 @@ export async function POST(req: NextRequest) {
     }
 
     // salva/atualiza a conversa (histórico)
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, reply, escalou, iaPausada)
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, reply, escalou, iaPausada, midia)
   }
 
   return NextResponse.json({ ok: true })
 }
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
+type Midia = { tipo: string; url: string; nome?: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia }
+
+const EXT: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
+
+// Baixa a mídia de uma mensagem (do payload base64 ou via endpoint) e guarda no Storage. Retorna a URL pública.
+async function baixarMidia(
+  service: ReturnType<typeof createServiceClient>,
+  companyId: string, instance: string, ev: unknown, msg: Record<string, unknown>,
+  tipo: string, nome?: string,
+): Promise<string | null> {
+  try {
+    let b64 = (msg.base64 as string) || ((ev as { base64?: string })?.base64) || null
+    const mime = (msg[`${tipo}Message`] as { mimetype?: string })?.mimetype || null
+    if (!b64) {
+      const r = await getMediaBase64(instance, ev)
+      b64 = r.base64
+    }
+    if (!b64) return null
+    const buf = Buffer.from(b64.replace(/^data:[^;]+;base64,/, ''), 'base64')
+    const ext = (nome && nome.includes('.')) ? nome.split('.').pop() : EXT[tipo] || 'bin'
+    const path = `${companyId}/wa/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error } = await service.storage.from('fotos').upload(path, buf, { contentType: mime || undefined, upsert: false })
+    if (error) { console.error('[wh midia]', error.message); return null }
+    return service.storage.from('fotos').getPublicUrl(path).data.publicUrl
+  } catch (err) { console.error('[wh midia]', err); return null }
+}
 
 // Registra uma mensagem de saída (enviada pela loja) sem duplicar o eco do que o Orbi já enviou.
 async function registrarSaida(
   service: ReturnType<typeof createServiceClient>,
-  companyId: string, numero: string, conteudo: string,
+  companyId: string, numero: string, conteudo: string, midia?: Midia,
 ) {
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
@@ -161,7 +199,7 @@ async function registrarSaida(
   // dedup: se a última mensagem registrada já é esse conteúdo (eco do envio pelo Orbi), ignora
   const ultima = anteriores[anteriores.length - 1]
   if (ultima && (ultima.role === 'human' || ultima.role === 'assistant') && ultima.content === conteudo) return
-  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo }].slice(-40)
+  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo, ...(midia ? { midia } : {}) }].slice(-40)
   const patch = { messages: novas, last_message_at: new Date().toISOString() }
   if (conv) await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
   else await service.from('conversations').insert({ company_id: companyId, contact_id: null, numero, ...patch } as never)
@@ -170,13 +208,13 @@ async function registrarSaida(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, aiReply: string | null, escalou: boolean, iaPausada: boolean,
+  userMsg: string, aiReply: string | null, escalou: boolean, iaPausada: boolean, midia?: Midia,
 ) {
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
 
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
-  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg }]
+  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ...(midia ? { midia } : {}) }]
   if (aiReply) novas.push({ role: 'assistant', content: aiReply })
 
   const patch: Record<string, unknown> = {

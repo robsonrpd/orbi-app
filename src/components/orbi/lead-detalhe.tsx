@@ -10,7 +10,8 @@ import {
   Paperclip, Mic, Image as ImageIcon, Square as StopIcon,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
+type Midia = { tipo: string; url: string; nome?: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia }
 type Tarefa = { id: string; titulo: string; vence_em: string | null; feito: boolean }
 type Anotacao = { id: string; texto: string; created_at: string }
 type Produto = { id: string; nome: string; quantidade: number; preco: number; desconto: number }
@@ -111,7 +112,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     if (url) {
       const tipo = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'document'
       const r = await enviarArquivoLead(lead.id, url, tipo, f.name)
-      if (!r?.error) setMsgs(m => [...m, { role: 'human', content: tipo === 'image' ? '📷 Imagem enviada' : `📎 ${f.name}` }])
+      if (!r?.error) setMsgs(m => [...m, { role: 'human', content: tipo === 'image' ? '📷 Imagem' : tipo === 'video' ? '🎥 Vídeo' : `📎 ${f.name}`, midia: { tipo, url, nome: f.name } }])
     }
     setAnexando(false); if (fileRef.current) fileRef.current.value = ''
   }
@@ -129,7 +130,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         setGravando(false); setAnexando(true)
         const url = await uploadBlob(blob, `audio-${Date.now()}.webm`)
-        if (url) { const r = await enviarAudioLead(lead.id, url); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '🎤 Áudio enviado' }]) }
+        if (url) { const r = await enviarAudioLead(lead.id, url); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url } }]) }
         setAnexando(false)
       }
       recRef.current = rec; rec.start(); setGravando(true)
@@ -215,7 +216,11 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   <div key={i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${m.role === 'assistant' ? 'bg-[#1A56FF] text-white rounded-br-sm' : m.role === 'human' ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
                       {m.role === 'assistant' && <span className="text-[10px] opacity-80 block mb-0.5">🤖 IA</span>}
-                      {m.content}
+                      {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer" onClick={() => window.open(m.midia!.url, '_blank')} />}
+                      {m.midia?.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full max-h-60 mb-1" />}
+                      {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="max-w-full mb-1" />}
+                      {m.midia?.tipo === 'document' && <a href={m.midia.url} target="_blank" className="flex items-center gap-1.5 underline mb-1"><Paperclip className="size-3.5" />{m.midia.nome || 'Documento'}</a>}
+                      {(!m.midia || m.content !== '📷 Imagem' && m.content !== '🎥 Vídeo' && m.content !== '🎤 Áudio') && <span>{m.content}</span>}
                     </div>
                   </div>
                 )

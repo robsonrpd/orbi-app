@@ -106,6 +106,16 @@ export async function enviarMedia(instance: string, number: string, p: { mediaty
   })
 }
 
+/** Baixa o base64 de uma mensagem de mídia (foto/áudio/vídeo/doc). `message` = objeto da mensagem recebida. */
+export async function getMediaBase64(instance: string, message: unknown) {
+  const r = await call(`/chat/getBase64FromMediaMessage/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ message, convertToMp4: false }),
+  })
+  const d = r.data as { base64?: string; mimetype?: string } | null
+  return { ok: r.ok, base64: d?.base64 ?? null, mimetype: d?.mimetype ?? null }
+}
+
 /** Envia áudio de voz (ptt). audio = URL pública ou base64. */
 export async function enviarAudio(instance: string, number: string, audio: string) {
   return call(`/message/sendWhatsAppAudio/${instance}`, {

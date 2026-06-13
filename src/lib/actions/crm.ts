@@ -17,11 +17,12 @@ async function envioBase(companyId: string, contactId: string) {
   return { service, instance, numero: d.startsWith('55') ? d : `55${d}` }
 }
 
-async function logConversa(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, numero: string, content: string) {
+type Midia = { tipo: string; url: string; nome?: string }
+async function logConversa(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, numero: string, content: string, midia?: Midia) {
   const chave = numero.slice(-8)
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
-  const nova = { role: 'human', content }
+  const nova = { role: 'human', content, ...(midia ? { midia } : {}) }
   if (conv) {
     const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
     await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
@@ -38,7 +39,8 @@ export async function enviarArquivoLead(contactId: string, url: string, mediatyp
   if (!base) return { error: 'WhatsApp não conectado ou lead sem telefone.' }
   const env = await enviarMedia(base.instance, base.numero, { mediatype, media: url, fileName, caption })
   if (!env.ok) return { error: 'Falha ao enviar o arquivo.' }
-  await logConversa(base.service, companyId, contactId, base.numero, mediatype === 'image' ? '📷 Imagem enviada' : `📎 ${fileName}`)
+  const rotulo = mediatype === 'image' ? '📷 Imagem' : mediatype === 'video' ? '🎥 Vídeo' : `📎 ${fileName}`
+  await logConversa(base.service, companyId, contactId, base.numero, rotulo, { tipo: mediatype, url, nome: fileName })
   revalidatePath('/dashboard/funil')
   return { success: true }
 }
@@ -51,7 +53,7 @@ export async function enviarAudioLead(contactId: string, url: string) {
   if (!base) return { error: 'WhatsApp não conectado ou lead sem telefone.' }
   const env = await enviarAudio(base.instance, base.numero, url)
   if (!env.ok) return { error: 'Falha ao enviar o áudio.' }
-  await logConversa(base.service, companyId, contactId, base.numero, '🎤 Áudio enviado')
+  await logConversa(base.service, companyId, contactId, base.numero, '🎤 Áudio', { tipo: 'audio', url })
   revalidatePath('/dashboard/funil')
   return { success: true }
 }
