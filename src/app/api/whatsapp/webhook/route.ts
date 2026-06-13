@@ -79,11 +79,34 @@ export async function POST(req: NextRequest) {
   for (const ev of eventos) {
     const e = ev as { key?: { remoteJid?: string; fromMe?: boolean }; message?: Record<string, unknown>; pushName?: string }
     const jid = e.key?.remoteJid ?? ''
-    if (e.key?.fromMe) continue              // ignora as próprias mensagens (evita loop)
     if (jid.endsWith('@g.us')) continue      // ignora grupos
     const numero = jid.split('@')[0]
     if (!numero) continue
     const chave = numero.replace(/\D/g, '').slice(-8)
+
+    // monta o conteúdo: texto, legenda ou rótulo da mídia (foto/áudio/doc/etc.)
+    const msg = e.message ?? {}
+    const cap = (m: unknown) => (m as { caption?: string })?.caption
+    const texto = (msg.conversation as string)
+      ?? (msg.extendedTextMessage as { text?: string })?.text
+      ?? cap(msg.imageMessage) ?? cap(msg.videoMessage) ?? cap(msg.documentMessage)
+      ?? ''
+    const media = msg.imageMessage ? '📷 Imagem'
+      : msg.videoMessage ? '🎥 Vídeo'
+      : (msg.audioMessage || msg.pttMessage) ? '🎤 Áudio'
+      : msg.documentMessage ? `📎 ${(msg.documentMessage as { fileName?: string })?.fileName || 'Documento'}`
+      : msg.stickerMessage ? '😀 Figurinha'
+      : msg.locationMessage ? '📍 Localização'
+      : msg.contactMessage ? '👤 Contato'
+      : null
+    const conteudo = texto.trim() || media
+    if (!conteudo) continue
+
+    // mensagem enviada PELA LOJA (pelo celular ou pelo Orbi) → registra como saída sem duplicar o eco do Orbi
+    if (e.key?.fromMe) {
+      await registrarSaida(service, company.id, numero, conteudo)
+      continue
+    }
 
     // CAPTURA AUTOMÁTICA: número novo vira lead no funil ("Novo Lead")
     let contactId = chave ? idPorChave.get(chave) : undefined
@@ -97,16 +120,11 @@ export async function POST(req: NextRequest) {
       if (contactId && chave) idPorChave.set(chave, contactId)
     }
 
-    const msg = e.message ?? {}
-    const texto = (msg.conversation as string)
-      ?? (msg.extendedTextMessage as { text?: string })?.text
-      ?? ''
-    console.log('[wh msg]', numero, '|', texto.slice(0, 40))
-    if (!texto.trim()) continue
+    console.log('[wh msg]', numero, '|', conteudo.slice(0, 40))
 
     let reply: string | null = null
     let escalou = false
-    if (!iaPausada && claude) {
+    if (texto.trim() && !iaPausada && claude) {
       try {
         const resp = await claude.messages.create({
           model: 'claude-haiku-4-5-20251001',
@@ -124,13 +142,30 @@ export async function POST(req: NextRequest) {
     }
 
     // salva/atualiza a conversa (histórico)
-    await salvarConversa(service, company.id, contactId ?? null, numero, texto, reply, escalou, iaPausada)
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, reply, escalou, iaPausada)
   }
 
   return NextResponse.json({ ok: true })
 }
 
-type Msg = { role: 'user' | 'assistant'; content: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
+
+// Registra uma mensagem de saída (enviada pela loja) sem duplicar o eco do que o Orbi já enviou.
+async function registrarSaida(
+  service: ReturnType<typeof createServiceClient>,
+  companyId: string, numero: string, conteudo: string,
+) {
+  const { data: conv } = await service.from('conversations')
+    .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
+  const anteriores = (conv?.messages as Msg[] | undefined) ?? []
+  // dedup: se a última mensagem registrada já é esse conteúdo (eco do envio pelo Orbi), ignora
+  const ultima = anteriores[anteriores.length - 1]
+  if (ultima && (ultima.role === 'human' || ultima.role === 'assistant') && ultima.content === conteudo) return
+  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo }].slice(-40)
+  const patch = { messages: novas, last_message_at: new Date().toISOString() }
+  if (conv) await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
+  else await service.from('conversations').insert({ company_id: companyId, contact_id: null, numero, ...patch } as never)
+}
 
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,

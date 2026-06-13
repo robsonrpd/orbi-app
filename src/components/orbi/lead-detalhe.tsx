@@ -54,6 +54,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   const [tags, setTags] = useState<string[]>(lead.tags ?? [])
   const [novaTag, setNovaTag] = useState('')
   const [responsavel, setResp] = useState(lead.responsavel_id ?? '')
+  const [salvando, setSalvando] = useState(false)
+  const [salvo, setSalvo] = useState(false)
 
   // tarefas e anotações
   const [tarefas, setTarefas] = useState<Tarefa[]>(lead.tarefas ?? [])
@@ -79,12 +81,13 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   async function enviarOrc() { setEnviandoOrc(true); const r = await enviarOrcamentoLead(lead.id); setEnviandoOrc(false); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '📋 Orçamento enviado' }]) }
   const totalProdutos = produtos.reduce((s, p) => s + (Number(p.quantidade) * Number(p.preco) - Number(p.desconto)), 0)
 
-  // auto-save de campos (sem botão / sem F5)
-  const [salvoFlash, setSalvoFlash] = useState(false)
-  async function salvarCampo(patch: Parameters<typeof atualizarLead>[1]) {
-    await atualizarLead(lead.id, patch)
-    onChange(lead.id, patch as Partial<Lead>)
-    setSalvoFlash(true); setTimeout(() => setSalvoFlash(false), 1200)
+  // salvar dados do lead (botão) — grava tudo de uma vez e atualiza o card
+  async function salvar() {
+    setSalvando(true)
+    const v = parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0
+    await atualizarLead(lead.id, { name: nome, email, origem, valor: v, tags })
+    onChange(lead.id, { name: nome || null, email: email || null, origem: origem || null, funil_valor: v, tags } as Partial<Lead>)
+    setSalvando(false); setSalvo(true); setTimeout(() => setSalvo(false), 1800)
   }
 
   // anexos + áudio
@@ -147,9 +150,9 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
 
   function addTag() {
     const t = novaTag.trim(); if (!t || tags.includes(t)) { setNovaTag(''); return }
-    const novas = [...tags, t]; setTags(novas); setNovaTag(''); salvarCampo({ tags: novas })
+    const novas = [...tags, t]; setTags(novas); setNovaTag('')
   }
-  function removerTag(t: string) { const novas = tags.filter(x => x !== t); setTags(novas); salvarCampo({ tags: novas }) }
+  function removerTag(t: string) { setTags(tags.filter(x => x !== t)) }
   async function mudarEtapa(n: string) { setEtapa(n); await atualizarLead(lead.id, { etapa: n }); onChange(lead.id, { funil_etapa: n }) }
   async function mudarResp(id: string) { setResp(id); await setResponsavel(lead.id, id || null) }
 
@@ -274,7 +277,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
               <p className={secTitle}><DollarSign className="size-3.5 text-[#0DB57A]" /> Negociação</p>
               <div>
                 <label className={labelCls}>Valor da venda</label>
-                <input value={valor} onChange={e => setValor(e.target.value)} onBlur={() => salvarCampo({ valor: parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0 })} placeholder="0,00" className={`${inputCls} font-bold text-[#0DB57A]`} />
+                <input value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" className={`${inputCls} font-bold text-[#0DB57A]`} />
               </div>
               <div>
                 <label className={labelCls}><UserCog className="size-3 inline mr-1" />Responsável</label>
@@ -349,17 +352,16 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
             <div className="space-y-2.5 pt-1 border-t border-[#F3F1EB]">
               <div className="flex items-center justify-between">
                 <p className={secTitle}>Dados</p>
-                {salvoFlash && <span className="text-[10px] font-bold text-[#0DB57A] flex items-center gap-0.5"><Check className="size-3" /> Salvo</span>}
               </div>
-              <div><label className={labelCls}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} onBlur={() => salvarCampo({ name: nome })} className={inputCls} /></div>
+              <div><label className={labelCls}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inputCls} /></div>
               <div className="flex gap-2">
                 <div className="flex-1"><label className={labelCls}>Telefone</label><input value={lead.phone} readOnly className={inputCls} /></div>
                 <a href={`https://wa.me/${lead.phone.replace(/\D/g, '').startsWith('55') ? lead.phone.replace(/\D/g, '') : '55' + lead.phone.replace(/\D/g, '')}`} target="_blank"
                   className="self-end w-10 h-10 rounded-lg flex items-center justify-center text-[#0DB57A] border border-[#EAE8E1] hover:bg-[#E6F9F3]"><MessageCircle className="size-4" /></a>
               </div>
-              <div><label className={labelCls}><Mail className="size-3 inline mr-1" />E-mail</label><input value={email} onChange={e => setEmail(e.target.value)} onBlur={() => salvarCampo({ email })} type="email" className={inputCls} /></div>
+              <div><label className={labelCls}><Mail className="size-3 inline mr-1" />E-mail</label><input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls} /></div>
               <div><label className={labelCls}><MapPin className="size-3 inline mr-1" />Origem</label>
-                <select value={origem} onChange={e => { setOrigem(e.target.value); salvarCampo({ origem: e.target.value }) }} className={inputCls}><option value="">—</option>{ORIGENS.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                <select value={origem} onChange={e => setOrigem(e.target.value)} className={inputCls}><option value="">—</option>{ORIGENS.map(o => <option key={o} value={o}>{o}</option>)}</select>
               </div>
               <div>
                 <label className={labelCls}><Tag className="size-3 inline mr-1" />Etiquetas</label>
@@ -371,6 +373,10 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   <button onClick={addTag} className="w-9 h-9 rounded-lg flex items-center justify-center text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] shrink-0"><Plus className="size-4" /></button>
                 </div>
               </div>
+              <button onClick={salvar} disabled={salvando}
+                className="w-full h-10 rounded-lg bg-[#1A56FF] text-white text-sm font-bold flex items-center justify-center gap-1.5 hover:bg-[#1448d8] disabled:opacity-60">
+                {salvo ? <><Check className="size-4" /> Salvo!</> : salvando ? 'Salvando…' : 'Salvar alterações'}
+              </button>
             </div>
 
             {/* Tarefas */}
