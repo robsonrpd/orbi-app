@@ -18,7 +18,6 @@ export const PERMISSOES: { key: string; label: string; href: string | null }[] =
   { key: 'vendedores', label: 'Gerenciar Vendedores', href: '/dashboard/vendedores' },
   { key: 'avaliacoes', label: 'Avaliações', href: '/dashboard/avaliacoes' },
   { key: 'indicacoes', label: 'Ganhe uma Mensalidade', href: '/dashboard/indicacoes' },
-  { key: 'conversas', label: 'Conversas', href: '/dashboard/conversas' },
   { key: 'ia', label: 'Inteligência IA', href: '/dashboard/ia' },
 ]
 

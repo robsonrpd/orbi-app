@@ -6,13 +6,18 @@ import { enviarTexto, getMediaBase64 } from '@/lib/evolution'
 
 // Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
 export async function POST(req: NextRequest) {
+  // valida o token secreto (se configurado) — barra POSTs forjados de terceiros
+  const tokenEsperado = process.env.WHATSAPP_WEBHOOK_TOKEN
+  if (tokenEsperado && req.nextUrl.searchParams.get('token') !== tokenEsperado) {
+    return NextResponse.json({ ok: true }) // responde 200 genérico, sem revelar que existe proteção
+  }
+
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
 
   const instance = (body.instance as string) || ''
   const evento = ((body.event as string) || '').toLowerCase().replace(/_/g, '.')
   const raw = body.data
-  console.log('[wh]', evento, '| instance:', instance)
   if (!instance) return NextResponse.json({ ok: true })
 
   // identifica a empresa pela instância. O nome é "<slug>-<timestamp>" (timestamp sem hífen),
@@ -131,8 +136,6 @@ export async function POST(req: NextRequest) {
       contactId = (novo as { id?: string })?.id
       if (contactId && chave) idPorChave.set(chave, contactId)
     }
-
-    console.log('[wh msg]', numero, '|', conteudo.slice(0, 40))
 
     let reply: string | null = null
     let escalou = false
