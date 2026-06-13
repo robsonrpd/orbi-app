@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { FUNIL_ETAPAS } from '@/lib/funil'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
-import { setResponsavel, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead } from '@/lib/actions/crm'
+import { setResponsavel, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
 import {
   X, Send, Loader2, Mail, MapPin, Tag, Check, MessageCircle, DollarSign, Plus,
   UserCog, CheckSquare, Square, Calendar, Zap, StickyNote, Trash2, Star, ShoppingBag, FileText,
+  Paperclip, Mic, Image as ImageIcon, Square as StopIcon,
 } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
@@ -29,20 +30,20 @@ const STATUS = [
 ]
 type Vendedor = { id: string; nome: string }
 type MsgPronta = { id: string; titulo: string; texto: string }
+type ProdLoja = { id: string; name: string; price: number }
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 function dataBR(s: string | null) { return s ? new Date(s.length <= 10 ? s + 'T12:00:00' : s).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '' }
 const ORIGENS = ['Instagram', 'Facebook', 'Google', 'Indicação de amigo', 'Indicação médica', 'Passou em frente', 'Já era cliente', 'WhatsApp', 'Manual', 'Outro']
 
-export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }: {
+export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, produtosLoja }: {
   lead: Lead; onClose: () => void; onChange: (id: string, patch: Partial<Lead>) => void
-  vendedores: Vendedor[]; msgsProntas: MsgPronta[]
+  vendedores: Vendedor[]; msgsProntas: MsgPronta[]; produtosLoja: ProdLoja[]
 }) {
   const [msgs, setMsgs] = useState<Msg[]>(lead.messages ?? [])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erroChat, setErroChat] = useState<string | null>(null)
-  const [prontasOpen, setProntasOpen] = useState(false)
   const fimRef = useRef<HTMLDivElement>(null)
 
   const [nome, setNome] = useState(lead.name ?? '')
@@ -53,8 +54,6 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
   const [tags, setTags] = useState<string[]>(lead.tags ?? [])
   const [novaTag, setNovaTag] = useState('')
   const [responsavel, setResp] = useState(lead.responsavel_id ?? '')
-  const [salvando, setSalvando] = useState(false)
-  const [salvo, setSalvo] = useState(false)
 
   // tarefas e anotações
   const [tarefas, setTarefas] = useState<Tarefa[]>(lead.tarefas ?? [])
@@ -66,7 +65,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
   const [estrelas, setEstrelas] = useState(lead.qualificacao ?? 0)
   const [status, setStatus] = useState(lead.negociacao_status ?? 'aberta')
   const [produtos, setProdutos] = useState<Produto[]>(lead.produtos ?? [])
-  const [pNome, setPNome] = useState(''); const [pQtd, setPQtd] = useState('1'); const [pPreco, setPPreco] = useState(''); const [pDesc, setPDesc] = useState('')
+  const [pSel, setPSel] = useState(''); const [pNome, setPNome] = useState(''); const [pQtd, setPQtd] = useState('1'); const [pPreco, setPPreco] = useState(''); const [pDesc, setPDesc] = useState('')
   const [enviandoOrc, setEnviandoOrc] = useState(false)
 
   async function mudarEstrelas(n: number) { setEstrelas(n); await setQualificacao(lead.id, n) }
@@ -74,11 +73,65 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
   async function addProduto() {
     if (!pNome.trim()) return
     const r = await addProdutoLead(lead.id, { nome: pNome, quantidade: parseFloat(pQtd) || 1, preco: parseFloat(pPreco.replace(',', '.')) || 0, desconto: parseFloat(pDesc.replace(',', '.')) || 0 })
-    if (r?.produto) { setProdutos(ps => [...ps, r.produto as Produto]); setPNome(''); setPQtd('1'); setPPreco(''); setPDesc('') }
+    if (r?.produto) { setProdutos(ps => [...ps, r.produto as Produto]); setPSel(''); setPNome(''); setPQtd('1'); setPPreco(''); setPDesc('') }
   }
   async function delProduto(id: string) { setProdutos(ps => ps.filter(x => x.id !== id)); await delProdutoLead(id) }
   async function enviarOrc() { setEnviandoOrc(true); const r = await enviarOrcamentoLead(lead.id); setEnviandoOrc(false); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '📋 Orçamento enviado' }]) }
   const totalProdutos = produtos.reduce((s, p) => s + (Number(p.quantidade) * Number(p.preco) - Number(p.desconto)), 0)
+
+  // auto-save de campos (sem botão / sem F5)
+  const [salvoFlash, setSalvoFlash] = useState(false)
+  async function salvarCampo(patch: Parameters<typeof atualizarLead>[1]) {
+    await atualizarLead(lead.id, patch)
+    onChange(lead.id, patch as Partial<Lead>)
+    setSalvoFlash(true); setTimeout(() => setSalvoFlash(false), 1200)
+  }
+
+  // anexos + áudio
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [subProntas, setSubProntas] = useState(false)
+  const [anexando, setAnexando] = useState(false)
+  const [gravando, setGravando] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const recRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+
+  async function uploadBlob(file: Blob, nome: string): Promise<string | null> {
+    const fd = new FormData(); fd.append('file', new File([file], nome, { type: file.type }))
+    try { const r = await fetch('/api/upload', { method: 'POST', body: fd }); const d = await r.json(); return r.ok ? d.url : null } catch { return null }
+  }
+
+  async function escolherArquivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (!f) return
+    setMenuOpen(false); setAnexando(true)
+    const url = await uploadBlob(f, f.name)
+    if (url) {
+      const tipo = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'document'
+      const r = await enviarArquivoLead(lead.id, url, tipo, f.name)
+      if (!r?.error) setMsgs(m => [...m, { role: 'human', content: tipo === 'image' ? '📷 Imagem enviada' : `📎 ${f.name}` }])
+    }
+    setAnexando(false); if (fileRef.current) fileRef.current.value = ''
+  }
+
+  async function toggleGravar() {
+    if (gravando) { recRef.current?.stop(); return }
+    setMenuOpen(false)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const rec = new MediaRecorder(stream)
+      chunksRef.current = []
+      rec.ondataavailable = ev => { if (ev.data.size) chunksRef.current.push(ev.data) }
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        setGravando(false); setAnexando(true)
+        const url = await uploadBlob(blob, `audio-${Date.now()}.webm`)
+        if (url) { const r = await enviarAudioLead(lead.id, url); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '🎤 Áudio enviado' }]) }
+        setAnexando(false)
+      }
+      recRef.current = rec; rec.start(); setGravando(true)
+    } catch { alert('Não foi possível acessar o microfone.') }
+  }
 
   useEffect(() => { fimRef.current?.scrollIntoView() }, [msgs.length])
 
@@ -92,15 +145,11 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
     setMsgs(m => [...m, { role: 'human', content: t }]); setTexto('')
   }
 
-  function addTag() { const t = novaTag.trim(); if (t && !tags.includes(t)) setTags([...tags, t]); setNovaTag('') }
-
-  async function salvar() {
-    setSalvando(true)
-    const v = parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0
-    await atualizarLead(lead.id, { name: nome, email, origem, valor: v, etapa, tags })
-    setSalvando(false); setSalvo(true); setTimeout(() => setSalvo(false), 2000)
-    onChange(lead.id, { name: nome || null, email: email || null, origem: origem || null, funil_valor: v, funil_etapa: etapa, tags })
+  function addTag() {
+    const t = novaTag.trim(); if (!t || tags.includes(t)) { setNovaTag(''); return }
+    const novas = [...tags, t]; setTags(novas); setNovaTag(''); salvarCampo({ tags: novas })
   }
+  function removerTag(t: string) { const novas = tags.filter(x => x !== t); setTags(novas); salvarCampo({ tags: novas }) }
   async function mudarEtapa(n: string) { setEtapa(n); await atualizarLead(lead.id, { etapa: n }); onChange(lead.id, { funil_etapa: n }) }
   async function mudarResp(id: string) { setResp(id); await setResponsavel(lead.id, id || null) }
 
@@ -172,32 +221,47 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
             </div>
             <div className="p-3 border-t border-[#EAE8E1] bg-white shrink-0">
               {erroChat && <p className="text-xs text-red-500 mb-1.5">{erroChat}</p>}
+              <input type="file" ref={fileRef} onChange={escolherArquivo} className="hidden" accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx" />
               <div className="flex items-center gap-2 relative">
-                {/* Mensagens prontas */}
+                {/* Menu "+" */}
                 <div className="relative">
-                  <button onClick={() => setProntasOpen(o => !o)} title="Mensagens prontas"
-                    className="w-11 h-11 rounded-xl flex items-center justify-center text-[#F59E0B] border border-[#EAE8E1] hover:bg-[#FEF3C7]"><Zap className="size-5" /></button>
-                  {prontasOpen && (
-                    <div className="absolute bottom-full left-0 mb-2 w-64 bg-white border border-[#EAE8E1] rounded-xl shadow-2xl overflow-hidden z-10 max-h-64 overflow-y-auto">
-                      {msgsProntas.length === 0 ? (
-                        <p className="text-xs text-[#C8C5BB] p-3 text-center">Nenhuma mensagem pronta.<br />Crie em Parâmetros.</p>
-                      ) : msgsProntas.map(mp => (
-                        <button key={mp.id} onClick={() => { setTexto(mp.texto); setProntasOpen(false) }}
-                          className="w-full text-left px-3 py-2 hover:bg-[#FEF9EE] border-b border-[#F3F1EB]">
-                          <p className="text-xs font-bold text-[#1C1B18]">{mp.titulo}</p>
-                          <p className="text-[11px] text-[#8C8880] truncate">{mp.texto}</p>
-                        </button>
-                      ))}
+                  <button onClick={() => setMenuOpen(o => !o)} title="Anexar"
+                    className="w-11 h-11 rounded-xl flex items-center justify-center text-[#8C8880] border border-[#EAE8E1] hover:bg-[#F7F6F3]">
+                    {anexando ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+                  </button>
+                  {menuOpen && (
+                    <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#EAE8E1] rounded-xl shadow-2xl overflow-hidden z-20">
+                      <button onClick={() => setSubProntas(s => !s)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#2E2D29] hover:bg-[#FEF9EE]"><Zap className="size-4 text-[#F59E0B]" /> Resposta rápida</button>
+                      {subProntas && (
+                        <div className="bg-[#FAFAF9] max-h-44 overflow-y-auto border-y border-[#F3F1EB]">
+                          {msgsProntas.length === 0 ? <p className="text-[11px] text-[#C8C5BB] p-2 text-center">Nenhuma. Crie no funil.</p>
+                            : msgsProntas.map(mp => (
+                              <button key={mp.id} onClick={() => { setTexto(mp.texto); setMenuOpen(false); setSubProntas(false) }} className="w-full text-left px-3 py-1.5 hover:bg-white">
+                                <p className="text-xs font-bold text-[#1C1B18]">{mp.titulo}</p><p className="text-[10px] text-[#8C8880] truncate">{mp.texto}</p>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                      <button onClick={() => { setMenuOpen(false); fileRef.current?.click() }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#2E2D29] hover:bg-[#EEF2FF]"><ImageIcon className="size-4 text-[#1A56FF]" /> Foto / Vídeo</button>
+                      <button onClick={() => { setMenuOpen(false); fileRef.current?.click() }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#2E2D29] hover:bg-[#EEF2FF]"><Paperclip className="size-4 text-[#8B5CF6]" /> Documento</button>
+                      <button onClick={toggleGravar} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#2E2D29] hover:bg-[#E6F9F3]"><Mic className="size-4 text-[#0DB57A]" /> Gravar áudio</button>
                     </div>
                   )}
                 </div>
-                <input value={texto} onChange={e => setTexto(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() } }}
-                  placeholder="Escreva uma mensagem…"
-                  className="flex-1 h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#0DB57A]" />
-                <button onClick={enviar} disabled={enviando || !texto.trim()}
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white disabled:opacity-50" style={{ background: '#0DB57A' }}>
-                  {enviando ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+
+                {gravando ? (
+                  <div className="flex-1 h-11 px-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-sm text-red-500 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" /> Gravando… toque em ■ para enviar
+                  </div>
+                ) : (
+                  <input value={texto} onChange={e => setTexto(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() } }}
+                    placeholder="Escreva uma mensagem…"
+                    className="flex-1 h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#0DB57A]" />
+                )}
+                <button onClick={gravando ? toggleGravar : enviar} disabled={enviando || (!gravando && !texto.trim())}
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white disabled:opacity-50" style={{ background: gravando ? '#EF4444' : '#0DB57A' }}>
+                  {enviando ? <Loader2 className="size-5 animate-spin" /> : gravando ? <StopIcon className="size-5 fill-white" /> : <Send className="size-5" />}
                 </button>
               </div>
             </div>
@@ -210,7 +274,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
               <p className={secTitle}><DollarSign className="size-3.5 text-[#0DB57A]" /> Negociação</p>
               <div>
                 <label className={labelCls}>Valor da venda</label>
-                <input value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" className={`${inputCls} font-bold text-[#0DB57A]`} />
+                <input value={valor} onChange={e => setValor(e.target.value)} onBlur={() => salvarCampo({ valor: parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0 })} placeholder="0,00" className={`${inputCls} font-bold text-[#0DB57A]`} />
               </div>
               <div>
                 <label className={labelCls}><UserCog className="size-3 inline mr-1" />Responsável</label>
@@ -259,11 +323,19 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
                 </div>
               ))}
               <div className="grid grid-cols-12 gap-1">
-                <input value={pNome} onChange={e => setPNome(e.target.value)} placeholder="Produto" className="col-span-12 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
+                {produtosLoja.length > 0 ? (
+                  <select value={pSel} onChange={e => { setPSel(e.target.value); const p = produtosLoja.find(x => x.id === e.target.value); if (p) { setPNome(p.name); setPPreco(String(p.price)) } else { setPNome('') } }}
+                    className="col-span-12 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none">
+                    <option value="">Escolher produto do estoque…</option>
+                    {produtosLoja.map(p => <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)}</option>)}
+                  </select>
+                ) : (
+                  <input value={pNome} onChange={e => setPNome(e.target.value)} placeholder="Produto" className="col-span-12 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
+                )}
                 <input value={pQtd} onChange={e => setPQtd(e.target.value)} type="number" min="1" placeholder="Qtd" className="col-span-3 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
                 <input value={pPreco} onChange={e => setPPreco(e.target.value)} placeholder="Preço" className="col-span-4 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
                 <input value={pDesc} onChange={e => setPDesc(e.target.value)} placeholder="Desc." className="col-span-3 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
-                <button onClick={addProduto} className="col-span-2 h-9 rounded-lg flex items-center justify-center text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF]"><Plus className="size-4" /></button>
+                <button onClick={addProduto} disabled={!pNome.trim()} className="col-span-2 h-9 rounded-lg flex items-center justify-center text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] disabled:opacity-40"><Plus className="size-4" /></button>
               </div>
               {produtos.length > 0 && (
                 <button onClick={enviarOrc} disabled={enviandoOrc}
@@ -275,29 +347,30 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
 
             {/* Dados */}
             <div className="space-y-2.5 pt-1 border-t border-[#F3F1EB]">
-              <div><label className={labelCls}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inputCls} /></div>
+              <div className="flex items-center justify-between">
+                <p className={secTitle}>Dados</p>
+                {salvoFlash && <span className="text-[10px] font-bold text-[#0DB57A] flex items-center gap-0.5"><Check className="size-3" /> Salvo</span>}
+              </div>
+              <div><label className={labelCls}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} onBlur={() => salvarCampo({ name: nome })} className={inputCls} /></div>
               <div className="flex gap-2">
                 <div className="flex-1"><label className={labelCls}>Telefone</label><input value={lead.phone} readOnly className={inputCls} /></div>
                 <a href={`https://wa.me/${lead.phone.replace(/\D/g, '').startsWith('55') ? lead.phone.replace(/\D/g, '') : '55' + lead.phone.replace(/\D/g, '')}`} target="_blank"
                   className="self-end w-10 h-10 rounded-lg flex items-center justify-center text-[#0DB57A] border border-[#EAE8E1] hover:bg-[#E6F9F3]"><MessageCircle className="size-4" /></a>
               </div>
-              <div><label className={labelCls}><Mail className="size-3 inline mr-1" />E-mail</label><input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls} /></div>
+              <div><label className={labelCls}><Mail className="size-3 inline mr-1" />E-mail</label><input value={email} onChange={e => setEmail(e.target.value)} onBlur={() => salvarCampo({ email })} type="email" className={inputCls} /></div>
               <div><label className={labelCls}><MapPin className="size-3 inline mr-1" />Origem</label>
-                <select value={origem} onChange={e => setOrigem(e.target.value)} className={inputCls}><option value="">—</option>{ORIGENS.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                <select value={origem} onChange={e => { setOrigem(e.target.value); salvarCampo({ origem: e.target.value }) }} className={inputCls}><option value="">—</option>{ORIGENS.map(o => <option key={o} value={o}>{o}</option>)}</select>
               </div>
               <div>
                 <label className={labelCls}><Tag className="size-3 inline mr-1" />Etiquetas</label>
                 <div className="flex flex-wrap gap-1.5 mb-1.5">
-                  {tags.map(t => <span key={t} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#1A56FF] font-semibold">{t}<button onClick={() => setTags(tags.filter(x => x !== t))}><X className="size-3" /></button></span>)}
+                  {tags.map(t => <span key={t} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#1A56FF] font-semibold">{t}<button onClick={() => removerTag(t)}><X className="size-3" /></button></span>)}
                 </div>
                 <div className="flex gap-1.5">
                   <input value={novaTag} onChange={e => setNovaTag(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }} placeholder="Nova etiqueta" className={`${inputCls} h-9`} />
                   <button onClick={addTag} className="w-9 h-9 rounded-lg flex items-center justify-center text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] shrink-0"><Plus className="size-4" /></button>
                 </div>
               </div>
-              <button onClick={salvar} disabled={salvando} className="w-full h-10 rounded-lg flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
-                {salvando ? <Loader2 className="size-4 animate-spin" /> : salvo ? <><Check className="size-4" /> Salvo!</> : 'Salvar dados'}
-              </button>
             </div>
 
             {/* Tarefas */}

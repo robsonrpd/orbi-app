@@ -2,8 +2,59 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
+
+/** Resolve instância + número do lead e registra uma mensagem na conversa. */
+async function envioBase(companyId: string, contactId: string) {
+  const service = createServiceClient()
+  const { data: contact } = await service.from('contacts').select('phone').eq('id', contactId).eq('company_id', companyId).single()
+  if (!contact?.phone) return null
+  const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const instance = (comp?.settings as { wa_instance?: string })?.wa_instance
+  if (!instance) return null
+  const d = (contact.phone || '').replace(/\D/g, '')
+  return { service, instance, numero: d.startsWith('55') ? d : `55${d}` }
+}
+
+async function logConversa(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, numero: string, content: string) {
+  const chave = numero.slice(-8)
+  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
+  const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const nova = { role: 'human', content }
+  if (conv) {
+    const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  } else {
+    await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, messages: [nova], handled_by_ai: false, last_message_at: new Date().toISOString() } as never)
+  }
+}
+
+/** Envia um arquivo/imagem (URL) ao lead pelo WhatsApp. */
+export async function enviarArquivoLead(contactId: string, url: string, mediatype: string, fileName: string, caption?: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const base = await envioBase(companyId, contactId)
+  if (!base) return { error: 'WhatsApp não conectado ou lead sem telefone.' }
+  const env = await enviarMedia(base.instance, base.numero, { mediatype, media: url, fileName, caption })
+  if (!env.ok) return { error: 'Falha ao enviar o arquivo.' }
+  await logConversa(base.service, companyId, contactId, base.numero, mediatype === 'image' ? '📷 Imagem enviada' : `📎 ${fileName}`)
+  revalidatePath('/dashboard/funil')
+  return { success: true }
+}
+
+/** Envia um áudio (URL) ao lead pelo WhatsApp. */
+export async function enviarAudioLead(contactId: string, url: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const base = await envioBase(companyId, contactId)
+  if (!base) return { error: 'WhatsApp não conectado ou lead sem telefone.' }
+  const env = await enviarAudio(base.instance, base.numero, url)
+  if (!env.ok) return { error: 'Falha ao enviar o áudio.' }
+  await logConversa(base.service, companyId, contactId, base.numero, '🎤 Áudio enviado')
+  revalidatePath('/dashboard/funil')
+  return { success: true }
+}
 
 function fmtBR(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 

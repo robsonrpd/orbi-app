@@ -97,3 +97,19 @@ export async function enviarTexto(instance: string, number: string, text: string
     body: JSON.stringify({ number, text }),
   })
 }
+
+/** Envia imagem/documento/vídeo. media = URL pública. mediatype: 'image' | 'document' | 'video'. */
+export async function enviarMedia(instance: string, number: string, p: { mediatype: string; media: string; fileName?: string; caption?: string }) {
+  return call(`/message/sendMedia/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ number, mediatype: p.mediatype, media: p.media, fileName: p.fileName, caption: p.caption }),
+  })
+}
+
+/** Envia áudio de voz (ptt). audio = URL pública ou base64. */
+export async function enviarAudio(instance: string, number: string, audio: string) {
+  return call(`/message/sendWhatsAppAudio/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ number, audio }),
+  })
+}

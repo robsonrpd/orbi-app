@@ -17,6 +17,9 @@ export default async function FunilPage() {
     service.from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome'),
   ])
 
+  let produtosLoja: { id: string; name: string; price: number }[] = []
+  try { produtosLoja = ((await service.from('products').select('id, name, price').eq('company_id', companyId).eq('active', true).order('name')).data ?? []) as never } catch {}
+
   // tabelas novas — toleram não existir ainda
   let tarefas: { id: string; contact_id: string; titulo: string; vence_em: string | null; feito: boolean }[] = []
   let anotacoes: { id: string; contact_id: string; texto: string; created_at: string }[] = []
@@ -51,7 +54,7 @@ export default async function FunilPage() {
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
       <Topbar title="Funil de Leads" subtitle="Seu CRM — acompanhe e converse com cada lead" />
       <div className="flex-1 overflow-hidden p-6">
-        <FunilClient leads={leads as never} vendedores={vendedores ?? []} msgsProntas={msgsProntas} />
+        <FunilClient leads={leads as never} vendedores={vendedores ?? []} msgsProntas={msgsProntas} produtosLoja={produtosLoja} />
       </div>
     </div>
   )

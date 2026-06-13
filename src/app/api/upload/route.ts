@@ -14,8 +14,7 @@ export async function POST(req: NextRequest) {
   const file = form.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'Nenhum arquivo.' }, { status: 400 })
 
-  if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: 'Imagem acima de 5MB.' }, { status: 400 })
-  if (!file.type.startsWith('image/')) return NextResponse.json({ error: 'Arquivo não é uma imagem.' }, { status: 400 })
+  if (file.size > 16 * 1024 * 1024) return NextResponse.json({ error: 'Arquivo acima de 16MB.' }, { status: 400 })
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
   const path = `${companyId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`

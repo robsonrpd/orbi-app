@@ -21,8 +21,9 @@ const STATUS_MAP: Record<string, { label: string; cor: string }> = {
 
 type Vendedor = { id: string; nome: string }
 type MsgPronta = { id: string; titulo: string; texto: string }
+type ProdLoja = { id: string; name: string; price: number }
 
-export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [] }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[] }) {
+export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [], produtosLoja = [] }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[]; produtosLoja?: ProdLoja[] }) {
   const [leads, setLeads] = useState<Lead[]>(leadsIniciais)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
@@ -193,7 +194,7 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
         })}
       </div>
 
-      {detalhe && <LeadDetalhe lead={detalhe} onClose={() => setDetalhe(null)} onChange={aplicar} vendedores={vendedores} msgsProntas={msgsProntas} />}
+      {detalhe && <LeadDetalhe lead={detalhe} onClose={() => setDetalhe(null)} onChange={aplicar} vendedores={vendedores} msgsProntas={msgsProntas} produtosLoja={produtosLoja} />}
 
       {/* Modal mensagens prontas */}
       {msgsOpen && (
