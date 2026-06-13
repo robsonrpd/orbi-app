@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Bot, User, AlertTriangle, MessageSquare, X, MessageCircle } from 'lucide-react'
+import { responderConversa } from '@/lib/actions/conversas'
+import { Bot, User, AlertTriangle, MessageSquare, X, MessageCircle, Send, Loader2 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant'; content: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
 type Conversa = {
   id: string
   numero: string | null
@@ -20,6 +21,21 @@ function waLink(phone: string) { const d = (phone || '').replace(/\D/g, ''); ret
 
 export function ConversasClient({ conversas }: { conversas: Conversa[] }) {
   const [aberta, setAberta] = useState<Conversa | null>(null)
+  const [texto, setTexto] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  async function enviar() {
+    if (!aberta || !texto.trim()) return
+    setEnviando(true); setErro(null)
+    const msg = texto.trim()
+    const r = await responderConversa(aberta.id, msg)
+    setEnviando(false)
+    if (r?.error) { setErro(r.error); return }
+    // adiciona localmente
+    setAberta(a => a ? { ...a, messages: [...(a.messages ?? []), { role: 'human', content: msg }], handled_by_ai: false } : a)
+    setTexto('')
+  }
 
   const byIA = conversas.filter(c => c.handled_by_ai && !c.escalated_at)
   const escalated = conversas.filter(c => c.escalated_at)
@@ -100,16 +116,40 @@ export function ConversasClient({ conversas }: { conversas: Conversa[] }) {
                 <button onClick={() => setAberta(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] hover:bg-[#F7F6F3]"><X className="size-5" /></button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#F0F2F5]">
-              {(aberta.messages ?? []).map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'assistant' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${m.role === 'assistant' ? 'bg-[#1A56FF] text-white rounded-br-sm' : 'bg-white text-[#2E2D29] border border-[#EAE8E1] rounded-bl-sm'}`}>
-                    {m.role === 'assistant' && <span className="text-[10px] opacity-70 block mb-0.5">🤖 Assistente</span>}
-                    {m.content}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ECE5DD]">
+              {(aberta.messages ?? []).map((m, i) => {
+                const meu = m.role === 'assistant' || m.role === 'human'
+                return (
+                  <div key={i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
+                      m.role === 'assistant' ? 'bg-[#1A56FF] text-white rounded-br-sm'
+                      : m.role === 'human' ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm'
+                      : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
+                      {m.role === 'assistant' && <span className="text-[10px] opacity-80 block mb-0.5">🤖 Assistente IA</span>}
+                      {m.role === 'human' && <span className="text-[10px] text-[#0DB57A] font-semibold block mb-0.5">Você</span>}
+                      {m.content}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {(aberta.messages ?? []).length === 0 && <p className="text-sm text-[#C8C5BB] text-center py-8">Sem mensagens.</p>}
+                )
+              })}
+              {(aberta.messages ?? []).length === 0 && <p className="text-sm text-[#8C8880] text-center py-8">Sem mensagens.</p>}
+            </div>
+
+            {/* Campo de envio (responde pelo WhatsApp sem sair do Orbi) */}
+            <div className="p-3 border-t border-[#EAE8E1] bg-white">
+              {erro && <p className="text-xs text-red-500 mb-1.5">{erro}</p>}
+              <div className="flex items-center gap-2">
+                <input value={texto} onChange={e => setTexto(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() } }}
+                  placeholder="Escreva sua resposta…"
+                  className="flex-1 h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#0DB57A] transition-all" />
+                <button onClick={enviar} disabled={enviando || !texto.trim()}
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white disabled:opacity-50 transition-all"
+                  style={{ background: '#0DB57A' }}>
+                  {enviando ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+                </button>
+              </div>
+              <p className="text-[10px] text-[#C8C5BB] mt-1.5">A mensagem é enviada pelo WhatsApp da loja. Ao responder, a IA para de atender esse cliente.</p>
             </div>
           </div>
         </div>

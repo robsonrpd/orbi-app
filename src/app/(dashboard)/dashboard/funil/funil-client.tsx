@@ -101,53 +101,60 @@ export function FunilClient({ leads: leadsIniciais }: { leads: Lead[] }) {
               onDragOver={e => { e.preventDefault(); setOverCol(col.key) }}
               onDragLeave={() => setOverCol(c => c === col.key ? null : c)}
               onDrop={() => soltar(col.key)}
-              className={`shrink-0 w-72 flex flex-col rounded-2xl transition-colors ${overCol === col.key ? 'bg-[#EAE8E1]/60' : 'bg-[#E9EBEF]'}`}>
+              className="shrink-0 w-[284px] flex flex-col rounded-2xl border bg-[#FAFAF9] transition-all"
+              style={overCol === col.key
+                ? { borderColor: col.cor, boxShadow: `0 0 0 3px ${col.cor}22`, background: '#fff' }
+                : { borderColor: '#EDEBE4' }}>
               {/* header coluna */}
-              <div className="p-3 flex items-center justify-between sticky top-0">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: col.cor }} />
-                  <span className="text-sm font-bold text-[#1C1B18]">{col.label}</span>
-                  <span className="text-xs text-[#8C8880] bg-white rounded-full px-1.5 py-0.5">{items.length}</span>
+              <div className="px-3.5 py-3 rounded-t-2xl" style={{ background: col.bg }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ background: col.cor }} />
+                    <span className="text-[13px] font-black" style={{ color: col.cor, fontFamily: 'Fraunces, serif' }}>{col.label}</span>
+                  </div>
+                  <span className="text-[11px] font-black text-white rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center" style={{ background: col.cor }}>{items.length}</span>
                 </div>
-                {total > 0 && <span className="text-[11px] font-bold" style={{ color: col.cor }}>{fmt(total)}</span>}
+                {total > 0 && <p className="text-[12px] font-bold mt-1" style={{ color: col.cor }}>{fmt(total)}</p>}
               </div>
 
               {/* cards */}
-              <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2 min-h-[60px]">
+              <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[80px]">
                 {items.map(lead => (
                   <div key={lead.id} draggable
                     onDragStart={() => setDragId(lead.id)}
                     onDragEnd={() => setDragId(null)}
-                    className={`group bg-white rounded-xl border border-[#EAE8E1] p-3 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-md ${dragId === lead.id ? 'opacity-50' : ''}`}>
-                    <div className="flex items-start gap-2">
-                      <GripVertical className="size-4 text-[#C8C5BB] mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[#1C1B18] truncate">{lead.name ?? lead.phone}</p>
-                        <p className="text-xs text-[#8C8880] flex items-center gap-1 mt-0.5"><Phone className="size-3" /> {lead.phone}</p>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          {lead.origem && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F7F6F3] text-[#8C8880] border border-[#EAE8E1]">{lead.origem}</span>
-                          )}
-                          <span className="text-[10px] text-[#C8C5BB]">{tempo(lead.created_at)}</span>
-                        </div>
-                        {/* valor */}
-                        <div className="mt-2">
-                          {editValor === lead.id ? (
-                            <input autoFocus value={valorTmp} onChange={e => setValorTmp(e.target.value)}
-                              onBlur={() => salvarValor(lead.id)} onKeyDown={e => { if (e.key === 'Enter') salvarValor(lead.id) }}
-                              placeholder="0,00"
-                              className="w-24 h-7 px-2 text-xs rounded-lg border border-[#1A56FF] outline-none" />
-                          ) : (
-                            <button onClick={() => { setEditValor(lead.id); setValorTmp(String(lead.funil_valor ?? '')) }}
-                              className="flex items-center gap-1 text-xs font-bold text-[#0DB57A] hover:underline">
-                              <Tag className="size-3" /> {Number(lead.funil_valor ?? 0) > 0 ? fmt(Number(lead.funil_valor)) : 'definir valor'}
-                            </button>
-                          )}
-                        </div>
+                    className={`group bg-white rounded-xl p-3 cursor-grab active:cursor-grabbing transition-all hover:shadow-lg border-l-[3px] ${dragId === lead.id ? 'opacity-40 scale-95' : 'shadow-sm'}`}
+                    style={{ borderLeftColor: col.cor }}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: col.cor }}>
+                        {(lead.name ?? lead.phone)[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-[#1C1B18] truncate leading-tight">{lead.name ?? 'Sem nome'}</p>
+                        <p className="text-[11px] text-[#8C8880] flex items-center gap-1"><Phone className="size-2.5" /> {lead.phone}</p>
+                      </div>
+                      <GripVertical className="size-4 text-[#D8D5CC] opacity-0 group-hover:opacity-100 shrink-0" />
+                    </div>
+
+                    <div className="flex items-center justify-between mt-2.5">
+                      {editValor === lead.id ? (
+                        <input autoFocus value={valorTmp} onChange={e => setValorTmp(e.target.value)}
+                          onBlur={() => salvarValor(lead.id)} onKeyDown={e => { if (e.key === 'Enter') salvarValor(lead.id) }}
+                          placeholder="0,00"
+                          className="w-20 h-6 px-2 text-xs rounded-md border border-[#0DB57A] outline-none" />
+                      ) : (
+                        <button onClick={() => { setEditValor(lead.id); setValorTmp(String(lead.funil_valor ?? '')) }}
+                          className="text-xs font-black text-[#0DB57A] hover:underline">
+                          {Number(lead.funil_valor ?? 0) > 0 ? fmt(Number(lead.funil_valor)) : '+ valor'}
+                        </button>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        {lead.origem && <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#F0F2F5] text-[#8C8880]">{lead.origem}</span>}
+                        <span className="text-[10px] text-[#C8C5BB]">{tempo(lead.created_at)}</span>
                       </div>
                     </div>
-                    {/* ações */}
-                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-[#F7F6F3] opacity-0 group-hover:opacity-100 transition-opacity">
+
+                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-[#F3F1EB]">
                       <a href={whatsLink(lead.phone)} target="_blank"
                         className="flex-1 flex items-center justify-center gap-1 h-7 rounded-lg text-xs font-semibold text-[#0DB57A] hover:bg-[#E6F9F3] transition-colors">
                         <MessageCircle className="size-3.5" /> WhatsApp
@@ -160,8 +167,8 @@ export function FunilClient({ leads: leadsIniciais }: { leads: Lead[] }) {
                   </div>
                 ))}
                 {items.length === 0 && (
-                  <div className="text-center text-xs text-[#C8C5BB] py-6 border-2 border-dashed border-[#D8D6CF] rounded-xl">
-                    Arraste leads pra cá
+                  <div className="text-center text-[11px] text-[#C8C5BB] py-8 border-2 border-dashed rounded-xl" style={{ borderColor: '#E8E5DC' }}>
+                    Solte um lead aqui
                   </div>
                 )}
               </div>
