@@ -178,8 +178,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   const secTitle = 'text-[11px] font-black text-[#1C1B18] uppercase tracking-wider flex items-center gap-1.5'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end" style={{ background: 'rgba(10,15,30,0.55)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-5xl h-full bg-white shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center" style={{ background: 'rgba(10,15,30,0.55)' }}>
+      <div className="w-full h-full bg-white shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#EAE8E1] shrink-0">
           <div className="flex items-center gap-3">

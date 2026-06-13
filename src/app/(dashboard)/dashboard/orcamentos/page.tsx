@@ -7,12 +7,13 @@ export default async function OrcamentosPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
-  const [{ data: orcamentos }, { data: contacts }, { data: services }, { data: products }] = await Promise.all([
+  const [{ data: orcamentos }, { data: contacts }, { data: services }, { data: products }, { data: vendedores }] = await Promise.all([
     service.from('orcamentos').select('*, contacts(id, name, phone)')
       .eq('company_id', companyId).order('numero', { ascending: false }),
     service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
     service.from('services').select('id, name, price').eq('company_id', companyId).eq('active', true),
     service.from('products' as never).select('id, name, price').eq('company_id', companyId).eq('active', true),
+    service.from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome'),
   ])
 
   return (
@@ -24,6 +25,7 @@ export default async function OrcamentosPage() {
           contacts={contacts ?? []}
           services={(services ?? []) as never}
           products={(products ?? []) as never}
+          vendedores={vendedores ?? []}
         />
       </div>
     </div>

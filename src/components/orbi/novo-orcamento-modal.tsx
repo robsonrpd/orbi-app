@@ -14,14 +14,14 @@ type Item = { tipo: 'servico' | 'produto'; descricao: string; valor: number; qtd
 
 type Props = {
   open: boolean; onClose: () => void
-  contacts: Contact[]; services: Service[]; products: Product[]
+  contacts: Contact[]; services: Service[]; products: Product[]; vendedores: { id: string; nome: string }[]
 }
 
 function fmt(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
-export function NovoOrcamentoModal({ open, onClose, contacts, services, products }: Props) {
+export function NovoOrcamentoModal({ open, onClose, contacts, services, products, vendedores }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modoCliente, setModoCliente] = useState<'cadastrado' | 'avulso'>('cadastrado')
@@ -31,15 +31,22 @@ export function NovoOrcamentoModal({ open, onClose, contacts, services, products
   const [clienteNome, setClienteNome] = useState('')
   const [clienteTel, setClienteTel] = useState('')
   const [vendedor, setVendedor] = useState('')
+  const [showVend, setShowVend] = useState(false)
   const [validade, setValidade] = useState('')
   const [observacoes, setObservacoes] = useState('')
   const [desconto, setDesconto] = useState('')
   const [itens, setItens] = useState<Item[]>([])
 
+  // mostra a lista ao focar (mesmo sem digitar); filtra ao digitar
   const filtered = contacts.filter(c =>
-    contactSearch.length > 0 && !selectedContact &&
-    (c.name?.toLowerCase().includes(contactSearch.toLowerCase()) || c.phone.includes(contactSearch))
-  ).slice(0, 5)
+    !selectedContact && (
+      contactSearch.length === 0 ||
+      c.name?.toLowerCase().includes(contactSearch.toLowerCase()) || c.phone.includes(contactSearch)
+    )
+  ).slice(0, 8)
+  const vendFiltrados = vendedores.filter(v =>
+    vendedor.length === 0 || v.nome.toLowerCase().includes(vendedor.toLowerCase())
+  ).slice(0, 8)
 
   if (!open) return null
 
@@ -125,8 +132,19 @@ export function NovoOrcamentoModal({ open, onClose, contacts, services, products
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div><label className={labelCls}>Vendedor</label>
-                  <input value={vendedor} onChange={e => setVendedor(e.target.value)} placeholder="Nome" className={inputCls} /></div>
+                <div className="relative"><label className={labelCls}>Vendedor</label>
+                  <input value={vendedor} onChange={e => { setVendedor(e.target.value); setShowVend(true) }}
+                    onFocus={() => setShowVend(true)} onBlur={() => setTimeout(() => setShowVend(false), 150)}
+                    placeholder={vendedores.length ? 'Selecione...' : 'Nome'} className={inputCls} />
+                  {showVend && vendFiltrados.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-[#EAE8E1] rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                      {vendFiltrados.map(v => (
+                        <button key={v.id} type="button" onMouseDown={() => { setVendedor(v.nome); setShowVend(false) }}
+                          className="w-full text-left px-3 py-2 text-sm text-[#1C1B18] hover:bg-[#F7F6F3] border-b border-[#EAE8E1] last:border-0">{v.nome}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div><label className={labelCls}><Calendar className="size-3" /> Válido até</label>
                   <input type="date" value={validade} onChange={e => setValidade(e.target.value)} className={inputCls} /></div>
               </div>

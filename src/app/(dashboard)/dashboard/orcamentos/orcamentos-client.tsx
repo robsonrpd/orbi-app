@@ -36,9 +36,9 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   convertido: { label: 'Convertido em O.S.', color: '#8B5CF6', bg: '#F5F3FF' },
 }
 
-type Props = { orcamentos: Orcamento[]; contacts: Contact[]; services: Service[]; products: Product[] }
+type Props = { orcamentos: Orcamento[]; contacts: Contact[]; services: Service[]; products: Product[]; vendedores: { id: string; nome: string }[] }
 
-export function OrcamentosClient({ orcamentos, contacts, services, products }: Props) {
+export function OrcamentosClient({ orcamentos, contacts, services, products, vendedores }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -159,7 +159,7 @@ export function OrcamentosClient({ orcamentos, contacts, services, products }: P
         )}
       </div>
 
-      <NovoOrcamentoModal open={modalOpen} onClose={() => setModalOpen(false)} contacts={contacts} services={services} products={products} />
+      <NovoOrcamentoModal open={modalOpen} onClose={() => setModalOpen(false)} contacts={contacts} services={services} products={products} vendedores={vendedores} />
     </>
   )
 }
