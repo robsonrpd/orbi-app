@@ -11,7 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useState, useRef } from 'react'
-import { Camera, Loader2 } from 'lucide-react'
+import { Camera, Loader2, ChevronDown, MessageCircle } from 'lucide-react'
 import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
 import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
@@ -22,7 +22,6 @@ const navItems = [
   { href: '/dashboard/funcionamento', label: 'Funcionamento', icon: Clock },
   { href: '/dashboard/agenda', label: 'Agendamentos', icon: Calendar },
   { href: '/dashboard/clientes', label: 'Clientes', icon: Users },
-  { href: '/dashboard/funil', label: 'Funil de Leads', icon: KanbanSquare },
   { href: '/dashboard/vendedores', label: 'Vendedores', icon: UserCog },
   { href: '/dashboard/receitas', label: 'Receitas (RX)', icon: Glasses },
   { href: '/dashboard/orcamentos', label: 'Orçamentos', icon: ClipboardList },
@@ -33,9 +32,17 @@ const navItems = [
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/dashboard/avaliacoes', label: 'Avaliações', icon: Star },
   { href: '/dashboard/indicacoes', label: 'Ganhe uma Mensalidade', icon: Gift },
-  { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
-  { href: '/dashboard/ia', label: 'Inteligência IA', icon: Bot },
 ]
+
+// Submenu OrbiWhatsapp — o "CRM de WhatsApp" dentro do app
+const orbiWhatsapp = {
+  label: 'OrbiWhatsapp',
+  children: [
+    { href: '/dashboard/funil', label: 'CRM (Funil)', icon: KanbanSquare },
+    { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
+    { href: '/dashboard/ia', label: 'Conexão & IA', icon: Bot },
+  ],
+}
 
 type ModoProps = { funcionario: boolean; bloqueios: string[]; temPin: boolean; vendedorNome: string | null; fonte?: 'login' | 'cookie' | null }
 type VendedorMini = { id: string; nome: string }
@@ -44,14 +51,16 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
   const pathname = usePathname()
   const router = useRouter()
   const m = modo ?? { funcionario: false, bloqueios: [], temPin: false, vendedorNome: null, fonte: null }
-  const visibleNav = navItems.filter(item => {
-    // 1) módulos que não pertencem ao nicho da empresa
-    if (esconderNicho.includes(item.href)) return false
-    // 2) módulos bloqueados para o vendedor logado
+  function podeVer(href: string) {
+    if (esconderNicho.includes(href)) return false      // nicho da empresa
     if (!m.funcionario) return true
-    const bloq = BLOQUEIO_POR_HREF[item.href]
+    const bloq = BLOQUEIO_POR_HREF[href]                 // bloqueio do vendedor
     return !(bloq && m.bloqueios.includes(bloq))
-  })
+  }
+  const visibleNav = navItems.filter(item => podeVer(item.href))
+  const waChildren = orbiWhatsapp.children.filter(c => podeVer(c.href))
+  const waAtivo = waChildren.some(c => pathname.startsWith(c.href))
+  const [waOpen, setWaOpen] = useState(waAtivo)
   const [logo, setLogo] = useState<string | null>(logoUrl ?? null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -138,6 +147,35 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
             </Link>
           )
         })}
+
+        {/* Submenu OrbiWhatsapp */}
+        {waChildren.length > 0 && (
+          <div className="pt-1">
+            <button onClick={() => setWaOpen(o => !o)}
+              className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all group',
+                waAtivo ? 'text-white' : 'text-white/80 hover:text-white hover:bg-white/5')}
+              style={waAtivo ? { background: 'rgba(13,181,122,0.18)', boxShadow: 'inset 0 0 0 1px rgba(13,181,122,0.3)' } : {}}>
+              <MessageCircle className="size-4 shrink-0 text-[#25D366]" strokeWidth={1.8} />
+              <span>OrbiWhatsapp</span>
+              <ChevronDown className={cn('size-4 ml-auto text-white/40 transition-transform', waOpen && 'rotate-180')} />
+            </button>
+            {waOpen && (
+              <div className="mt-0.5 ml-3 pl-3 border-l border-white/10 space-y-0.5">
+                {waChildren.map(child => {
+                  const active = pathname.startsWith(child.href)
+                  return (
+                    <Link key={child.href} href={child.href}
+                      className={cn('flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all group',
+                        active ? 'text-white bg-white/10' : 'text-white/60 hover:text-white hover:bg-white/5')}>
+                      <child.icon className={cn('size-3.5 shrink-0', active ? 'text-[#25D366]' : 'text-white/40 group-hover:text-white/70')} strokeWidth={1.5} />
+                      <span>{child.label}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* Bottom */}
