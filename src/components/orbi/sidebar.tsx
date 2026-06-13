@@ -39,7 +39,6 @@ const orbiWhatsapp = {
   label: 'OrbiWhatsapp',
   children: [
     { href: '/dashboard/funil', label: 'CRM (Funil)', icon: KanbanSquare },
-    { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
     { href: '/dashboard/ia', label: 'Conexão & IA', icon: Bot },
   ],
 }

@@ -2,7 +2,96 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
+import { enviarTexto } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
+
+function fmtBR(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
+
+/* ---------- Qualificação (estrelas) e Status da negociação ---------- */
+export async function setQualificacao(contactId: string, estrelas: number) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+  await service.from('contacts').update({ qualificacao: Math.max(0, Math.min(5, estrelas)) } as never).eq('id', contactId).eq('company_id', companyId)
+  revalidatePath('/dashboard/funil')
+  return { success: true }
+}
+
+export async function setStatusNegociacao(contactId: string, status: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const validos = ['aberta', 'vendida', 'perdida', 'pendente']
+  if (!validos.includes(status)) return { error: 'Status inválido.' }
+  const service = createServiceClient()
+  await service.from('contacts').update({ negociacao_status: status } as never).eq('id', contactId).eq('company_id', companyId)
+  revalidatePath('/dashboard/funil')
+  return { success: true }
+}
+
+/* ---------- Produtos do lead ---------- */
+export async function addProdutoLead(contactId: string, p: { nome: string; quantidade: number; preco: number; desconto: number }) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!p.nome.trim()) return { error: 'Informe o produto.' }
+  const service = createServiceClient()
+  const { data, error } = await service.from('lead_produtos').insert({
+    company_id: companyId, contact_id: contactId, nome: p.nome.trim(),
+    quantidade: p.quantidade || 1, preco: p.preco || 0, desconto: p.desconto || 0,
+  } as never).select('id, nome, quantidade, preco, desconto').single()
+  if (error) return { error: 'Erro ao adicionar produto.' }
+  revalidatePath('/dashboard/funil')
+  return { success: true, produto: data }
+}
+
+export async function delProdutoLead(id: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+  await service.from('lead_produtos').delete().eq('id', id).eq('company_id', companyId)
+  revalidatePath('/dashboard/funil')
+  return { success: true }
+}
+
+/** Monta um mini-orçamento dos produtos e envia pelo WhatsApp do lead. */
+export async function enviarOrcamentoLead(contactId: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+  const { data: contact } = await service.from('contacts').select('phone').eq('id', contactId).eq('company_id', companyId).single()
+  if (!contact?.phone) return { error: 'Lead sem telefone.' }
+  const { data: comp } = await service.from('companies').select('name, settings').eq('id', companyId).single()
+  const instance = (comp?.settings as { wa_instance?: string })?.wa_instance
+  if (!instance) return { error: 'WhatsApp não conectado.' }
+  const { data: itens } = await service.from('lead_produtos').select('nome, quantidade, preco, desconto').eq('contact_id', contactId).eq('company_id', companyId)
+  if (!itens?.length) return { error: 'Adicione produtos primeiro.' }
+
+  let total = 0
+  const linhas = itens.map(i => {
+    const sub = Number(i.quantidade) * Number(i.preco) - Number(i.desconto)
+    total += sub
+    return `• ${i.quantidade}x ${i.nome} — ${fmtBR(sub)}`
+  })
+  const texto = `*Orçamento — ${comp?.name ?? 'Nossa loja'}*\n\n${linhas.join('\n')}\n\n*Total: ${fmtBR(total)}*\n\nQualquer dúvida, é só chamar! 😊`
+
+  const d = (contact.phone || '').replace(/\D/g, '')
+  const numero = d.startsWith('55') ? d : `55${d}`
+  const env = await enviarTexto(instance, numero, texto)
+  if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
+
+  // registra na conversa
+  const chave = numero.slice(-8)
+  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
+  const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const nova = { role: 'human', content: texto }
+  if (conv) {
+    const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  } else {
+    await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, messages: [nova], handled_by_ai: false, last_message_at: new Date().toISOString() } as never)
+  }
+  revalidatePath('/dashboard/funil')
+  return { success: true }
+}
 
 /* ---------- Responsável ---------- */
 export async function setResponsavel(contactId: string, vendedorId: string | null) {

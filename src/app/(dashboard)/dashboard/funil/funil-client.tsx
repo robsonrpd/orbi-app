@@ -6,12 +6,17 @@ import { moverLead, criarLead } from '@/lib/actions/funil'
 import { criarMsgPronta, excluirMsgPronta } from '@/lib/actions/crm'
 import { deleteContact } from '@/lib/actions/contacts'
 import { LeadDetalhe, type Lead } from '@/components/orbi/lead-detalhe'
-import { Plus, X, Loader2, Check, Trash2, Zap } from 'lucide-react'
+import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User } from 'lucide-react'
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
-function tempo(iso: string) {
-  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (dias <= 0) return 'hoje'; if (dias === 1) return 'ontem'; return `${dias}d`
+function diasDesde(iso: string) { return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) }
+function dataBR(iso: string) { return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }
+
+const STATUS_MAP: Record<string, { label: string; cor: string }> = {
+  aberta: { label: 'Aberta', cor: '#1A56FF' },
+  vendida: { label: 'Vendida', cor: '#0DB57A' },
+  pendente: { label: 'Pendente', cor: '#F59E0B' },
+  perdida: { label: 'Perdida', cor: '#EF4444' },
 }
 
 type Vendedor = { id: string; nome: string }
@@ -38,6 +43,7 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
   }
   async function delMsgPronta(id: string) { setProntas(p => p.filter(x => x.id !== id)); await excluirMsgPronta(id) }
 
+  const vendMap = new Map(vendedores.map(v => [v.id, v.nome]))
   function leadsDe(k: string) { return leads.filter(l => (l.funil_etapa ?? 'novo') === k) }
   function totalDe(k: string) { return leadsDe(k).reduce((s, l) => s + Number(l.funil_valor ?? 0), 0) }
 
@@ -116,35 +122,65 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
 
               <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[80px]">
                 {items.map(lead => {
-                  const ultima = lead.messages?.[lead.messages.length - 1]
+                  const st = STATUS_MAP[lead.negociacao_status ?? 'aberta'] ?? STATUS_MAP.aberta
+                  const nProd = lead.produtos?.length ?? 0
+                  const totalProd = (lead.produtos ?? []).reduce((s, p) => s + (Number(p.quantidade) * Number(p.preco) - Number(p.desconto)), 0)
+                  const ultAtiv = lead.lastMessageAt ?? lead.created_at
+                  const dias = diasDesde(ultAtiv)
+                  const esfriando = lead.negociacao_status === 'aberta' && dias >= 2
+                  const resp = lead.responsavel_id ? vendMap.get(lead.responsavel_id) : null
                   return (
                     <div key={lead.id} draggable
                       onDragStart={() => setDragId(lead.id)}
                       onDragEnd={() => setDragId(null)}
                       onClick={() => setDetalhe(lead)}
-                      className={`group bg-white rounded-xl p-3 cursor-pointer transition-all hover:shadow-lg border-l-[3px] ${dragId === lead.id ? 'opacity-40 scale-95' : 'shadow-sm'}`}
+                      className={`group bg-white rounded-xl p-2.5 cursor-pointer transition-all hover:shadow-lg border-l-[3px] ${dragId === lead.id ? 'opacity-40 scale-95' : 'shadow-sm'}`}
                       style={{ borderLeftColor: col.cor }}>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: col.cor }}>
-                          {(lead.name ?? lead.phone)[0].toUpperCase()}
+                      {/* status + esfriando */}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold" style={{ color: st.cor }}>
+                          <span className="w-2 h-2 rounded-sm" style={{ background: st.cor }} /> {st.label}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {esfriando && <span className="text-[9px] font-semibold text-[#F59E0B]">❄ {dias}d</span>}
+                          <button onClick={e => { e.stopPropagation(); excluir(lead.id) }}
+                            className="text-red-400 opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-[#1C1B18] truncate leading-tight">{lead.name ?? 'Sem nome'}</p>
-                          <p className="text-[11px] text-[#8C8880] truncate">{ultima ? `${ultima.role !== 'user' ? '➜ ' : ''}${ultima.content}` : lead.phone}</p>
-                        </div>
-                        <button onClick={e => { e.stopPropagation(); excluir(lead.id) }}
-                          className="w-6 h-6 flex items-center justify-center rounded text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 shrink-0"><Trash2 className="size-3.5" /></button>
                       </div>
-                      <div className="flex items-center justify-between mt-2">
+
+                      <p className="text-sm font-bold text-[#1C1B18] truncate leading-tight">{lead.name ?? lead.phone}</p>
+                      {lead.origem && <p className="text-[11px] text-[#8C8880] truncate">{lead.origem}</p>}
+
+                      {/* estrelas · responsável · produtos */}
+                      <div className="flex items-center gap-2.5 mt-1.5">
+                        <span className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map(n => <Star key={n} className={`size-2.5 ${n <= (lead.qualificacao ?? 0) ? 'fill-amber-400 text-amber-400' : 'text-[#E5E2D9]'}`} strokeWidth={1} />)}
+                        </span>
+                        <span title={resp ?? 'Sem responsável'} className="flex items-center gap-0.5 text-[10px] text-[#8C8880]">
+                          <User className="size-3" /> {resp ? resp.split(' ')[0] : '—'}
+                        </span>
+                        <span className="flex items-center gap-0.5 text-[10px] text-[#8C8880] ml-auto">
+                          <ShoppingBag className="size-3" /> {nProd > 0 ? fmt(totalProd) : 'Nenhum'}
+                        </span>
+                      </div>
+
+                      {/* valor + criar tarefa */}
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#F3F1EB]">
                         {Number(lead.funil_valor ?? 0) > 0
                           ? <span className="text-xs font-black text-[#0DB57A]">{fmt(Number(lead.funil_valor))}</span>
-                          : <span />}
-                        <div className="flex items-center gap-1.5">
-                          {(lead.tags ?? []).slice(0, 1).map(t => <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-[#EEF2FF] text-[#1A56FF]">{t}</span>)}
-                          {lead.origem && <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#F0F2F5] text-[#8C8880]">{lead.origem}</span>}
-                          <span className="text-[10px] text-[#C8C5BB]">{tempo(lead.created_at)}</span>
-                        </div>
+                          : <span className="text-[10px] text-[#C8C5BB]">sem valor</span>}
+                        <button onClick={e => { e.stopPropagation(); setDetalhe(lead) }}
+                          className="flex items-center gap-1 text-[10px] font-semibold text-[#1A56FF] hover:underline">
+                          <CheckSquare className="size-3" /> Criar tarefa
+                        </button>
                       </div>
+
+                      {/* último contato */}
+                      {lead.lastMessageAt && (
+                        <div className="mt-2 text-[10px] text-[#8C8880] bg-[#FCE7F3]/40 rounded px-1.5 py-0.5">
+                          Último contato {dataBR(lead.lastMessageAt)}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

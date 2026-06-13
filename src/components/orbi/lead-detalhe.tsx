@@ -3,21 +3,30 @@
 import { useState, useRef, useEffect } from 'react'
 import { FUNIL_ETAPAS } from '@/lib/funil'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
-import { setResponsavel, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao } from '@/lib/actions/crm'
+import { setResponsavel, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead } from '@/lib/actions/crm'
 import {
   X, Send, Loader2, Mail, MapPin, Tag, Check, MessageCircle, DollarSign, Plus,
-  UserCog, CheckSquare, Square, Calendar, Zap, StickyNote, Trash2,
+  UserCog, CheckSquare, Square, Calendar, Zap, StickyNote, Trash2, Star, ShoppingBag, FileText,
 } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
 type Tarefa = { id: string; titulo: string; vence_em: string | null; feito: boolean }
 type Anotacao = { id: string; texto: string; created_at: string }
+type Produto = { id: string; nome: string; quantidade: number; preco: number; desconto: number }
 export type Lead = {
   id: string; name: string | null; phone: string; email: string | null
   origem: string | null; tags: string[] | null; notes: string | null
-  funil_etapa: string | null; funil_valor: number | null; responsavel_id: string | null; created_at: string
-  conversaId: string | null; messages: Msg[]; tarefas: Tarefa[]; anotacoes: Anotacao[]
+  funil_etapa: string | null; funil_valor: number | null; responsavel_id: string | null
+  qualificacao: number | null; negociacao_status: string | null; lastMessageAt: string | null; created_at: string
+  conversaId: string | null; messages: Msg[]; tarefas: Tarefa[]; anotacoes: Anotacao[]; produtos: Produto[]
 }
+
+const STATUS = [
+  { key: 'aberta', label: 'Aberta', cor: '#1A56FF', bg: '#EEF2FF' },
+  { key: 'vendida', label: 'Vendida', cor: '#0DB57A', bg: '#E6F9F3' },
+  { key: 'pendente', label: 'Pendente', cor: '#F59E0B', bg: '#FEF3C7' },
+  { key: 'perdida', label: 'Perdida', cor: '#EF4444', bg: '#FEF2F2' },
+]
 type Vendedor = { id: string; nome: string }
 type MsgPronta = { id: string; titulo: string; texto: string }
 
@@ -52,6 +61,24 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
   const [tTit, setTTit] = useState(''); const [tData, setTData] = useState('')
   const [anotacoes, setAnotacoes] = useState<Anotacao[]>(lead.anotacoes ?? [])
   const [anot, setAnot] = useState('')
+
+  // qualificação, status, produtos
+  const [estrelas, setEstrelas] = useState(lead.qualificacao ?? 0)
+  const [status, setStatus] = useState(lead.negociacao_status ?? 'aberta')
+  const [produtos, setProdutos] = useState<Produto[]>(lead.produtos ?? [])
+  const [pNome, setPNome] = useState(''); const [pQtd, setPQtd] = useState('1'); const [pPreco, setPPreco] = useState(''); const [pDesc, setPDesc] = useState('')
+  const [enviandoOrc, setEnviandoOrc] = useState(false)
+
+  async function mudarEstrelas(n: number) { setEstrelas(n); await setQualificacao(lead.id, n) }
+  async function mudarStatus(s: string) { setStatus(s); await setStatusNegociacao(lead.id, s); onChange(lead.id, { negociacao_status: s }) }
+  async function addProduto() {
+    if (!pNome.trim()) return
+    const r = await addProdutoLead(lead.id, { nome: pNome, quantidade: parseFloat(pQtd) || 1, preco: parseFloat(pPreco.replace(',', '.')) || 0, desconto: parseFloat(pDesc.replace(',', '.')) || 0 })
+    if (r?.produto) { setProdutos(ps => [...ps, r.produto as Produto]); setPNome(''); setPQtd('1'); setPPreco(''); setPDesc('') }
+  }
+  async function delProduto(id: string) { setProdutos(ps => ps.filter(x => x.id !== id)); await delProdutoLead(id) }
+  async function enviarOrc() { setEnviandoOrc(true); const r = await enviarOrcamentoLead(lead.id); setEnviandoOrc(false); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '📋 Orçamento enviado' }]) }
+  const totalProdutos = produtos.reduce((s, p) => s + (Number(p.quantidade) * Number(p.preco) - Number(p.desconto)), 0)
 
   useEffect(() => { fimRef.current?.scrollIntoView() }, [msgs.length])
 
@@ -192,6 +219,58 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas }
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
                 </select>
               </div>
+              {/* Status da negociação */}
+              <div>
+                <label className={labelCls}>Status</label>
+                <div className="grid grid-cols-4 gap-1">
+                  {STATUS.map(s => (
+                    <button key={s.key} onClick={() => mudarStatus(s.key)}
+                      className="h-8 rounded-lg text-[11px] font-bold transition-all"
+                      style={status === s.key ? { background: s.cor, color: '#fff' } : { background: s.bg, color: s.cor }}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Qualificação */}
+              <div>
+                <label className={labelCls}>Qualificação</label>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button key={n} onClick={() => mudarEstrelas(n === estrelas ? 0 : n)}>
+                      <Star className={`size-5 ${n <= estrelas ? 'fill-amber-400 text-amber-400' : 'text-[#EAE8E1]'}`} strokeWidth={1} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Produtos / mini-orçamento */}
+            <div className="space-y-2 pt-1 border-t border-[#F3F1EB]">
+              <div className="flex items-center justify-between">
+                <p className={secTitle}><ShoppingBag className="size-3.5 text-[#1A56FF]" /> Produtos</p>
+                {totalProdutos > 0 && <span className="text-xs font-black text-[#0DB57A]">{fmt(totalProdutos)}</span>}
+              </div>
+              {produtos.map(p => (
+                <div key={p.id} className="group flex items-center gap-2 text-xs">
+                  <span className="flex-1 text-[#2E2D29]">{Number(p.quantidade)}x {p.nome}{Number(p.desconto) > 0 ? ` (-${fmt(Number(p.desconto))})` : ''}</span>
+                  <span className="font-semibold text-[#0DB57A]">{fmt(Number(p.quantidade) * Number(p.preco) - Number(p.desconto))}</span>
+                  <button onClick={() => delProduto(p.id)} className="opacity-0 group-hover:opacity-100 text-red-400"><Trash2 className="size-3" /></button>
+                </div>
+              ))}
+              <div className="grid grid-cols-12 gap-1">
+                <input value={pNome} onChange={e => setPNome(e.target.value)} placeholder="Produto" className="col-span-12 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
+                <input value={pQtd} onChange={e => setPQtd(e.target.value)} type="number" min="1" placeholder="Qtd" className="col-span-3 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
+                <input value={pPreco} onChange={e => setPPreco(e.target.value)} placeholder="Preço" className="col-span-4 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
+                <input value={pDesc} onChange={e => setPDesc(e.target.value)} placeholder="Desc." className="col-span-3 h-9 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-xs outline-none" />
+                <button onClick={addProduto} className="col-span-2 h-9 rounded-lg flex items-center justify-center text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF]"><Plus className="size-4" /></button>
+              </div>
+              {produtos.length > 0 && (
+                <button onClick={enviarOrc} disabled={enviandoOrc}
+                  className="w-full h-9 rounded-lg flex items-center justify-center gap-2 text-xs font-bold text-white" style={{ background: '#0DB57A' }}>
+                  {enviandoOrc ? <Loader2 className="size-4 animate-spin" /> : <><FileText className="size-3.5" /> Enviar orçamento no WhatsApp</>}
+                </button>
+              )}
             </div>
 
             {/* Dados */}

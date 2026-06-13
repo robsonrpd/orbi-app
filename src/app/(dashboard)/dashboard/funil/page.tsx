@@ -11,19 +11,21 @@ export default async function FunilPage() {
 
   const [{ data: contacts }, { data: convs }, { data: vendedores }] = await Promise.all([
     service.from('contacts')
-      .select('id, name, phone, email, origem, tags, notes, funil_etapa, funil_valor, responsavel_id, created_at')
+      .select('id, name, phone, email, origem, tags, notes, funil_etapa, funil_valor, responsavel_id, qualificacao, negociacao_status, created_at')
       .eq('company_id', companyId).eq('active', true).order('created_at', { ascending: false }),
     service.from('conversations').select('id, numero, messages, last_message_at').eq('company_id', companyId),
     service.from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome'),
   ])
 
-  // tabelas novas (Onda 1) — toleram não existir ainda
+  // tabelas novas — toleram não existir ainda
   let tarefas: { id: string; contact_id: string; titulo: string; vence_em: string | null; feito: boolean }[] = []
   let anotacoes: { id: string; contact_id: string; texto: string; created_at: string }[] = []
   let msgsProntas: { id: string; titulo: string; texto: string }[] = []
+  let produtos: { id: string; contact_id: string; nome: string; quantidade: number; preco: number; desconto: number }[] = []
   try { tarefas = ((await service.from('lead_tarefas').select('id, contact_id, titulo, vence_em, feito').eq('company_id', companyId).order('vence_em')).data ?? []) as never } catch {}
   try { anotacoes = ((await service.from('lead_anotacoes').select('id, contact_id, texto, created_at').eq('company_id', companyId).order('created_at', { ascending: false })).data ?? []) as never } catch {}
   try { msgsProntas = ((await service.from('mensagens_prontas').select('id, titulo, texto').eq('company_id', companyId).order('titulo')).data ?? []) as never } catch {}
+  try { produtos = ((await service.from('lead_produtos').select('id, contact_id, nome, quantidade, preco, desconto').eq('company_id', companyId)).data ?? []) as never } catch {}
 
   const convPorChave = new Map<string, { id: string; messages: Msg[]; last_message_at: string }>()
   for (const c of convs ?? []) {
@@ -38,8 +40,10 @@ export default async function FunilPage() {
       ...l,
       conversaId: conv?.id ?? null,
       messages: conv?.messages ?? [],
+      lastMessageAt: conv?.last_message_at ?? null,
       tarefas: tarefas.filter(t => t.contact_id === l.id),
       anotacoes: anotacoes.filter(a => a.contact_id === l.id),
+      produtos: produtos.filter(p => p.contact_id === l.id),
     }
   })
 
