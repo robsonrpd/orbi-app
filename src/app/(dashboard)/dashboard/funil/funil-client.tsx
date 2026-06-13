@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { FUNIL_ETAPAS } from '@/lib/funil'
 import { moverLead, criarLead } from '@/lib/actions/funil'
+import { criarMsgPronta, excluirMsgPronta } from '@/lib/actions/crm'
 import { deleteContact } from '@/lib/actions/contacts'
 import { LeadDetalhe, type Lead } from '@/components/orbi/lead-detalhe'
-import { Plus, X, Loader2, Check, Trash2 } from 'lucide-react'
+import { Plus, X, Loader2, Check, Trash2, Zap } from 'lucide-react'
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 function tempo(iso: string) {
@@ -13,7 +14,10 @@ function tempo(iso: string) {
   if (dias <= 0) return 'hoje'; if (dias === 1) return 'ontem'; return `${dias}d`
 }
 
-export function FunilClient({ leads: leadsIniciais }: { leads: Lead[] }) {
+type Vendedor = { id: string; nome: string }
+type MsgPronta = { id: string; titulo: string; texto: string }
+
+export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [] }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[] }) {
   const [leads, setLeads] = useState<Lead[]>(leadsIniciais)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
@@ -22,6 +26,17 @@ export function FunilClient({ leads: leadsIniciais }: { leads: Lead[] }) {
   const [novoNome, setNovoNome] = useState('')
   const [novoFone, setNovoFone] = useState('')
   const [salvando, setSalvando] = useState(false)
+  // mensagens prontas
+  const [msgsOpen, setMsgsOpen] = useState(false)
+  const [prontas, setProntas] = useState(msgsProntas)
+  const [mpTit, setMpTit] = useState(''); const [mpTxt, setMpTxt] = useState('')
+
+  async function addMsgPronta() {
+    if (!mpTit.trim() || !mpTxt.trim()) return
+    const r = await criarMsgPronta(mpTit, mpTxt)
+    if (r?.msg) { setProntas(p => [...p, r.msg as MsgPronta]); setMpTit(''); setMpTxt('') }
+  }
+  async function delMsgPronta(id: string) { setProntas(p => p.filter(x => x.id !== id)); await excluirMsgPronta(id) }
 
   function leadsDe(k: string) { return leads.filter(l => (l.funil_etapa ?? 'novo') === k) }
   function totalDe(k: string) { return leadsDe(k).reduce((s, l) => s + Number(l.funil_valor ?? 0), 0) }
@@ -64,11 +79,17 @@ export function FunilClient({ leads: leadsIniciais }: { leads: Lead[] }) {
         <p className="text-sm text-[#8C8880]">
           {leads.length} leads · <strong className="text-[#1A56FF]">{fmt(totalAberto)}</strong> em aberto · clique num card para abrir a conversa
         </p>
-        <button onClick={() => setAddOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
-          style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-          <Plus className="size-4" /> Novo Lead
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setMsgsOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#F59E0B] bg-[#FEF3C7] hover:bg-[#FDE9A8]">
+            <Zap className="size-4" /> Mensagens prontas
+          </button>
+          <button onClick={() => setAddOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
+            style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+            <Plus className="size-4" /> Novo Lead
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 flex gap-3 overflow-x-auto pb-2">
@@ -136,7 +157,41 @@ export function FunilClient({ leads: leadsIniciais }: { leads: Lead[] }) {
         })}
       </div>
 
-      {detalhe && <LeadDetalhe lead={detalhe} onClose={() => setDetalhe(null)} onChange={aplicar} />}
+      {detalhe && <LeadDetalhe lead={detalhe} onClose={() => setDetalhe(null)} onChange={aplicar} vendedores={vendedores} msgsProntas={msgsProntas} />}
+
+      {/* Modal mensagens prontas */}
+      {msgsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ background: 'linear-gradient(135deg,#0A0F1E,#F59E0B)' }}>
+              <div className="flex items-center gap-2"><Zap className="size-5 text-white" /><p className="text-sm font-bold text-white">Mensagens prontas</p></div>
+              <button onClick={() => setMsgsOpen(false)} className="text-white/50 hover:text-white"><X className="size-5" /></button>
+            </div>
+            <div className="p-5 space-y-3 overflow-y-auto">
+              <p className="text-xs text-[#8C8880]">Crie respostas padrão para enviar com 1 clique no chat dos leads.</p>
+              <div className="space-y-2">
+                <input value={mpTit} onChange={e => setMpTit(e.target.value)} placeholder="Título (ex: Primeiro contato)"
+                  className="w-full h-10 px-3 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#F59E0B]" />
+                <textarea value={mpTxt} onChange={e => setMpTxt(e.target.value)} rows={3} placeholder="Texto da mensagem…"
+                  className="w-full px-3 py-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#F59E0B] resize-none" />
+                <button onClick={addMsgPronta} disabled={!mpTit.trim() || !mpTxt.trim()}
+                  className="w-full h-10 rounded-lg flex items-center justify-center gap-2 text-sm font-bold text-white disabled:opacity-50" style={{ background: '#F59E0B' }}>
+                  <Plus className="size-4" /> Adicionar mensagem
+                </button>
+              </div>
+              <div className="space-y-2 pt-2 border-t border-[#F3F1EB]">
+                {prontas.length === 0 ? <p className="text-xs text-[#C8C5BB] text-center py-3">Nenhuma mensagem ainda.</p>
+                  : prontas.map(mp => (
+                    <div key={mp.id} className="group bg-[#FAF9F6] rounded-lg p-2.5 border border-[#F0EFEA] flex items-start justify-between gap-2">
+                      <div className="min-w-0"><p className="text-xs font-bold text-[#1C1B18]">{mp.titulo}</p><p className="text-[11px] text-[#8C8880]">{mp.texto}</p></div>
+                      <button onClick={() => delMsgPronta(mp.id)} className="opacity-0 group-hover:opacity-100 text-red-400 shrink-0"><Trash2 className="size-3.5" /></button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
