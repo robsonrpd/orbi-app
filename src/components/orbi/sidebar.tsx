@@ -15,6 +15,7 @@ import { Camera, Loader2, ChevronDown, MessageCircle } from 'lucide-react'
 import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
 import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
+import { useMobileNav } from '@/components/orbi/mobile-nav'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -49,6 +50,7 @@ type VendedorMini = { id: string; nome: string }
 export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vendedores = [], esconderNicho = [] }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps; vendedores?: VendedorMini[]; esconderNicho?: string[] }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { open, setOpen } = useMobileNav()
   const m = modo ?? { funcionario: false, bloqueios: [], temPin: false, vendedorNome: null, fonte: null }
   function podeVer(href: string) {
     if (esconderNicho.includes(href)) return false      // nicho da empresa
@@ -93,8 +95,16 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
   }
 
   return (
-    <aside className="w-[220px] shrink-0 flex flex-col h-screen sticky top-0"
-      style={{ background: 'linear-gradient(180deg, #0A0F1E 0%, #0D1635 100%)' }}>
+    <>
+      {/* Overlay (mobile, menu aberto) */}
+      {open && (
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setOpen(false)} />
+      )}
+      <aside className={cn(
+        'w-[220px] shrink-0 flex flex-col h-screen fixed md:sticky top-0 z-50 transition-transform duration-200 ease-out',
+        open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      )}
+        style={{ background: 'linear-gradient(180deg, #0A0F1E 0%, #0D1635 100%)' }}>
       <div className="absolute inset-0 opacity-[0.025] pointer-events-none"
         style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
 
@@ -208,6 +218,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
           Sair
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

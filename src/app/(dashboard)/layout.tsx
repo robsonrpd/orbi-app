@@ -6,6 +6,7 @@ import { nichoEsconde } from '@/lib/nichos'
 import { Sidebar } from '@/components/orbi/sidebar'
 import { SubscriptionManager } from '@/components/orbi/subscription-manager'
 import { ImpersonationBanner } from '@/components/orbi/impersonation-banner'
+import { MobileNavProvider } from '@/components/orbi/mobile-nav'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -34,21 +35,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
     : false
 
   return (
-    <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-      <Sidebar companyName={company?.name ?? 'Minha Empresa'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} esconderNicho={esconderNicho} />
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
-        {!impersonation && (
-          <SubscriptionManager
-            companyName={company?.name ?? 'Minha Ótica'}
-            trialEndsAt={company?.trial_ends_at ?? null}
-            subscriptionStatus={company?.subscription_status ?? 'trial'}
-            subscriptionPlan={company?.subscription_plan ?? null}
-            isNewUser={isNewUser}
-          />
-        )}
-        {children}
-      </main>
-    </div>
+    <MobileNavProvider>
+      <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
+        <Sidebar companyName={company?.name ?? 'Minha Empresa'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} esconderNicho={esconderNicho} />
+        <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
+          {!impersonation && (
+            <SubscriptionManager
+              companyName={company?.name ?? 'Minha Ótica'}
+              trialEndsAt={company?.trial_ends_at ?? null}
+              subscriptionStatus={company?.subscription_status ?? 'trial'}
+              subscriptionPlan={company?.subscription_plan ?? null}
+              isNewUser={isNewUser}
+            />
+          )}
+          {children}
+        </main>
+      </div>
+    </MobileNavProvider>
   )
 }
