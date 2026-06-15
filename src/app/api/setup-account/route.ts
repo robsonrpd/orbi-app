@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient, createClient } from '@/lib/supabase/server'
+import { sendEmail } from '@/lib/email'
 
 function toSlug(name: string): string {
   return name
@@ -74,6 +75,27 @@ export async function POST(req: NextRequest) {
       console.error('Erro ao criar usuário:', userError)
       await service.from('companies').delete().eq('id', company.id)
       return NextResponse.json({ error: 'Erro ao criar usuário.' }, { status: 500 })
+    }
+
+    // 5. Notifica os super-admins sobre o novo cadastro (lead)
+    const admins = (process.env.SUPER_ADMIN_EMAILS ?? '').split(',').map(e => e.trim()).filter(Boolean)
+    for (const adminEmail of admins) {
+      await sendEmail({
+        to: adminEmail,
+        subject: `🎉 Novo cadastro no Orbi: ${companyName || 'Sem nome'}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+            <h2 style="color:#1A56FF">Novo lead cadastrado!</h2>
+            <p style="background:#F0F2F5;padding:14px;border-radius:10px">
+              <strong>Nome:</strong> ${name || '-'}<br/>
+              <strong>Negócio:</strong> ${companyName || '-'}<br/>
+              <strong>Ramo:</strong> ${ramo}<br/>
+              <strong>E-mail:</strong> ${user.email}<br/>
+              <strong>WhatsApp:</strong> ${ownerPhone || '-'}
+            </p>
+          </div>
+        `,
+      })
     }
 
     return NextResponse.json({ ok: true, companyId: company.id })
