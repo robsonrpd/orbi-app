@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase/server'
 import { buildSystemPrompt } from '@/lib/claude/buildSystemPrompt'
 import { enviarTexto, getMediaBase64 } from '@/lib/evolution'
+import { sendEmail } from '@/lib/email'
 
 // Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
 export async function POST(req: NextRequest) {
@@ -31,12 +32,24 @@ export async function POST(req: NextRequest) {
   if (!company) company = (await service.from('companies').select(sel).eq('slug', instance).maybeSingle()).data as Comp | null
   if (!company) return NextResponse.json({ ok: true })
 
-  // registra o último evento de conexão (para diagnóstico)
+  // conexão mudou → registra estado, limpa QR se abriu, avisa por e-mail se caiu
   if (evento.includes('connection')) {
     const d = raw as { state?: string; statusReason?: number } | null
-    await service.from('companies')
-      .update({ settings: { ...(company.settings as Record<string, unknown>), wa_last_event: `state=${d?.state} reason=${d?.statusReason}` } })
-      .eq('id', company.id)
+    const settings = { ...(company.settings as Record<string, unknown>) }
+    const estadoAnterior = settings.wa_state as string | undefined
+    settings.wa_last_event = `state=${d?.state} reason=${d?.statusReason}`
+    settings.wa_state = d?.state
+
+    if (d?.state === 'open') {
+      delete settings.wa_qr
+      delete settings.wa_disconnect_alert_sent
+    } else if (d?.state === 'close' && estadoAnterior !== 'close' && !settings.wa_disconnect_alert_sent) {
+      settings.wa_disconnect_alert_sent = true
+      await avisarDesconexao(service, company)
+    }
+
+    await service.from('companies').update({ settings }).eq('id', company.id)
+    return NextResponse.json({ ok: true })
   }
 
   // QR atualizado → guarda o base64 para o painel exibir
@@ -54,16 +67,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // conexão mudou → se abriu, limpa o QR
-  if (evento.includes('connection')) {
-    const d = raw as { state?: string } | null
-    if (d?.state === 'open') {
-      const s = { ...(company.settings as Record<string, unknown>) }
-      delete s.wa_qr
-      await service.from('companies').update({ settings: s }).eq('id', company.id)
-    }
-    return NextResponse.json({ ok: true })
-  }
 
   // a partir daqui, só mensagens
   if (evento && !evento.includes('messages')) return NextResponse.json({ ok: true })
@@ -161,6 +164,41 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true })
+}
+
+// Avisa por e-mail (dono da empresa + super-admins) que o WhatsApp caiu, em tempo real.
+async function avisarDesconexao(
+  service: ReturnType<typeof createServiceClient>,
+  company: { id: string; name: string },
+) {
+  try {
+    const { data: admins } = await service.from('users').select('email').eq('company_id', company.id).eq('role', 'admin')
+    const destinos = new Set<string>()
+    for (const a of admins ?? []) if (a.email) destinos.add(a.email as string)
+    for (const e of (process.env.SUPER_ADMIN_EMAILS ?? '').split(',')) {
+      const t = e.trim()
+      if (t) destinos.add(t)
+    }
+    if (destinos.size === 0) return
+
+    const url = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+    for (const to of destinos) {
+      await sendEmail({
+        to,
+        subject: `⚠️ WhatsApp desconectado — ${company.name}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+            <h2 style="color:#E0383D">WhatsApp desconectado</h2>
+            <p>O WhatsApp da empresa <strong>${company.name}</strong> caiu e a IA/atendimento automático está parado.</p>
+            <p>Reconecte o quanto antes para não deixar os clientes sem resposta:</p>
+            <p><a href="${url}/dashboard/ia" style="background:#1A56FF;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none">Reconectar WhatsApp</a></p>
+            <p style="color:#8C8880;font-size:13px">Vá em Conexão & IA → Conectar e escaneie o QR code.</p>
+          </div>`,
+      })
+    }
+  } catch (err) {
+    console.error('[wh avisoDesconexao]', err)
+  }
 }
 
 type Midia = { tipo: string; url: string; nome?: string }
