@@ -1,4 +1,5 @@
 import { UserPlus, Settings, Bot } from 'lucide-react'
+import { LaptopMockup } from './laptop-mockup'
 
 const steps = [
   {
@@ -54,6 +55,8 @@ export function HowItWorks() {
             </div>
           ))}
         </div>
+
+        <LaptopMockup />
       </div>
     </section>
   )
