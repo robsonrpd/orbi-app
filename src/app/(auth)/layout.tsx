@@ -5,13 +5,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <div className="min-h-screen flex" style={{ fontFamily: 'Sora, sans-serif' }}>
 
       {/* Lado esquerdo — arte de marca */}
-      <div className="hidden lg:block lg:w-[55%] relative overflow-hidden">
+      <div className="hidden lg:block lg:w-[55%] relative overflow-hidden" style={{ background: '#010D2D' }}>
         <Image
           src="/brand/Fundo.png"
           alt="Orbi — Gestão 360° para o seu negócio"
           fill
           priority
-          className="object-cover"
+          className="object-contain"
         />
       </div>
 
