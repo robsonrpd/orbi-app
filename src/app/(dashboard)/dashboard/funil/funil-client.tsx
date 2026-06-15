@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { FUNIL_ETAPAS } from '@/lib/funil'
 import { moverLead, criarLead } from '@/lib/actions/funil'
 import { criarMsgPronta, excluirMsgPronta } from '@/lib/actions/crm'
@@ -23,8 +25,31 @@ type Vendedor = { id: string; nome: string }
 type MsgPronta = { id: string; titulo: string; texto: string }
 type ProdLoja = { id: string; name: string; price: number }
 
-export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [], produtosLoja = [] }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[]; produtosLoja?: ProdLoja[] }) {
+export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [], produtosLoja = [], companyId = '' }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[]; produtosLoja?: ProdLoja[]; companyId?: string }) {
   const [leads, setLeads] = useState<Lead[]>(leadsIniciais)
+  const router = useRouter()
+
+  // mantém a lista em dia com o servidor (após router.refresh())
+  useEffect(() => { setLeads(leadsIniciais) }, [leadsIniciais])
+
+  // tempo real: novo lead/conversa chega → atualiza o painel sem precisar de F5
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!companyId) return
+    const supabase = createClient()
+    const agendarRefresh = () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      refreshTimer.current = setTimeout(() => router.refresh(), 600)
+    }
+    const channel = supabase.channel(`funil-${companyId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts', filter: `company_id=eq.${companyId}` }, agendarRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `company_id=eq.${companyId}` }, agendarRefresh)
+      .subscribe()
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      supabase.removeChannel(channel)
+    }
+  }, [companyId, router])
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
   const [detalhe, setDetalhe] = useState<Lead | null>(null)

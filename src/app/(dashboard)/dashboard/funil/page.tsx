@@ -54,7 +54,7 @@ export default async function FunilPage() {
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
       <Topbar title="Funil de Leads" subtitle="Seu CRM — acompanhe e converse com cada lead" />
       <div className="flex-1 overflow-hidden p-6">
-        <FunilClient leads={leads as never} vendedores={vendedores ?? []} msgsProntas={msgsProntas} produtosLoja={produtosLoja} />
+        <FunilClient leads={leads as never} vendedores={vendedores ?? []} msgsProntas={msgsProntas} produtosLoja={produtosLoja} companyId={companyId ?? ''} />
       </div>
     </div>
   )
