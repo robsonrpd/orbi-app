@@ -14,8 +14,8 @@ export function Hero() {
       <div className="absolute bottom-[-100px] left-[-100px] w-[360px] h-[360px] rounded-full opacity-10"
         style={{ background: 'radial-gradient(circle, #1A56FF 0%, transparent 70%)' }} />
 
-      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6"
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-14 sm:pt-16 sm:pb-20 text-center">
+        <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 animate-in fade-in slide-in-from-bottom-2 duration-700 fill-mode-both"
           style={{ background: 'rgba(26,86,255,0.15)', border: '1px solid rgba(26,86,255,0.25)' }}>
           <Sparkles className="size-3.5" style={{ color: '#93AAFF' }} />
           <span className="text-xs font-bold tracking-[2px] uppercase text-[#93AAFF]" style={{ fontFamily: 'Barlow, sans-serif' }}>
@@ -23,7 +23,7 @@ export function Hero() {
           </span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.05] max-w-3xl mx-auto"
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.05] max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 fill-mode-both"
           style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
           O sistema que trabalha{' '}
           <span className="text-transparent" style={{ backgroundImage: 'linear-gradient(90deg, #1A56FF, #93AAFF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -31,12 +31,12 @@ export function Hero() {
           </span>
         </h1>
 
-        <p className="mt-6 text-base sm:text-lg text-white/60 max-w-2xl mx-auto leading-relaxed">
+        <p className="mt-6 text-base sm:text-lg text-white/60 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 fill-mode-both">
           Agendamentos, clientes, financeiro, estoque e atendimento automático no WhatsApp —
           tudo em um só painel, com uma IA cuidando do seu negócio 24 horas por dia.
         </p>
 
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
           <Link href="/cadastro"
             className="inline-flex items-center justify-center gap-2 h-13 px-7 rounded-xl text-base font-bold text-white transition-all active:scale-[0.98] w-full sm:w-auto"
             style={{ height: '52px', background: 'linear-gradient(135deg, #1A56FF 0%, #1445DD 100%)', boxShadow: '0 8px 32px rgba(26,86,255,0.4)' }}>
@@ -50,14 +50,14 @@ export function Hero() {
           </a>
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/40">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/40 animate-in fade-in duration-700 delay-300 fill-mode-both">
           <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-[#0DB57A]" /> Sem cartão de crédito</span>
           <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-[#0DB57A]" /> Cancele quando quiser</span>
           <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-[#0DB57A]" /> Configuração em minutos</span>
         </div>
 
         {/* Print do produto */}
-        <div className="mt-14 relative max-w-4xl mx-auto rounded-2xl overflow-hidden border border-white/10"
+        <div className="mt-10 relative max-w-4xl mx-auto rounded-2xl overflow-hidden border border-white/10 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both"
           style={{ boxShadow: '0 30px 80px -20px rgba(0,0,0,0.6)' }}>
           <Image
             src="/brand/Fundo.png"

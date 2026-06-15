@@ -24,9 +24,9 @@ const PLANS = [
 
 export function Pricing() {
   return (
-    <section id="planos" className="py-20 sm:py-28 bg-white">
+    <section id="planos" className="py-14 sm:py-20 bg-[#F7F6F3]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="max-w-2xl mx-auto text-center">
+        <div className="max-w-2xl mx-auto text-center animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
           <p className="text-xs font-bold tracking-[3px] uppercase text-[#1A56FF] mb-3" style={{ fontFamily: 'Barlow, sans-serif' }}>
             Planos
           </p>
@@ -38,10 +38,11 @@ export function Pricing() {
           </p>
         </div>
 
-        <div className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-6 items-start">
-          {PLANS.map(p => (
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-6 items-start">
+          {PLANS.map((p, i) => (
             <div key={p.key}
-              className={p.highlight ? 'glow-card p-7 sm:scale-105' : 'rounded-2xl border border-[#EAE8E1] p-7 bg-white'}>
+              className={`${p.highlight ? 'glow-card p-7 sm:scale-105' : 'rounded-2xl border border-[#EAE8E1] p-7 bg-white shadow-sm'} animate-in fade-in slide-in-from-bottom-4 fill-mode-both`}
+              style={{ animationDuration: '700ms', animationDelay: `${i * 100}ms` }}>
               {p.highlight && (
                 <span className="inline-block mb-3 text-[10px] font-bold tracking-[2px] uppercase text-white px-2.5 py-1 rounded-full"
                   style={{ background: 'linear-gradient(135deg, #1A56FF 0%, #1445DD 100%)' }}>

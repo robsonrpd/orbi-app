@@ -9,7 +9,7 @@ export function CTA() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-15"
         style={{ background: 'radial-gradient(circle, #1A56FF 0%, transparent 70%)' }} />
 
-      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-20 sm:py-24 text-center">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
         <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
           Pronto para automatizar o atendimento do seu negócio?
         </h2>

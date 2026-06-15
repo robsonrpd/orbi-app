@@ -34,9 +34,9 @@ export function FAQ() {
   const [open, setOpen] = useState<number | null>(0)
 
   return (
-    <section id="faq" className="py-20 sm:py-28 bg-[#F7F6F3]">
+    <section id="faq" className="py-14 sm:py-20 bg-white">
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <div className="text-center">
+        <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
           <p className="text-xs font-bold tracking-[3px] uppercase text-[#1A56FF] mb-3" style={{ fontFamily: 'Barlow, sans-serif' }}>
             Dúvidas frequentes
           </p>
@@ -45,11 +45,11 @@ export function FAQ() {
           </h2>
         </div>
 
-        <div className="mt-12 space-y-3">
+        <div className="mt-10 space-y-3">
           {faqs.map((item, i) => {
             const isOpen = open === i
             return (
-              <div key={item.q} className="rounded-2xl border border-[#EAE8E1] bg-white overflow-hidden">
+              <div key={item.q} className="rounded-2xl border border-[#EAE8E1] bg-[#F7F6F3] overflow-hidden">
                 <button onClick={() => setOpen(isOpen ? null : i)}
                   className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left">
                   <span className="text-sm sm:text-base font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{item.q}</span>

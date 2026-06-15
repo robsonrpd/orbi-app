@@ -24,9 +24,9 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section className="py-20 sm:py-28 bg-[#F7F6F3]">
+    <section className="py-14 sm:py-20 bg-[#F7F6F3]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="max-w-2xl mx-auto text-center">
+        <div className="max-w-2xl mx-auto text-center animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
           <p className="text-xs font-bold tracking-[3px] uppercase text-[#1A56FF] mb-3" style={{ fontFamily: 'Barlow, sans-serif' }}>
             Simples assim
           </p>
@@ -35,9 +35,11 @@ export function HowItWorks() {
           </h2>
         </div>
 
-        <div className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
           {steps.map((s, i) => (
-            <div key={s.step} className="relative text-center">
+            <div key={s.step}
+              className="relative text-center animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
+              style={{ animationDuration: '700ms', animationDelay: `${i * 120}ms` }}>
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto relative"
                 style={{ background: 'linear-gradient(135deg, #1A56FF 0%, #1445DD 100%)', boxShadow: '0 8px 24px rgba(26,86,255,0.3)' }}>
                 <s.icon className="size-7 text-white" strokeWidth={1.5} />
