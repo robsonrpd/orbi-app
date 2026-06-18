@@ -1,0 +1,57 @@
+#!/bin/sh
+# Guardrail de segredos do Orbi — bloqueia commits que vazem credenciais.
+# Instalado via `npm run prepare` (git config core.hooksPath scripts/git-hooks).
+# Em emergência legítima, pule com: git commit --no-verify
+
+red='\033[0;31m'; ylw='\033[0;33m'; nc='\033[0m'
+fail=0
+
+# Apenas arquivos novos/modificados que estão staged (Added/Copied/Modified)
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# 1) Bloqueia qualquer arquivo .env (exceto exemplos)
+for f in $staged; do
+  case "$f" in
+    *.env|.env|.env.*|*/.env|*/.env.*)
+      case "$f" in
+        *.example|*.sample|*.template) : ;;
+        *)
+          printf "${red}✖ Segredo bloqueado:${nc} arquivo de ambiente staged: %s\n" "$f"
+          printf "  Arquivos .env nunca vão pro repo. Remova com: git restore --staged %s\n" "$f"
+          fail=1 ;;
+      esac ;;
+  esac
+done
+
+# 2) Varre o conteúdo staged por padrões perigosos
+for f in $staged; do
+  case "$f" in
+    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.json|*.md|*.txt|*.yml|*.yaml) ;;
+    *) continue ;;
+  esac
+  added=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -v '^+++')
+
+  # 2a) NEXT_PUBLIC_ com nome de segredo (vai pro bundle do client).
+  # ANON_KEY é público por design — fica de fora.
+  hit=$(printf '%s' "$added" | grep -Eo 'NEXT_PUBLIC_[A-Z_]*(SECRET|KEY|TOKEN|PASSWORD|SERVICE_ROLE)' | grep -v 'ANON_KEY' | head -1)
+  if [ -n "$hit" ]; then
+    printf "${red}✖ Segredo bloqueado:${nc} %s em %s expõe dado sensível no client.\n" "$hit" "$f"
+    printf "  Use a var SEM prefixo NEXT_PUBLIC_ e leia só no servidor.\n"
+    fail=1
+  fi
+
+  # 2b) Chaves hardcoded de alto sinal
+  if printf '%s' "$added" | grep -Eq 'sk-ant-[A-Za-z0-9_-]{20,}'; then
+    printf "${red}✖ Segredo bloqueado:${nc} chave Anthropic (sk-ant-...) hardcoded em %s\n" "$f"; fail=1; fi
+  if printf '%s' "$added" | grep -Eq 're_[A-Za-z0-9]{20,}'; then
+    printf "${red}✖ Segredo bloqueado:${nc} chave Resend (re_...) hardcoded em %s\n" "$f"; fail=1; fi
+  if printf '%s' "$added" | grep -Eq 'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]*service_role'; then
+    printf "${red}✖ Segredo bloqueado:${nc} JWT service_role do Supabase hardcoded em %s\n" "$f"; fail=1; fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  printf "\n${ylw}Commit abortado pelo guardrail de segredos.${nc} Corrija acima ou use --no-verify se for falso positivo.\n"
+  exit 1
+fi
+exit 0
