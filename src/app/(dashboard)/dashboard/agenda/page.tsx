@@ -13,7 +13,7 @@ export default async function AgendaPage() {
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString()
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0).toISOString()
 
-  const [{ data: appointments }, { data: contacts }, { data: services }, { data: transactions }] = await Promise.all([
+  const [{ data: appointments }, { data: contacts }, { data: services }, { data: transactions }, { data: company }] = await Promise.all([
     service.from('appointments')
       .select('id, start_at, end_at, status, professional, notes, contacts(id, name, phone), services(id, name, duration_minutes, price)')
       .eq('company_id', companyId)
@@ -23,6 +23,7 @@ export default async function AgendaPage() {
     service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
     service.from('services').select('id, name, duration_minutes, price').eq('company_id', companyId).eq('active', true),
     service.from('transactions').select('amount').eq('company_id', companyId).eq('status', 'paid').gte('created_at', monthStart),
+    service.from('companies').select('slug').eq('id', companyId).single(),
   ])
 
   const totalFaturamento = (transactions ?? []).reduce((s, t) => s + Number(t.amount), 0)
@@ -36,6 +37,7 @@ export default async function AgendaPage() {
           contacts={contacts ?? []}
           services={(services ?? []) as never}
           totalFaturamento={totalFaturamento}
+          companySlug={company?.slug ?? ''}
         />
       </div>
     </div>

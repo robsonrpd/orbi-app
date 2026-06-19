@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
+import { BookingLinkCard } from '@/components/orbi/booking-link-card'
 import { AppointmentBadge } from '@/components/orbi/status-badge'
 import { NovoAgendamentoModal } from '@/components/orbi/novo-agendamento-modal'
 import { ProgramarPanel } from '@/components/orbi/programar-panel'
@@ -30,9 +31,10 @@ type Props = {
   contacts: Contact[]
   services: Service[]
   totalFaturamento: number
+  companySlug: string
 }
 
-export function AgendaRedesignClient({ appointments, contacts, services, totalFaturamento }: Props) {
+export function AgendaRedesignClient({ appointments, contacts, services, totalFaturamento, companySlug }: Props) {
   const today = new Date()
   const [selectedDate, setSelectedDate] = useState(today)
   const [weekOffset, setWeekOffset] = useState(0)
@@ -75,6 +77,8 @@ export function AgendaRedesignClient({ appointments, contacts, services, totalFa
   return (
     <>
       <div className="space-y-4">
+        {companySlug && <BookingLinkCard slug={companySlug} />}
+
         {/* Métricas */}
         <div className="grid grid-cols-4 gap-4">
           {metrics.map(m => (
