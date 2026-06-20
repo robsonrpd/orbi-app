@@ -77,9 +77,12 @@ export async function saveSchedule(schedule: Record<string, { open: string; clos
   if (!companyId) return { error: 'Não autenticado.' }
 
   const service = createServiceClient()
-  const { error } = await service.from('companies').update({
-    settings: { schedule, interval_minutes: intervalMinutes }
-  }).eq('id', companyId)
+  // Lê o settings atual e faz merge — nunca sobrescreve por completo, senão
+  // apaga wa_instance/wa_qr/dono_pin e outras chaves gravadas por outras telas.
+  const { data: current } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const settings = { ...(current?.settings as Record<string, unknown> ?? {}), schedule, interval_minutes: intervalMinutes }
+
+  const { error } = await service.from('companies').update({ settings }).eq('id', companyId)
 
   if (error) return { error: 'Erro ao salvar horários.' }
   revalidatePath('/dashboard/funcionamento')
