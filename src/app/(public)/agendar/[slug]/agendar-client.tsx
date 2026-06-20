@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { getAvailableSlots, createPublicAppointment } from '@/lib/actions/public-booking'
-import { Loader2, CheckCircle2, Clock, ArrowLeft, Calendar, Scissors, User } from 'lucide-react'
+import { Loader2, CheckCircle2, Clock, ArrowLeft, Calendar, Scissors, User, Star } from 'lucide-react'
 
-type Service = { id: string; name: string; price: number; duration_minutes: number }
+type Service = { id: string; name: string; price: number; duration_minutes: number; image_url: string | null }
+type ScheduleDay = { open: string; close: string; active: boolean }
+type Schedule = Record<string, ScheduleDay>
+type Review = { rating: number; author_name: string | null; comment: string | null; created_at: string }
 
 function fmtMoney(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
@@ -22,13 +25,29 @@ function buildDays() {
 }
 
 const DIA_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const DIA_SEMANA_LONGO = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const DAY_KEYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab']
 const MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-export function AgendarClient({ slug, companyId, companyName, services }: {
+function estaAbertoAgora(schedule: Schedule) {
+  const now = new Date()
+  const dia = schedule[DAY_KEYS[now.getDay()]]
+  if (!dia || !dia.active) return false
+  const atual = now.getHours() * 60 + now.getMinutes()
+  const [oh, om] = dia.open.split(':').map(Number)
+  const [ch, cm] = dia.close.split(':').map(Number)
+  return atual >= oh * 60 + om && atual <= ch * 60 + cm
+}
+
+export function AgendarClient({ slug, companyId, companyName, logoUrl, services, schedule, avaliacoes, mediaAvaliacao }: {
   slug: string
   companyId: string
   companyName: string
+  logoUrl: string | null
   services: Service[]
+  schedule: Schedule
+  avaliacoes: Review[]
+  mediaAvaliacao: number | null
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [service, setService] = useState<Service | null>(null)
@@ -43,6 +62,8 @@ export function AgendarClient({ slug, companyId, companyName, services }: {
   const [done, setDone] = useState(false)
 
   const days = useMemo(buildDays, [])
+  const aberto = useMemo(() => estaAbertoAgora(schedule), [schedule])
+  const diasAtivos = DAY_KEYS.map((k, i) => ({ key: k, label: DIA_SEMANA_LONGO[i], ...schedule[k] })).filter(d => d.open)
 
   useEffect(() => {
     if (!service || !date) return
@@ -99,12 +120,26 @@ export function AgendarClient({ slug, companyId, companyName, services }: {
             <div className="p-7">
               {/* Header */}
               <div className="text-center mb-5">
-                <p className="text-[11px] font-bold text-[#8C8880] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>
-                  Agendar horário
-                </p>
-                <h1 className="text-2xl font-black text-[#1C1B18] mt-1" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
+                {logoUrl && (
+                  <img src={logoUrl} alt={companyName} className="w-14 h-14 rounded-2xl object-cover mx-auto mb-2 border border-[#EAE8E1]" />
+                )}
+                <h1 className="text-2xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
                   {companyName}
                 </h1>
+                <div className="flex items-center justify-center gap-2 mt-1.5">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: aberto ? '#E6F9F3' : '#FEF2F2', color: aberto ? '#0DB57A' : '#EF4444' }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: aberto ? '#0DB57A' : '#EF4444' }} />
+                    {aberto ? 'Aberto agora' : 'Fechado agora'}
+                  </span>
+                  {mediaAvaliacao !== null ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1C1B18]">
+                      <Star className="size-3 fill-amber-400 text-amber-400" /> {mediaAvaliacao} ({avaliacoes.length})
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-[#C8C5BB]">Sem avaliações</span>
+                  )}
+                </div>
               </div>
 
               {/* Stepper */}
@@ -117,23 +152,71 @@ export function AgendarClient({ slug, companyId, companyName, services }: {
 
               {/* Passo 1 — serviço */}
               {step === 1 && (
-                <div className="space-y-2.5">
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-[#1C1B18] uppercase tracking-wide mb-2">
-                    <Scissors className="size-3.5" /> Escolha o serviço
-                  </p>
-                  {services.length === 0 && (
-                    <p className="text-sm text-[#8C8880] text-center py-6">Nenhum serviço disponível no momento.</p>
-                  )}
-                  {services.map(s => (
-                    <button key={s.id} onClick={() => { setService(s); setStep(2) }}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl border border-[#EAE8E1] hover:border-[#1A56FF] hover:bg-[#EEF2FF] transition-all text-left">
-                      <div>
-                        <p className="text-sm font-bold text-[#1C1B18]">{s.name}</p>
-                        <p className="text-xs text-[#8C8880]">{s.duration_minutes} min</p>
+                <div className="space-y-5">
+                  <div className="space-y-2.5">
+                    <p className="flex items-center gap-1.5 text-xs font-bold text-[#1C1B18] uppercase tracking-wide mb-2">
+                      <Scissors className="size-3.5" /> Escolha o serviço
+                    </p>
+                    {services.length === 0 && (
+                      <p className="text-sm text-[#8C8880] text-center py-6">Nenhum serviço disponível no momento.</p>
+                    )}
+                    {services.map(s => (
+                      <button key={s.id} onClick={() => { setService(s); setStep(2) }}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-[#EAE8E1] hover:border-[#1A56FF] hover:bg-[#EEF2FF] transition-all text-left">
+                        {s.image_url ? (
+                          <img src={s.image_url} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-[#F7F6F3] flex items-center justify-center shrink-0">
+                            <Scissors className="size-5 text-[#C8C5BB]" strokeWidth={1.5} />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-[#1C1B18] truncate">{s.name}</p>
+                          <p className="text-xs text-[#8C8880]">{s.duration_minutes} min</p>
+                        </div>
+                        <span className="text-sm font-bold text-[#1A56FF] shrink-0">{fmtMoney(s.price)}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {diasAtivos.length > 0 && (
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-[#1C1B18] uppercase tracking-wide mb-2">
+                        <Clock className="size-3.5" /> Horário de funcionamento
+                      </p>
+                      <div className="rounded-xl bg-[#F7F6F3] divide-y divide-[#EAE8E1]">
+                        {diasAtivos.map(d => (
+                          <div key={d.key} className="flex items-center justify-between px-3.5 py-2 text-xs">
+                            <span className="text-[#2E2D29]">{d.label}</span>
+                            <span className={d.active ? 'text-[#1C1B18] font-semibold' : 'text-[#C8C5BB]'}>
+                              {d.active ? `${d.open} – ${d.close}` : 'Fechado'}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      <span className="text-sm font-bold text-[#1A56FF] shrink-0">{fmtMoney(s.price)}</span>
-                    </button>
-                  ))}
+                    </div>
+                  )}
+
+                  {avaliacoes.length > 0 && (
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-[#1C1B18] uppercase tracking-wide mb-2">
+                        <Star className="size-3.5" /> Avaliações de clientes
+                      </p>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {avaliacoes.slice(0, 5).map((r, i) => (
+                          <div key={i} className="rounded-xl border border-[#EAE8E1] px-3.5 py-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-[#1C1B18]">{r.author_name || 'Cliente'}</span>
+                              <span className="flex items-center gap-0.5 text-[11px] text-amber-500">
+                                {Array.from({ length: r.rating }).map((_, j) => <Star key={j} className="size-2.5 fill-amber-400" />)}
+                              </span>
+                            </div>
+                            {r.comment && <p className="text-xs text-[#8C8880] mt-1">{r.comment}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

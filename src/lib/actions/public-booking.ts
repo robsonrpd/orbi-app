@@ -17,27 +17,41 @@ export async function getBookingInfo(slug: string) {
   const service = createServiceClient()
   const { data: company } = await service
     .from('companies')
-    .select('id, name, business_type, settings')
+    .select('id, name, business_type, settings, logo_url')
     .eq('slug', slug)
     .single()
 
   if (!company) return { error: 'Empresa não encontrada.' as const }
 
-  const { data: services } = await service
-    .from('services')
-    .select('id, name, price, duration_minutes')
-    .eq('company_id', company.id)
-    .eq('active', true)
-    .order('name')
+  const [{ data: services }, { data: reviews }] = await Promise.all([
+    service.from('services')
+      .select('id, name, price, duration_minutes, image_url')
+      .eq('company_id', company.id)
+      .eq('active', true)
+      .order('name'),
+    service.from('reviews' as never)
+      .select('rating, author_name, comment, created_at')
+      .eq('company_id', company.id)
+      .eq('visible', true)
+      .order('created_at', { ascending: false })
+      .limit(20) as unknown as Promise<{ data: { rating: number; author_name: string | null; comment: string | null; created_at: string }[] | null }>,
+  ])
 
   const settings = (company.settings ?? {}) as { schedule?: Schedule; interval_minutes?: number }
+  const list = reviews ?? []
+  const mediaAvaliacao = list.length
+    ? Math.round((list.reduce((s, r) => s + r.rating, 0) / list.length) * 10) / 10
+    : null
 
   return {
     companyId: company.id,
     companyName: company.name,
+    logoUrl: company.logo_url,
     services: services ?? [],
     schedule: settings.schedule ?? {},
     intervalMinutes: settings.interval_minutes ?? 30,
+    avaliacoes: list,
+    mediaAvaliacao,
   }
 }
 
