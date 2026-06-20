@@ -2,10 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { Bell, Eye, Gift, PackageCheck, ArrowDownCircle, X } from 'lucide-react'
+import { Bell, Eye, Gift, PackageCheck, ArrowDownCircle, CalendarPlus, X } from 'lucide-react'
 
 type Notif = {
-  tipo: 'receita' | 'aniversario' | 'entrega' | 'conta'
+  tipo: 'receita' | 'aniversario' | 'entrega' | 'conta' | 'agendamento'
   titulo: string
   desc: string
   href: string
@@ -16,6 +16,7 @@ const CONFIG = {
   aniversario: { icon: Gift, color: '#F59E0B', bg: '#FEF3C7' },
   entrega: { icon: PackageCheck, color: '#1A56FF', bg: '#EEF2FF' },
   conta: { icon: ArrowDownCircle, color: '#EF4444', bg: '#FEF2F2' },
+  agendamento: { icon: CalendarPlus, color: '#0DB57A', bg: '#E6F9F3' },
 }
 
 export function Notificacoes() {

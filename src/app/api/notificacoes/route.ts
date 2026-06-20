@@ -14,12 +14,26 @@ export async function GET() {
   const mesAtual = new Date().getMonth() + 1
   const umAnoAtras = new Date(); umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1)
 
-  const [{ data: ordens }, { data: receitas }, { data: contacts }, { data: contas }] = await Promise.all([
+  const desde48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+
+  const [{ data: ordens }, { data: receitas }, { data: contacts }, { data: contas }, { data: agendamentosOnline }] = await Promise.all([
     service.from('ordens_servico').select('id, numero, status').eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelada'),
     service.from('receitas').select('id, contacts(name, phone)').eq('company_id', companyId).lt('data_receita', umAnoAtras.toISOString().split('T')[0]),
     service.from('contacts').select('id, name, phone, data_nascimento').eq('company_id', companyId),
     service.from('contas_pagar' as never).select('id, descricao, valor, status, vencimento').eq('company_id', companyId).eq('status', 'pendente'),
+    service.from('appointments').select('id, start_at, contacts(name)').eq('company_id', companyId).eq('notes', 'Agendado pelo cliente (link público)').gte('created_at', desde48h),
   ])
+
+  // Novos agendamentos feitos pelo cliente no link público
+  const novosOnline = (agendamentosOnline ?? []) as unknown as { id: string; start_at: string; contacts: { name: string | null }[] | { name: string | null } | null }[]
+  if (novosOnline.length > 0) {
+    const ultimo = novosOnline[novosOnline.length - 1]
+    const contatoUltimo = Array.isArray(ultimo.contacts) ? ultimo.contacts[0] : ultimo.contacts
+    const desc = novosOnline.length === 1
+      ? `${contatoUltimo?.name ?? 'Cliente'} agendou para ${new Date(ultimo.start_at).toLocaleDateString('pt-BR')}`
+      : 'Clientes agendaram direto pelo seu link'
+    notifs.push({ tipo: 'agendamento', titulo: `${novosOnline.length} novo${novosOnline.length > 1 ? 's' : ''} agendamento${novosOnline.length > 1 ? 's' : ''} online`, desc, href: '/dashboard/agenda' })
+  }
 
   // Entregas pendentes
   const pendentes = (ordens ?? []).length
