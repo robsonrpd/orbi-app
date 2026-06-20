@@ -2,10 +2,11 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string } }
+type Midia = { tipo: string; url: string; nome?: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia }
 
 export type ConversaResumo = {
   id: string
@@ -59,27 +60,63 @@ export async function obterMensagens(conversaId: string): Promise<Msg[]> {
   return (data?.messages as Msg[] | null) ?? []
 }
 
-/** Envia uma resposta manual pelo WhatsApp e registra na conversa. */
-export async function responderConversa(conversaId: string, texto: string) {
+/** Resolve a conversa + a instância do WhatsApp conectada, validando que pertence à empresa logada. */
+async function resolverConversa(conversaId: string) {
   const companyId = await getCompanyId()
-  if (!companyId) return { error: 'Não autenticado.' }
-  const limpo = texto.trim()
-  if (!limpo) return { error: 'Digite uma mensagem.' }
+  if (!companyId) return { error: 'Não autenticado.' as const }
 
   const service = createServiceClient()
   const { data: conv } = await service.from('conversations').select('id, numero, messages').eq('id', conversaId).eq('company_id', companyId).single()
-  if (!conv) return { error: 'Conversa não encontrada.' }
+  if (!conv) return { error: 'Conversa não encontrada.' as const }
 
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
   const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
-  if (!instance) return { error: 'WhatsApp não conectado.' }
+  if (!instance) return { error: 'WhatsApp não conectado.' as const }
 
-  const env = await enviarTexto(instance, conv.numero, limpo)
+  return { service, conv, instance }
+}
+
+async function registrarSaida(service: ReturnType<typeof createServiceClient>, conv: { id: string; messages: unknown }, msg: Msg) {
+  const messages = [...((conv.messages as Msg[] | null) ?? []), msg].slice(-60)
+  await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  revalidatePath('/dashboard/conversas')
+}
+
+/** Envia uma resposta manual de texto pelo WhatsApp e registra na conversa. */
+export async function responderConversa(conversaId: string, texto: string) {
+  const limpo = texto.trim()
+  if (!limpo) return { error: 'Digite uma mensagem.' }
+
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+
+  const env = await enviarTexto(r.instance, r.conv.numero, limpo)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
-  const messages = [...((conv.messages as Msg[] | null) ?? []), { role: 'human' as const, content: limpo }].slice(-60)
-  await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  await registrarSaida(r.service, r.conv, { role: 'human', content: limpo })
+  return { success: true as const }
+}
 
-  revalidatePath('/dashboard/conversas')
+/** Envia uma imagem ou documento (já hospedado em uma URL pública) pelo WhatsApp. */
+export async function enviarMidiaConversa(conversaId: string, p: { url: string; mediatype: 'image' | 'document' | 'video'; fileName?: string }) {
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+
+  const env = await enviarMedia(r.instance, r.conv.numero, { mediatype: p.mediatype, media: p.url, fileName: p.fileName })
+  if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
+
+  await registrarSaida(r.service, r.conv, { role: 'human', content: p.fileName || 'Arquivo', midia: { tipo: p.mediatype, url: p.url, nome: p.fileName } })
+  return { success: true as const }
+}
+
+/** Envia um áudio de voz (já hospedado em uma URL pública) pelo WhatsApp. */
+export async function enviarAudioConversa(conversaId: string, url: string) {
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+
+  const env = await enviarAudio(r.instance, r.conv.numero, url)
+  if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
+
+  await registrarSaida(r.service, r.conv, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url } })
   return { success: true as const }
 }
