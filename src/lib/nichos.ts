@@ -24,7 +24,7 @@ export const NICHOS: Nicho[] = [
   {
     key: 'loja', label: 'Loja / Varejo', emoji: '🛍️',
     descricao: 'Estoque, PDV, crediário e clientes.',
-    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico', '/dashboard/agenda', '/dashboard/servicos', '/dashboard/funcionamento'],
+    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
   },
   {
     key: 'clinica', label: 'Clínica / Estética', emoji: '🩺',

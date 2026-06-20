@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Calendar, Users, DollarSign,
   Bot, MessageSquare, Settings, LogOut, Eye,
-  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal, Crown, Gift, KanbanSquare,
+  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal, Crown, Gift, KanbanSquare, Globe,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -32,6 +32,7 @@ const navItems = [
   { href: '/dashboard/caixa', label: 'Caixa', icon: Wallet },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/dashboard/avaliacoes', label: 'Avaliações', icon: Star },
+  { href: '/dashboard/meu-site', label: 'Meu Site', icon: Globe },
   { href: '/dashboard/indicacoes', label: 'Ganhe uma Mensalidade', icon: Gift },
 ]
 

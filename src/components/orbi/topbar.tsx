@@ -2,6 +2,7 @@
 
 import { Search, Menu } from 'lucide-react'
 import { Notificacoes } from './notificacoes'
+import { UserMenu } from './user-menu'
 import { useMobileNav } from './mobile-nav'
 
 type TopbarProps = {
@@ -42,6 +43,7 @@ export function Topbar({ title, subtitle }: TopbarProps) {
           />
         </div>
         <Notificacoes />
+        <UserMenu />
       </div>
     </header>
   )
