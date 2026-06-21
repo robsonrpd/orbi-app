@@ -23,6 +23,7 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
       schedule={info.schedule}
       avaliacoes={info.avaliacoes}
       mediaAvaliacao={info.mediaAvaliacao}
+      site={info.site}
     />
   )
 }

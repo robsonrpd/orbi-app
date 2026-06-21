@@ -1,6 +1,7 @@
 'use server'
 
 import { createServiceClient } from '@/lib/supabase/server'
+import { SITE_DEFAULT, type SiteConfig } from './site-types'
 
 const DAY_KEYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab']
 
@@ -37,21 +38,23 @@ export async function getBookingInfo(slug: string) {
       .limit(20) as unknown as Promise<{ data: { rating: number; author_name: string | null; comment: string | null; created_at: string }[] | null }>,
   ])
 
-  const settings = (company.settings ?? {}) as { schedule?: Schedule; interval_minutes?: number }
+  const settings = (company.settings ?? {}) as { schedule?: Schedule; interval_minutes?: number; site?: Partial<SiteConfig> }
   const list = reviews ?? []
   const mediaAvaliacao = list.length
     ? Math.round((list.reduce((s, r) => s + r.rating, 0) / list.length) * 10) / 10
     : null
+  const site: SiteConfig = { ...SITE_DEFAULT, ...(settings.site ?? {}) }
 
   return {
     companyId: company.id,
-    companyName: company.name,
+    companyName: site.titulo || company.name,
     logoUrl: company.logo_url,
     services: services ?? [],
     schedule: settings.schedule ?? {},
     intervalMinutes: settings.interval_minutes ?? 30,
     avaliacoes: list,
     mediaAvaliacao,
+    site,
   }
 }
 

@@ -2,14 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { getAvailableSlots, createPublicAppointment } from '@/lib/actions/public-booking'
-import { Loader2, CheckCircle2, Clock, ArrowLeft, Calendar, Scissors, Star, Tag, X } from 'lucide-react'
+import { Loader2, CheckCircle2, Clock, ArrowLeft, Calendar, Scissors, Star, Tag, X, MessageCircle, AtSign, MapPin } from 'lucide-react'
+import type { SiteConfig } from '@/lib/actions/site-types'
 
 type Service = { id: string; name: string; price: number; duration_minutes: number; image_url: string | null }
 type ScheduleDay = { open: string; close: string; active: boolean }
 type Schedule = Record<string, ScheduleDay>
 type Review = { rating: number; author_name: string | null; comment: string | null; created_at: string }
-
-const AZUL = '#1A56FF'
 
 function fmtMoney(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
@@ -48,7 +47,7 @@ const ETAPAS = [
   { icon: CheckCircle2, titulo: 'Tudo certo!', subtitulo: 'Revise os detalhes do seu agendamento' },
 ]
 
-export function AgendarClient({ slug, companyId, companyName, logoUrl, services, schedule, avaliacoes, mediaAvaliacao }: {
+export function AgendarClient({ slug, companyId, companyName, logoUrl, services, schedule, avaliacoes, mediaAvaliacao, site }: {
   slug: string
   companyId: string
   companyName: string
@@ -57,7 +56,10 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
   schedule: Schedule
   avaliacoes: Review[]
   mediaAvaliacao: number | null
+  site: SiteConfig
 }) {
+  const cor = site.corPrimaria || '#1A56FF'
+  const corEscura = site.corSecundaria || '#1445DD'
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [service, setService] = useState<Service | null>(null)
   const [date, setDate] = useState<Date | null>(null)
@@ -121,7 +123,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
       <div className="px-4 pt-6 pb-5" style={{ background: 'linear-gradient(160deg, #0A0F1E 0%, #0D1635 60%, #1A2B5E 100%)' }}>
         <div className="max-w-md mx-auto text-center">
           <span className="text-2xl font-black text-white" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
-            Orbi<span style={{ color: AZUL }}>.</span>
+            Orbi<span style={{ color: cor }}>.</span>
           </span>
           {logoUrl && (
             <img src={logoUrl} alt={companyName} className="w-14 h-14 rounded-2xl object-cover mx-auto mt-4 border border-white/10" />
@@ -129,6 +131,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
           <h1 className="text-2xl font-black text-white mt-2" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
             {companyName}
           </h1>
+          {site.subtitulo && <p className="text-sm text-white/50 mt-1">{site.subtitulo}</p>}
           <div className="flex items-center justify-center gap-2 mt-1.5">
             <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full"
               style={{ background: aberto ? 'rgba(13,181,122,0.15)' : 'rgba(239,68,68,0.15)', color: aberto ? '#0DB57A' : '#EF4444' }}>
@@ -143,6 +146,29 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
               <span className="text-[11px] text-white/40">Sem avaliações</span>
             )}
           </div>
+
+          {(site.whatsapp || site.instagram || site.endereco) && (
+            <div className="flex items-center justify-center gap-2 mt-3">
+              {site.whatsapp && (
+                <a href={`https://wa.me/55${site.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 transition-colors">
+                  <MessageCircle className="size-4 text-[#25D366]" />
+                </a>
+              )}
+              {site.instagram && (
+                <a href={`https://instagram.com/${site.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 transition-colors">
+                  <AtSign className="size-4 text-white" />
+                </a>
+              )}
+              {site.endereco && (
+                <a href={`https://maps.google.com/?q=${encodeURIComponent(site.endereco)}`} target="_blank" rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 transition-colors">
+                  <MapPin className="size-4 text-white" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -172,13 +198,13 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                     <div key={num} className="flex items-center">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all"
                         style={{
-                          background: ativo || feito ? AZUL : '#F0F2F5',
+                          background: ativo || feito ? cor : '#F0F2F5',
                           color: ativo || feito ? '#fff' : '#C8C5BB',
                         }}>
                         <e.icon className="size-4" strokeWidth={2} />
                       </div>
                       {num < ETAPAS.length && (
-                        <div className="w-8 sm:w-10 h-[2px] mx-1" style={{ background: feito ? AZUL : '#EAE8E1' }} />
+                        <div className="w-8 sm:w-10 h-[2px] mx-1" style={{ background: feito ? cor : '#EAE8E1' }} />
                       )}
                     </div>
                   )
@@ -213,14 +239,14 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                           <img src={s.image_url} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
                         ) : (
                           <div className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}>
-                            <Scissors className="size-5" style={{ color: AZUL }} strokeWidth={1.5} />
+                            <Scissors className="size-5" style={{ color: cor }} strokeWidth={1.5} />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-[#1C1B18] truncate">{s.name}</p>
                           <p className="flex items-center gap-1 text-xs text-[#8C8880]"><Clock className="size-3" /> {s.duration_minutes} min</p>
                         </div>
-                        <span className="text-sm font-bold shrink-0" style={{ color: AZUL }}>{fmtMoney(s.price)}</span>
+                        <span className="text-sm font-bold shrink-0" style={{ color: cor }}>{fmtMoney(s.price)}</span>
                       </button>
                     ))}
                   </div>
@@ -280,9 +306,9 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                             <button key={d.toISOString()} onClick={() => { setDate(d); setStep(3) }}
                               className="rounded-xl py-2.5 flex flex-col items-center transition-all"
                               style={{
-                                background: ativo ? AZUL : '#F7F6F3',
+                                background: ativo ? cor : '#F7F6F3',
                                 color: ativo ? '#fff' : '#1C1B18',
-                                border: ativo ? `1px solid ${AZUL}` : hoje ? `1px solid ${AZUL}80` : '1px solid #EAE8E1',
+                                border: ativo ? `1px solid ${cor}` : hoje ? `1px solid ${cor}80` : '1px solid #EAE8E1',
                               }}>
                               <span className="text-[10px] font-semibold opacity-70">{hoje ? 'HOJE' : DIA_SEMANA[d.getDay()]}</span>
                               <span className="text-base font-black" style={{ fontFamily: 'Fraunces, serif' }}>{d.getDate()}</span>
@@ -299,7 +325,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
               {step === 3 && (
                 <div>
                   {loadingSlots && (
-                    <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin" style={{ color: AZUL }} /></div>
+                    <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin" style={{ color: cor }} /></div>
                   )}
                   {!loadingSlots && slots.length === 0 && (
                     <p className="text-sm text-[#8C8880] text-center py-6">Sem horários livres nesse dia. Escolha outra data.</p>
@@ -321,7 +347,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                   <div className="rounded-2xl bg-[#F7F6F3] divide-y divide-[#EAE8E1] mb-5">
                     <div className="flex items-center gap-3 px-4 py-3">
                       <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}>
-                        <Scissors className="size-4" style={{ color: AZUL }} strokeWidth={1.5} />
+                        <Scissors className="size-4" style={{ color: cor }} strokeWidth={1.5} />
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider">Serviço</p>
@@ -330,7 +356,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                     </div>
                     <div className="flex items-center gap-3 px-4 py-3">
                       <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}>
-                        <Calendar className="size-4" style={{ color: AZUL }} strokeWidth={1.5} />
+                        <Calendar className="size-4" style={{ color: cor }} strokeWidth={1.5} />
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider">Data</p>
@@ -341,7 +367,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                     </div>
                     <div className="flex items-center gap-3 px-4 py-3">
                       <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}>
-                        <Clock className="size-4" style={{ color: AZUL }} strokeWidth={1.5} />
+                        <Clock className="size-4" style={{ color: cor }} strokeWidth={1.5} />
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider">Horário</p>
@@ -350,7 +376,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                     </div>
                     <div className="flex items-center gap-3 px-4 py-3">
                       <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}>
-                        <Tag className="size-4" style={{ color: AZUL }} strokeWidth={1.5} />
+                        <Tag className="size-4" style={{ color: cor }} strokeWidth={1.5} />
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider">Valor</p>
@@ -375,7 +401,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
 
                   <button onClick={handleConfirm} disabled={loading || !name || !phone}
                     className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white mt-5 transition-all active:scale-[0.98] disabled:opacity-60"
-                    style={{ fontFamily: 'Barlow, sans-serif', background: 'linear-gradient(135deg,#1A56FF,#1445DD)', boxShadow: '0 4px 16px rgba(26,86,255,0.4)' }}>
+                    style={{ fontFamily: 'Barlow, sans-serif', background: `linear-gradient(135deg, ${cor}, ${corEscura})`, boxShadow: `0 4px 16px ${cor}66` }}>
                     {loading ? <Loader2 className="size-4 animate-spin" /> : <><CheckCircle2 className="size-4" /> Confirmar Agendamento</>}
                   </button>
                 </div>
