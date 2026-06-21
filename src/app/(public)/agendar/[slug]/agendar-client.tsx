@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { getAvailableSlots, createPublicAppointment } from '@/lib/actions/public-booking'
-import { Loader2, CheckCircle2, Clock, ArrowLeft, Calendar, Scissors, Star, Tag, X, MessageCircle, AtSign, MapPin } from 'lucide-react'
+import { Loader2, CheckCircle2, Clock, ArrowLeft, ArrowRight, Calendar, Scissors, Star, Tag, X, MessageCircle, AtSign, MapPin } from 'lucide-react'
 import type { SiteConfig } from '@/lib/actions/site-types'
 
 type Service = { id: string; name: string; price: number; duration_minutes: number; image_url: string | null }
@@ -14,15 +14,10 @@ function fmtMoney(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
-function buildDays() {
-  const days = []
-  const hoje = new Date()
-  for (let i = 0; i < 21; i++) {
-    const d = new Date(hoje)
-    d.setDate(hoje.getDate() + i)
-    days.push(d)
-  }
-  return days
+function inicioDoDia(d: Date) {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
 }
 
 const DIA_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -73,20 +68,22 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
   const [done, setDone] = useState(false)
   const [desconto, setDesconto] = useState<{ percentual: number; valorFinal: number } | null>(null)
 
-  const days = useMemo(buildDays, [])
+  const hoje = useMemo(() => inicioDoDia(new Date()), [])
+  const [mesView, setMesView] = useState(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1))
   const aberto = useMemo(() => estaAbertoAgora(schedule), [schedule])
   const diasAtivos = DAY_KEYS.map((k, i) => ({ key: k, label: DIA_SEMANA_LONGO[i], ...schedule[k] })).filter(d => d.open)
 
-  const diasPorMes = useMemo(() => {
-    const grupos: { mes: string; dias: Date[] }[] = []
-    for (const d of days) {
-      const label = `${MES[d.getMonth()]} ${d.getFullYear()}`
-      let g = grupos.find(g => g.mes === label)
-      if (!g) { g = { mes: label, dias: [] }; grupos.push(g) }
-      g.dias.push(d)
-    }
-    return grupos
-  }, [days])
+  const celulasCalendario = useMemo(() => {
+    const ano = mesView.getFullYear()
+    const mes = mesView.getMonth()
+    const offset = new Date(ano, mes, 1).getDay()
+    const totalDias = new Date(ano, mes + 1, 0).getDate()
+    const celulas: (Date | null)[] = Array(offset).fill(null)
+    for (let dia = 1; dia <= totalDias; dia++) celulas.push(new Date(ano, mes, dia))
+    return celulas
+  }, [mesView])
+
+  const podeVoltarMes = mesView.getFullYear() > hoje.getFullYear() || mesView.getMonth() > hoje.getMonth()
 
   useEffect(() => {
     if (!service || !date) return
@@ -310,32 +307,49 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                 </div>
               )}
 
-              {/* Passo 2 — data, agrupado por mês */}
+              {/* Passo 2 — calendário do mês */}
               {step === 2 && (
-                <div className="space-y-5">
-                  {diasPorMes.map(grupo => (
-                    <div key={grupo.mes}>
-                      <p className="text-[11px] font-bold text-[#8C8880] uppercase tracking-wider mb-2">{grupo.mes}</p>
-                      <div className="grid grid-cols-4 gap-2">
-                        {grupo.dias.map(d => {
-                          const ativo = date?.toDateString() === d.toDateString()
-                          const hoje = d.toDateString() === new Date().toDateString()
-                          return (
-                            <button key={d.toISOString()} onClick={() => { setDate(d); setStep(3) }}
-                              className="rounded-xl py-2.5 flex flex-col items-center transition-all"
-                              style={{
-                                background: ativo ? cor : '#F7F6F3',
-                                color: ativo ? '#fff' : '#1C1B18',
-                                border: ativo ? `1px solid ${cor}` : hoje ? `1px solid ${cor}80` : '1px solid #EAE8E1',
-                              }}>
-                              <span className="text-[10px] font-semibold opacity-70">{hoje ? 'HOJE' : DIA_SEMANA[d.getDay()]}</span>
-                              <span className="text-base font-black" style={{ fontFamily: 'Fraunces, serif' }}>{d.getDate()}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <button onClick={() => podeVoltarMes && setMesView(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                      disabled={!podeVoltarMes}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#EAE8E1] disabled:opacity-30 hover:bg-[#F7F6F3] transition-colors">
+                      <ArrowLeft className="size-3.5" />
+                    </button>
+                    <p className="text-sm font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>
+                      {MES[mesView.getMonth()]} {mesView.getFullYear()}
+                    </p>
+                    <button onClick={() => setMesView(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#EAE8E1] hover:bg-[#F7F6F3] transition-colors">
+                      <ArrowRight className="size-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1 mb-1.5">
+                    {DIA_SEMANA.map(d => (
+                      <div key={d} className="text-center text-[10px] font-bold text-[#C8C5BB] uppercase">{d}</div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1">
+                    {celulasCalendario.map((d, i) => {
+                      if (!d) return <div key={i} />
+                      const passado = d.getTime() < hoje.getTime()
+                      const ativo = date?.toDateString() === d.toDateString()
+                      const ehHoje = d.toDateString() === hoje.toDateString()
+                      return (
+                        <button key={d.toISOString()} disabled={passado} onClick={() => { setDate(d); setStep(3) }}
+                          className="aspect-square rounded-lg flex items-center justify-center text-sm font-bold transition-all disabled:opacity-25 disabled:cursor-not-allowed"
+                          style={{
+                            background: ativo ? cor : 'transparent',
+                            color: ativo ? '#fff' : '#1C1B18',
+                            border: ativo ? `1px solid ${cor}` : ehHoje ? `1px solid ${cor}80` : '1px solid transparent',
+                          }}>
+                          {d.getDate()}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
