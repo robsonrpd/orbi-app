@@ -8,7 +8,10 @@ import { MeuSiteClient } from './meu-site-client'
 export default async function MeuSitePage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
-  const { data: company } = await service.from('companies').select('slug, name').eq('id', companyId).single()
+  const [{ data: company }, { data: services }] = await Promise.all([
+    service.from('companies').select('slug, name').eq('id', companyId).single(),
+    service.from('services').select('id, name, price').eq('company_id', companyId).eq('active', true).order('name'),
+  ])
   const site = await getSiteConfig()
 
   return (
@@ -16,7 +19,7 @@ export default async function MeuSitePage() {
       <Topbar title="Meu Site" subtitle="A página pública que seus clientes acessam para agendar" />
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {company?.slug && <BookingLinkCard slug={company.slug} />}
-        <MeuSiteClient initial={site} companyName={company?.name ?? ''} />
+        <MeuSiteClient initial={site} companyName={company?.name ?? ''} services={services ?? []} slug={company?.slug ?? ''} />
       </div>
     </div>
   )

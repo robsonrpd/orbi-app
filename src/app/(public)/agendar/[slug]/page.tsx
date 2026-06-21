@@ -11,7 +11,20 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params
   const info = await getBookingInfo(slug)
 
-  if ('error' in info) notFound()
+  if ('error' in info) {
+    if ('desativada' in info) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 text-center" style={{ background: '#F7F6F3' }}>
+          <div>
+            <p className="text-4xl mb-3">🔒</p>
+            <h1 className="text-lg font-bold text-[#1C1B18]">Página de agendamento indisponível</h1>
+            <p className="text-sm text-[#8C8880] mt-1">Entre em contato diretamente com o estabelecimento.</p>
+          </div>
+        </div>
+      )
+    }
+    notFound()
+  }
 
   return (
     <AgendarClient

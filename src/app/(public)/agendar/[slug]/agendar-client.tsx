@@ -71,6 +71,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [desconto, setDesconto] = useState<{ percentual: number; valorFinal: number } | null>(null)
 
   const days = useMemo(buildDays, [])
   const aberto = useMemo(() => estaAbertoAgora(schedule), [schedule])
@@ -112,6 +113,7 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
     })
     setLoading(false)
     if ('error' in result) { setError(result.error ?? 'Erro ao agendar.'); return }
+    setDesconto(result.desconto ?? null)
     setDone(true)
   }
 
@@ -119,6 +121,11 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
 
   return (
     <div className="min-h-screen" style={{ background: '#F7F6F3' }}>
+      {site.avisoAtivo && site.avisoTexto && (
+        <div className="px-4 py-2 text-center text-xs font-bold text-white" style={{ background: '#0DB57A' }}>
+          📣 {site.avisoTexto}
+        </div>
+      )}
       {/* Header da empresa */}
       <div className="px-4 pt-6 pb-5" style={{ background: 'linear-gradient(160deg, #0A0F1E 0%, #0D1635 60%, #1A2B5E 100%)' }}>
         <div className="max-w-md mx-auto text-center">
@@ -184,6 +191,12 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
                 {service?.name} em <strong>{companyName}</strong>{' '}
                 no dia <strong>{date && `${date.getDate()}/${date.getMonth() + 1}`}</strong> às <strong>{time}</strong>.
               </p>
+              {desconto && (
+                <div className="mt-3 rounded-xl px-4 py-2.5 inline-block" style={{ background: '#E6F9F3' }}>
+                  <p className="text-sm font-bold text-[#0DB57A]">🎁 Você ganhou {desconto.percentual}% de desconto na primeira visita!</p>
+                  <p className="text-xs text-[#0DB57A]">Valor com desconto: {fmtMoney(desconto.valorFinal)}</p>
+                </div>
+              )}
               <p className="text-xs text-[#C8C5BB] mt-3">Chegue com alguns minutos de antecedência.</p>
             </div>
           ) : (
@@ -228,6 +241,11 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
               {/* Passo 1 — serviço */}
               {step === 1 && (
                 <div className="space-y-5">
+                  {site.descontoAtivo && (
+                    <div className="rounded-xl px-4 py-2.5 text-center text-xs font-bold" style={{ background: '#E6F9F3', color: '#0DB57A' }}>
+                      🎁 Novos clientes ganham {site.descontoValor}{site.descontoTipo === 'percentual' ? '%' : 'R$'} de desconto na primeira visita!
+                    </div>
+                  )}
                   <div className="space-y-2.5">
                     {services.length === 0 && (
                       <p className="text-sm text-[#8C8880] text-center py-6">Nenhum serviço disponível no momento.</p>

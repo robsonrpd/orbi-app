@@ -6,6 +6,15 @@ export type SiteConfig = {
   whatsapp: string
   instagram: string
   endereco: string
+  ordemServicos: string[]
+  avisoAtivo: boolean
+  avisoTexto: string
+  paginaAtiva: boolean
+  qrCorFrente: string
+  qrCorFundo: string
+  descontoAtivo: boolean
+  descontoTipo: 'percentual' | 'fixo'
+  descontoValor: number
 }
 
 export const SITE_DEFAULT: SiteConfig = {
@@ -16,4 +25,13 @@ export const SITE_DEFAULT: SiteConfig = {
   whatsapp: '',
   instagram: '',
   endereco: '',
+  ordemServicos: [],
+  avisoAtivo: false,
+  avisoTexto: '',
+  paginaAtiva: true,
+  qrCorFrente: '#000000',
+  qrCorFundo: '#FFFFFF',
+  descontoAtivo: false,
+  descontoTipo: 'percentual',
+  descontoValor: 10,
 }

@@ -24,6 +24,10 @@ export async function getBookingInfo(slug: string) {
 
   if (!company) return { error: 'Empresa não encontrada.' as const }
 
+  const settingsRaw = (company.settings ?? {}) as { site?: Partial<SiteConfig> }
+  const siteCheck: SiteConfig = { ...SITE_DEFAULT, ...(settingsRaw.site ?? {}) }
+  if (!siteCheck.paginaAtiva) return { error: 'Página desativada.' as const, desativada: true as const }
+
   const [{ data: services }, { data: reviews }] = await Promise.all([
     service.from('services')
       .select('id, name, price, duration_minutes, image_url')
@@ -45,11 +49,20 @@ export async function getBookingInfo(slug: string) {
     : null
   const site: SiteConfig = { ...SITE_DEFAULT, ...(settings.site ?? {}) }
 
+  const servicosOrdenados = [...(services ?? [])].sort((a, b) => {
+    const ia = site.ordemServicos.indexOf(a.id)
+    const ib = site.ordemServicos.indexOf(b.id)
+    if (ia === -1 && ib === -1) return 0
+    if (ia === -1) return 1
+    if (ib === -1) return -1
+    return ia - ib
+  })
+
   return {
     companyId: company.id,
     companyName: site.titulo || company.name,
     logoUrl: company.logo_url,
-    services: services ?? [],
+    services: servicosOrdenados,
     schedule: settings.schedule ?? {},
     intervalMinutes: settings.interval_minutes ?? 30,
     avaliacoes: list,
@@ -145,7 +158,7 @@ export async function createPublicAppointment(input: {
 
   const { data: svc } = await service
     .from('services')
-    .select('id, duration_minutes')
+    .select('id, duration_minutes, price')
     .eq('id', input.serviceId)
     .eq('company_id', company.id)
     .single()
@@ -175,6 +188,7 @@ export async function createPublicAppointment(input: {
     .eq('phone', phone)
     .maybeSingle()
 
+  const primeiraVisita = !existingContact
   let contactId = existingContact?.id
   if (!contactId) {
     const { data: newContact, error: contactError } = await service
@@ -184,6 +198,19 @@ export async function createPublicAppointment(input: {
       .single()
     if (contactError || !newContact) return { error: 'Erro ao registrar seus dados.' as const }
     contactId = newContact.id
+  }
+
+  // Desconto de primeira visita (apenas informativo — cobrança é feita no balcão)
+  const { data: companyFull } = await service.from('companies').select('settings').eq('id', company.id).single()
+  const site: SiteConfig = { ...SITE_DEFAULT, ...((companyFull?.settings as { site?: Partial<SiteConfig> } | null)?.site ?? {}) }
+  let desconto: { percentual: number; valorFinal: number } | null = null
+  if (primeiraVisita && site.descontoAtivo) {
+    const off = site.descontoTipo === 'percentual'
+      ? svc.price * (site.descontoValor / 100)
+      : site.descontoValor
+    const valorFinal = Math.max(0, svc.price - off)
+    const percentual = site.descontoTipo === 'percentual' ? site.descontoValor : Math.round((off / svc.price) * 100)
+    desconto = { percentual, valorFinal }
   }
 
   const { error } = await service.from('appointments').insert({
@@ -197,5 +224,5 @@ export async function createPublicAppointment(input: {
   })
   if (error) return { error: 'Erro ao criar agendamento.' as const }
 
-  return { success: true as const }
+  return { success: true as const, desconto }
 }
