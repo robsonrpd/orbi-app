@@ -70,7 +70,11 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
   async function delMsgPronta(id: string) { setProntas(p => p.filter(x => x.id !== id)); await excluirMsgPronta(id) }
 
   const vendMap = new Map(vendedores.map(v => [v.id, v.nome]))
-  function leadsDe(k: string) { return leads.filter(l => (l.funil_etapa ?? 'novo') === k) }
+  function leadsDe(k: string) {
+    return leads
+      .filter(l => (l.funil_etapa ?? 'novo') === k)
+      .sort((a, b) => new Date(b.lastMessageAt ?? b.created_at).getTime() - new Date(a.lastMessageAt ?? a.created_at).getTime())
+  }
   function totalDe(k: string) { return leadsDe(k).reduce((s, l) => s + Number(l.funil_valor ?? 0), 0) }
 
   async function soltar(etapa: string) {
