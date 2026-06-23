@@ -11,7 +11,12 @@ import {
 } from 'lucide-react'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string }
+
+function fmtHoraMsg(ts: string | undefined) {
+  if (!ts) return null
+  return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
 type Tarefa = { id: string; titulo: string; vence_em: string | null; feito: boolean }
 type Anotacao = { id: string; texto: string; created_at: string }
 type Produto = { id: string; nome: string; quantidade: number; preco: number; desconto: number }
@@ -79,7 +84,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     if (r?.produto) { setProdutos(ps => [...ps, r.produto as Produto]); setPSel(''); setPNome(''); setPQtd('1'); setPPreco(''); setPDesc('') }
   }
   async function delProduto(id: string) { setProdutos(ps => ps.filter(x => x.id !== id)); await delProdutoLead(id) }
-  async function enviarOrc() { setEnviandoOrc(true); const r = await enviarOrcamentoLead(lead.id); setEnviandoOrc(false); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '📋 Orçamento enviado' }]) }
+  async function enviarOrc() { setEnviandoOrc(true); const r = await enviarOrcamentoLead(lead.id); setEnviandoOrc(false); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '📋 Orçamento enviado', ts: new Date().toISOString() }]) }
   const totalProdutos = produtos.reduce((s, p) => s + (Number(p.quantidade) * Number(p.preco) - Number(p.desconto)), 0)
 
   // salvar dados do lead (botão) — grava tudo de uma vez e atualiza o card
@@ -112,7 +117,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     if (url) {
       const tipo = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'document'
       const r = await enviarArquivoLead(lead.id, url, tipo, f.name)
-      if (!r?.error) setMsgs(m => [...m, { role: 'human', content: tipo === 'image' ? '📷 Imagem' : tipo === 'video' ? '🎥 Vídeo' : `📎 ${f.name}`, midia: { tipo, url, nome: f.name } }])
+      if (!r?.error) setMsgs(m => [...m, { role: 'human', content: tipo === 'image' ? '📷 Imagem' : tipo === 'video' ? '🎥 Vídeo' : `📎 ${f.name}`, ts: new Date().toISOString(), midia: { tipo, url, nome: f.name } }])
     }
     setAnexando(false); if (fileRef.current) fileRef.current.value = ''
   }
@@ -130,7 +135,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         setGravando(false); setAnexando(true)
         const url = await uploadBlob(blob, `audio-${Date.now()}.webm`)
-        if (url) { const r = await enviarAudioLead(lead.id, url); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url } }]) }
+        if (url) { const r = await enviarAudioLead(lead.id, url); if (!r?.error) setMsgs(m => [...m, { role: 'human', content: '🎤 Áudio', ts: new Date().toISOString(), midia: { tipo: 'audio', url } }]) }
         setAnexando(false)
       }
       recRef.current = rec; rec.start(); setGravando(true)
@@ -146,7 +151,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     const r = await responderLead(lead.id, t)
     setEnviando(false)
     if (r?.error) { setErroChat(r.error); return }
-    setMsgs(m => [...m, { role: 'human', content: t }]); setTexto('')
+    setMsgs(m => [...m, { role: 'human', content: t, ts: new Date().toISOString() }]); setTexto('')
   }
 
   function addTag() {
@@ -221,6 +226,11 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                       {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="max-w-full mb-1" />}
                       {m.midia?.tipo === 'document' && <a href={m.midia.url} target="_blank" className="flex items-center gap-1.5 underline mb-1"><Paperclip className="size-3.5" />{m.midia.nome || 'Documento'}</a>}
                       {(!m.midia || m.content !== '📷 Imagem' && m.content !== '🎥 Vídeo' && m.content !== '🎤 Áudio') && <span>{m.content}</span>}
+                      {fmtHoraMsg(m.ts) && (
+                        <span className={`block text-[10px] mt-1 text-right ${m.role === 'assistant' ? 'text-white/60' : 'text-[#8C8880]'}`}>
+                          {fmtHoraMsg(m.ts)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )

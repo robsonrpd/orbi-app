@@ -11,7 +11,7 @@ function waNumero(phone: string) {
   return d.startsWith('55') ? d : `55${d}`
 }
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; ts?: string }
 
 /** Envia mensagem ao lead pelo WhatsApp (a partir do CRM) e registra na conversa. */
 export async function responderLead(contactId: string, texto: string) {
@@ -35,7 +35,7 @@ export async function responderLead(contactId: string, texto: string) {
   const chave = numero.slice(-8)
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
-  const nova: Msg = { role: 'human', content: texto.trim() }
+  const nova: Msg = { role: 'human', content: texto.trim(), ts: new Date().toISOString() }
 
   if (conv) {
     const messages = [...((conv.messages as Msg[]) ?? []), nova].slice(-60)

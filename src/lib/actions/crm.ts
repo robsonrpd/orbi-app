@@ -22,7 +22,7 @@ async function logConversa(service: ReturnType<typeof createServiceClient>, comp
   const chave = numero.slice(-8)
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
-  const nova = { role: 'human', content, ...(midia ? { midia } : {}) }
+  const nova = { role: 'human', content, ts: new Date().toISOString(), ...(midia ? { midia } : {}) }
   if (conv) {
     const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
     await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
@@ -135,7 +135,7 @@ export async function enviarOrcamentoLead(contactId: string) {
   const chave = numero.slice(-8)
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
-  const nova = { role: 'human', content: texto }
+  const nova = { role: 'human', content: texto, ts: new Date().toISOString() }
   if (conv) {
     const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
     await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)

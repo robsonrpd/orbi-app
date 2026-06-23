@@ -6,7 +6,7 @@ import { enviarTexto, enviarMedia, enviarAudio } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string }
 
 export type ConversaResumo = {
   id: string
@@ -77,7 +77,8 @@ async function resolverConversa(conversaId: string) {
 }
 
 async function registrarSaida(service: ReturnType<typeof createServiceClient>, conv: { id: string; messages: unknown }, msg: Msg) {
-  const messages = [...((conv.messages as Msg[] | null) ?? []), msg].slice(-60)
+  const comTimestamp = { ...msg, ts: msg.ts ?? new Date().toISOString() }
+  const messages = [...((conv.messages as Msg[] | null) ?? []), comTimestamp].slice(-60)
   await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
   revalidatePath('/dashboard/conversas')
 }

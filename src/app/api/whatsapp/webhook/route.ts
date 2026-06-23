@@ -202,7 +202,7 @@ async function avisarDesconexao(
 }
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string }
 
 const EXT: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
 
@@ -240,7 +240,7 @@ async function registrarSaida(
   // dedup: se a última mensagem registrada já é esse conteúdo (eco do envio pelo Orbi), ignora
   const ultima = anteriores[anteriores.length - 1]
   if (ultima && (ultima.role === 'human' || ultima.role === 'assistant') && ultima.content === conteudo) return
-  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo, ...(midia ? { midia } : {}) }].slice(-40)
+  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo, ts: new Date().toISOString(), ...(midia ? { midia } : {}) }].slice(-40)
   const patch = { messages: novas, last_message_at: new Date().toISOString() }
   if (conv) await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
   else await service.from('conversations').insert({ company_id: companyId, contact_id: null, numero, ...patch } as never)
@@ -255,8 +255,9 @@ async function salvarConversa(
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
 
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
-  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ...(midia ? { midia } : {}) }]
-  if (aiReply) novas.push({ role: 'assistant', content: aiReply })
+  const agora = new Date().toISOString()
+  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ts: agora, ...(midia ? { midia } : {}) }]
+  if (aiReply) novas.push({ role: 'assistant', content: aiReply, ts: agora })
 
   const patch: Record<string, unknown> = {
     messages: novas.slice(-40),

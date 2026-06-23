@@ -10,7 +10,7 @@ import {
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string } }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string }
 
 const EMOJIS = ['😀', '😂', '😍', '👍', '🙏', '🎉', '❤️', '😊', '😢', '😮', '🔥', '✅', '👏', '🙌', '😅', '🤔', '😎', '💪', '📅', '⏰']
 
@@ -106,7 +106,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     const res = await responderConversa(selecionada, t)
     setEnviando(false)
     if (!('error' in res)) {
-      setMensagens(prev => [...prev, { role: 'human', content: t }])
+      setMensagens(prev => [...prev, { role: 'human', content: t, ts: new Date().toISOString() }])
       listarConversas().then(setConversas)
     } else {
       setErro(res.error ?? 'Erro ao enviar.')
@@ -133,7 +133,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     const res = await enviarMidiaConversa(selecionada, { url, mediatype: tipo, fileName: file.name })
     setEnviando(false)
     if (!('error' in res)) {
-      setMensagens(prev => [...prev, { role: 'human', content: file.name, midia: { tipo, url, nome: file.name } }])
+      setMensagens(prev => [...prev, { role: 'human', content: file.name, ts: new Date().toISOString(), midia: { tipo, url, nome: file.name } }])
       listarConversas().then(setConversas)
     } else {
       setErro(res.error ?? 'Erro ao enviar.')
@@ -170,7 +170,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     const res = await enviarAudioConversa(selecionada, url)
     setEnviando(false)
     if (!('error' in res)) {
-      setMensagens(prev => [...prev, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url } }])
+      setMensagens(prev => [...prev, { role: 'human', content: '🎤 Áudio', ts: new Date().toISOString(), midia: { tipo: 'audio', url } }])
       listarConversas().then(setConversas)
     } else {
       setErro(res.error ?? 'Erro ao enviar.')
@@ -261,6 +261,11 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>
                       )}
                       <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
+                      {m.ts && (
+                        <span className={`block text-[10px] mt-1 text-right ${minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
+                          {fmtHora(m.ts)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )
