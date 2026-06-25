@@ -4,16 +4,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, User, Building2, Mail, Lock, ArrowRight, Check, Phone } from 'lucide-react'
+import { Loader2, User, Building2, Mail, Lock, ArrowRight, Check, Phone, Eye, EyeOff } from 'lucide-react'
 import { NICHOS } from '@/lib/nichos'
 
 const perks = ['14 dias grátis', 'Sem cartão de crédito', 'Cancele quando quiser']
 
 export default function CadastroPage() {
   const router = useRouter()
-  const [form, setForm] = useState({ name: '', company: '', phone: '', email: '', password: '', business_type: 'otica' })
+  const [form, setForm] = useState({ name: '', company: '', phone: '', email: '', password: '', confirmPassword: '', business_type: 'otica' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   function set(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -21,8 +23,14 @@ export default function CadastroPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError(null)
+
+    if (form.password !== form.confirmPassword) {
+      setError('As senhas não coincidem.')
+      return
+    }
+
+    setLoading(true)
 
     const supabase = createClient()
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -175,9 +183,14 @@ export default function CadastroPage() {
           </label>
           <div className="relative">
             <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
-            <input type="password" placeholder="Mínimo 8 caracteres" value={form.password}
+            <input type={showPassword ? 'text' : 'password'} placeholder="Mínimo 8 caracteres" value={form.password}
               onChange={e => set('password', e.target.value)} required minLength={8}
-              className="w-full h-11 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
+              className="w-full h-11 pl-10 pr-10 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
+            <button type="button" onClick={() => setShowPassword(s => !s)}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8C8880] hover:text-[#1C1B18] transition-colors"
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
           </div>
           {/* Indicador de força */}
           {form.password.length > 0 && (
@@ -195,8 +208,39 @@ export default function CadastroPage() {
           )}
         </div>
 
+        {/* Confirmar senha */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-[#2E2D29] uppercase tracking-wider"
+            style={{ fontFamily: 'Barlow, sans-serif' }}>
+            Confirmar senha
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
+            <input type={showConfirmPassword ? 'text' : 'password'} placeholder="Digite a senha novamente" value={form.confirmPassword}
+              onChange={e => set('confirmPassword', e.target.value)} required minLength={8}
+              className="w-full h-11 pl-10 pr-10 rounded-xl border text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:bg-white focus:ring-4"
+              style={{
+                borderColor: form.confirmPassword.length > 0 && form.confirmPassword !== form.password ? '#EF4444' : '#EAE8E1',
+                background: '#F7F6F3',
+              }} />
+            <button type="button" onClick={() => setShowConfirmPassword(s => !s)}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8C8880] hover:text-[#1C1B18] transition-colors"
+              aria-label={showConfirmPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+              {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
+          {form.confirmPassword.length > 0 && form.confirmPassword !== form.password && (
+            <p className="text-xs text-red-500">As senhas não coincidem.</p>
+          )}
+          {form.confirmPassword.length > 0 && form.confirmPassword === form.password && (
+            <p className="flex items-center gap-1 text-xs text-[#0DB57A]">
+              <Check className="size-3" strokeWidth={2.5} /> Senhas coincidem
+            </p>
+          )}
+        </div>
+
         {/* Botão */}
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || (form.confirmPassword.length > 0 && form.confirmPassword !== form.password)}
           className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60 mt-2"
           style={{
             fontFamily: 'Barlow, sans-serif',
