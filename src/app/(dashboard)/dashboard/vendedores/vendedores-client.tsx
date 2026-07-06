@@ -17,7 +17,9 @@ type Vendedor = {
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
-export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
+type Termo = { singular: string; plural: string }
+
+export function VendedoresClient({ vendedores, termo = { singular: 'Vendedor', plural: 'Vendedores' } }: { vendedores: Vendedor[]; termo?: Termo }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Vendedor | null>(null)
   const [viewing, setViewing] = useState<Vendedor | null>(null)
@@ -72,9 +74,9 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
     const vendId = editing?.id ?? (result as { id?: string }).id
     if (!editing?.temLogin && senhaLogin.length >= 6 && vendId) {
       const emailVal = (fd.get('email') as string)?.trim()
-      if (!emailVal) { setLoading(false); setError('Para criar o login, preencha o e-mail do vendedor.'); return }
+      if (!emailVal) { setLoading(false); setError(`Para criar o login, preencha o e-mail do ${termo.singular.toLowerCase()}.`); return }
       const lr = await criarLoginVendedor(vendId, senhaLogin)
-      if (lr?.error) { setLoading(false); setError('Vendedor salvo, mas o login falhou: ' + lr.error); return }
+      if (lr?.error) { setLoading(false); setError(`${termo.singular} salvo, mas o login falhou: ` + lr.error); return }
       // mostra as credenciais na tela (não fecha o modal) para o dono copiar
       setLoading(false)
       setCredenciais({ email: emailVal, senha: senhaLogin })
@@ -99,13 +101,13 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>Vendedores</h2>
-            <p className="text-sm text-[#8C8880] mt-0.5">Equipe de vendas e permissões de acesso</p>
+            <h2 className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>{termo.plural}</h2>
+            <p className="text-sm text-[#8C8880] mt-0.5">Equipe e permissões de acesso</p>
           </div>
           <button onClick={openNew}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
             style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-            <Plus className="size-4" /> Novo Vendedor
+            <Plus className="size-4" /> Novo {termo.singular}
           </button>
         </div>
 
@@ -116,11 +118,11 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 <Users className="size-7 text-[#1A56FF]" strokeWidth={1.5} />
               </div>
               <div className="text-center">
-                <p className="text-base font-bold text-[#1C1B18]">Nenhum vendedor cadastrado</p>
+                <p className="text-base font-bold text-[#1C1B18]">Nenhum {termo.singular.toLowerCase()} cadastrado</p>
                 <p className="text-sm text-[#8C8880] mt-1">Cadastre sua equipe e defina o que cada um pode acessar.</p>
               </div>
               <button onClick={openNew} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-                <Plus className="size-4" /> Cadastrar vendedor
+                <Plus className="size-4" /> Cadastrar {termo.singular.toLowerCase()}
               </button>
             </div>
           </GlowCard>
@@ -182,7 +184,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 </div>
                 <div>
                   <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{viewing.nome}</p>
-                  <p className="text-xs text-[#8C8880]">{[viewing.telefone, viewing.email].filter(Boolean).join(' · ') || 'Vendedor'}</p>
+                  <p className="text-xs text-[#8C8880]">{[viewing.telefone, viewing.email].filter(Boolean).join(' · ') || termo.singular}</p>
                 </div>
               </div>
               <button onClick={() => setViewing(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] hover:bg-[#F7F6F3]"><X className="size-5" /></button>
@@ -208,7 +210,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
               <button onClick={() => { const v = viewing; setViewing(null); openEdit(v) }}
                 className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-                <Edit2 className="size-4" /> Editar Vendedor
+                <Edit2 className="size-4" /> Editar {termo.singular}
               </button>
             </div>
           </div>
@@ -221,7 +223,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-[#E6F9F3] flex items-center justify-center mx-auto mb-3"><Check className="size-6 text-[#0DB57A]" strokeWidth={2} /></div>
             <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Acesso criado! 🎉</p>
-            <p className="text-sm text-[#8C8880] mt-1 mb-4">Entregue estas credenciais ao vendedor. Ele entra em <strong>/login</strong>.</p>
+            <p className="text-sm text-[#8C8880] mt-1 mb-4">Entregue estas credenciais ao {termo.singular.toLowerCase()}. Ele entra em <strong>/login</strong>.</p>
             <div className="rounded-xl bg-[#F7F6F3] border border-[#EAE8E1] p-3 text-left text-sm space-y-1 mb-3">
               <p><span className="text-[#8C8880]">E-mail:</span> <strong className="text-[#1C1B18] break-all">{credenciais.email}</strong></p>
               <p><span className="text-[#8C8880]">Senha:</span> <strong className="text-[#1C1B18]">{credenciais.senha}</strong></p>
@@ -245,7 +247,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
             <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ background: 'linear-gradient(135deg, #0A0F1E, #1A56FF)' }}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center"><Users className="size-4 text-white" strokeWidth={1.5} /></div>
-                <p className="text-sm font-bold text-white">{editing ? 'Editar Vendedor' : 'Novo Vendedor'}</p>
+                <p className="text-sm font-bold text-white">{editing ? `Editar ${termo.singular}` : `Novo ${termo.singular}`}</p>
               </div>
               <button onClick={() => setModalOpen(false)} className="text-white/50 hover:text-white"><X className="size-5" /></button>
             </div>
@@ -280,7 +282,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="size-4 text-[#1A56FF]" />
-                    <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">O que esse vendedor PODE acessar</p>
+                    <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">O que esse {termo.singular.toLowerCase()} PODE acessar</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button type="button" onClick={() => setPodeAcessar(new Set(AREAS.map(a => a.key)))}
@@ -323,7 +325,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 ) : (
                   <div className="space-y-1.5">
                     <p className="text-xs text-[#8C8880]">
-                      <LogIn className="size-3 inline mb-0.5 mr-0.5" /> Defina uma senha para o vendedor entrar com o <strong>e-mail</strong> informado acima. Deixe em branco se não quiser criar agora.
+                      <LogIn className="size-3 inline mb-0.5 mr-0.5" /> Defina uma senha para o {termo.singular.toLowerCase()} entrar com o <strong>e-mail</strong> informado acima. Deixe em branco se não quiser criar agora.
                     </p>
                     <input value={senhaLogin} onChange={e => setSenhaLogin(e.target.value)} type="text"
                       placeholder="Senha de acesso (mín. 6) — opcional" className={inputCls} />

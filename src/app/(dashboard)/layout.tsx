@@ -37,7 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <MobileNavProvider>
       <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
-        <Sidebar companyName={company?.name ?? 'Minha Empresa'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} esconderNicho={esconderNicho} />
+        <Sidebar companyName={company?.name ?? 'Minha Empresa'} logoUrl={company?.logo_url ?? null} canEditLogo={!impersonation && modo.fonte !== 'login'} modo={modo} vendedores={vendedoresList ?? []} esconderNicho={esconderNicho} businessType={company?.business_type ?? null} />
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
           {impersonation && <ImpersonationBanner companyName={impersonation.companyName} />}
           {!impersonation && (

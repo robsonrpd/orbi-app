@@ -34,7 +34,11 @@ export const NICHOS: Nicho[] = [
   {
     key: 'geral', label: 'Geral / Outro', emoji: '🏢',
     descricao: 'Editoras, serviços e qualquer outro ramo.',
-    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
+    esconder: [
+      '/dashboard/agenda', '/dashboard/funcionamento',
+      '/dashboard/receitas', '/dashboard/ordens-servico',
+      '/dashboard/produtos', '/dashboard/caixa', '/dashboard/meu-site',
+    ],
   },
 ]
 
@@ -50,6 +54,13 @@ export function nichoEsconde(businessType: string | null | undefined): string[] 
 
 export function nichoLabel(businessType: string | null | undefined): string {
   return NICHOS.find(x => x.key === (businessType ?? NICHO_DEFAULT))?.label ?? 'Negócio'
+}
+
+/** Termo usado para o módulo de "equipe" — Vendedor faz sentido em vendas, Colaborador é mais genérico. */
+export function termoEquipe(businessType: string | null | undefined): { singular: string; plural: string } {
+  return (businessType ?? NICHO_DEFAULT) === 'geral'
+    ? { singular: 'Colaborador', plural: 'Colaboradores' }
+    : { singular: 'Vendedor', plural: 'Vendedores' }
 }
 
 // Sugestões rápidas de serviços por ramo

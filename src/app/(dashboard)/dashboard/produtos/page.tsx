@@ -1,9 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { guardNicho } from '@/lib/auth/nicho'
 import { Topbar } from '@/components/orbi/topbar'
 import { ProdutosClient } from './produtos-client'
 
 export default async function ProdutosPage() {
+  await guardNicho('/dashboard/produtos')
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 

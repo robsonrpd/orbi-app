@@ -1,10 +1,12 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { guardModo } from '@/lib/auth/modo'
+import { guardNicho } from '@/lib/auth/nicho'
 import { Topbar } from '@/components/orbi/topbar'
 import { CaixaClient } from './caixa-client'
 
 export default async function CaixaPage() {
+  await guardNicho('/dashboard/caixa')
   await guardModo('caixa')
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()

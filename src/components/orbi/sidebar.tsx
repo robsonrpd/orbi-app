@@ -16,6 +16,7 @@ import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
 import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
 import { useMobileNav } from '@/components/orbi/mobile-nav'
+import { termoEquipe } from '@/lib/nichos'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -49,18 +50,21 @@ const orbiWhatsapp = {
 type ModoProps = { funcionario: boolean; bloqueios: string[]; temPin: boolean; vendedorNome: string | null; fonte?: 'login' | 'cookie' | null }
 type VendedorMini = { id: string; nome: string }
 
-export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vendedores = [], esconderNicho = [] }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps; vendedores?: VendedorMini[]; esconderNicho?: string[] }) {
+export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vendedores = [], esconderNicho = [], businessType = null }: { companyName?: string; logoUrl?: string | null; canEditLogo?: boolean; modo?: ModoProps; vendedores?: VendedorMini[]; esconderNicho?: string[]; businessType?: string | null }) {
   const pathname = usePathname()
   const router = useRouter()
   const { open, setOpen } = useMobileNav()
   const m = modo ?? { funcionario: false, bloqueios: [], temPin: false, vendedorNome: null, fonte: null }
+  const equipe = termoEquipe(businessType)
   function podeVer(href: string) {
     if (esconderNicho.includes(href)) return false      // nicho da empresa
     if (!m.funcionario) return true
     const bloq = BLOQUEIO_POR_HREF[href]                 // bloqueio do vendedor
     return !(bloq && m.bloqueios.includes(bloq))
   }
-  const visibleNav = navItems.filter(item => podeVer(item.href))
+  const visibleNav = navItems
+    .filter(item => podeVer(item.href))
+    .map(item => item.href === '/dashboard/vendedores' ? { ...item, label: equipe.plural } : item)
   const waChildren = orbiWhatsapp.children.filter(c => podeVer(c.href))
   const waAtivo = waChildren.some(c => pathname.startsWith(c.href))
   const [waOpen, setWaOpen] = useState(waAtivo)
