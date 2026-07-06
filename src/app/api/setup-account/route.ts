@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient, createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email'
+import { NICHO_KEYS, NICHO_DEFAULT } from '@/lib/nichos'
 
 function toSlug(name: string): string {
   return name
@@ -23,8 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, companyName, phone, businessType } = await req.json()
-    const NICHOS_VALIDOS = ['otica', 'barbearia', 'loja', 'clinica']
-    const ramo = NICHOS_VALIDOS.includes(businessType) ? businessType : 'otica'
+    const ramo = NICHO_KEYS.includes(businessType) ? businessType : NICHO_DEFAULT
 
     const service = createServiceClient()
 

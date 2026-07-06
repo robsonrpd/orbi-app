@@ -31,6 +31,11 @@ export const NICHOS: Nicho[] = [
     descricao: 'Agendamentos, serviços e ficha de clientes.',
     esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
   },
+  {
+    key: 'geral', label: 'Geral / Outro', emoji: '🏢',
+    descricao: 'Editoras, serviços e qualquer outro ramo.',
+    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
+  },
 ]
 
 export const NICHO_DEFAULT = 'otica'
@@ -53,6 +58,7 @@ export const SUGESTOES_SERVICO: Record<string, string[]> = {
   barbearia: ['Corte de cabelo', 'Barba', 'Corte + Barba', 'Sobrancelha', 'Pezinho', 'Hidratação', 'Coloração', 'Escova / Progressiva', 'Luzes / Mechas', 'Corte infantil', 'Manicure', 'Pedicure'],
   clinica: ['Limpeza de pele', 'Massagem relaxante', 'Drenagem linfática', 'Depilação', 'Design de sobrancelha', 'Peeling', 'Avaliação', 'Microagulhamento', 'Botox / Preenchimento', 'Massagem modeladora'],
   loja: ['Montagem / Entrega', 'Assistência técnica', 'Garantia estendida', 'Instalação'],
+  geral: ['Atendimento', 'Consultoria', 'Orçamento', 'Entrega', 'Suporte'],
 }
 
 export function sugestoesServico(businessType: string | null | undefined): string[] {
