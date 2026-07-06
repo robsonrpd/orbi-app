@@ -8,7 +8,8 @@ import { moverLead, criarLead } from '@/lib/actions/funil'
 import { criarMsgPronta, excluirMsgPronta } from '@/lib/actions/crm'
 import { deleteContact } from '@/lib/actions/contacts'
 import { LeadDetalhe, type Lead } from '@/components/orbi/lead-detalhe'
-import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User } from 'lucide-react'
+import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
+import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User, Upload, Download } from 'lucide-react'
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 function diasDesde(iso: string) { return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) }
@@ -61,6 +62,20 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
   const [msgsOpen, setMsgsOpen] = useState(false)
   const [prontas, setProntas] = useState(msgsProntas)
   const [mpTit, setMpTit] = useState(''); const [mpTxt, setMpTxt] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
+
+  async function exportarExcel() {
+    const XLSX = await import('xlsx')
+    const dados = leads.map(l => ({
+      Nome: l.name ?? '', Telefone: l.phone ?? '', Etapa: l.funil_etapa ?? 'novo',
+      Valor: Number(l.funil_valor ?? 0), Origem: l.origem ?? '', Tags: (l.tags ?? []).join(', '),
+      'Cadastrado em': new Date(l.created_at).toLocaleDateString('pt-BR'),
+    }))
+    const ws = XLSX.utils.json_to_sheet(dados)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads')
+    XLSX.writeFile(wb, `crm-leads-${new Date().toISOString().split('T')[0]}.xlsx`)
+  }
 
   async function addMsgPronta() {
     if (!mpTit.trim() || !mpTxt.trim()) return
@@ -116,6 +131,14 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
           {leads.length} leads · <strong className="text-[#1A56FF]">{fmt(totalAberto)}</strong> em aberto · clique num card para abrir a conversa
         </p>
         <div className="flex items-center gap-2">
+          <button onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#2E2D29]">
+            <Upload className="size-4" /> Importar
+          </button>
+          <button onClick={exportarExcel}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#2E2D29]">
+            <Download className="size-4" /> Exportar
+          </button>
           <button onClick={() => setMsgsOpen(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#F59E0B] bg-[#FEF3C7] hover:bg-[#FDE9A8]">
             <Zap className="size-4" /> Mensagens prontas
@@ -285,6 +308,8 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
           </div>
         </div>
       )}
+
+      <ImportarContatosModal open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   )
 }

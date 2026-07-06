@@ -3,12 +3,12 @@ import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { getModo } from '@/lib/auth/modo'
 import { Topbar } from '@/components/orbi/topbar'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart } from '@/components/orbi/dashboard-charts'
+import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart, ReceitaDespesaChart } from '@/components/orbi/dashboard-charts'
 import { RelatorioMensal } from '@/components/orbi/relatorio-mensal'
 import {
   ArrowUpCircle, ArrowDownCircle, Gift, PackageCheck, Eye,
   TrendingUp, Glasses, FileText, ChevronRight, Cake,
-  Users, DollarSign, Calendar, UserPlus, Award
+  Users, DollarSign, Calendar, UserPlus, Award, Briefcase, BarChart2
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -24,8 +24,9 @@ export default async function DashboardPage() {
   const modo = await getModo()
   const ocultar = modo.funcionario && modo.bloqueios.includes('faturamento')
   const { data: userRow } = await service.from('users').select('name').eq('id', user!.id).single()
-  const { data: companyRow } = await service.from('companies').select('name').eq('id', companyId).single()
+  const { data: companyRow } = await service.from('companies').select('name, business_type').eq('id', companyId).single()
   const companyName = companyRow?.name ?? 'Minha Ótica'
+  const isGeral = companyRow?.business_type === 'geral'
   const firstName = userRow?.name?.split(' ')[0] ?? 'usuário'
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
@@ -38,14 +39,18 @@ export default async function DashboardPage() {
   const [
     { data: transactions }, { data: contasPagar }, { data: contacts },
     { data: ordens }, { data: receitas }, { data: products }, { data: appointments },
+    { data: projetos },
   ] = await Promise.all([
     service.from('transactions').select('amount, status, created_at, paid_at, forma_pagamento, contact_id').eq('company_id', companyId),
-    service.from('contas_pagar' as never).select('valor, status').eq('company_id', companyId),
+    service.from('contas_pagar' as never).select('valor, status, pago_em').eq('company_id', companyId),
     service.from('contacts').select('id, name, phone, data_nascimento, created_at').eq('company_id', companyId),
     service.from('ordens_servico').select('status, total, created_at').eq('company_id', companyId),
     service.from('receitas').select('id, data_receita, contact_id, contacts(name, phone)').eq('company_id', companyId).lt('data_receita', umAnoAtras.split('T')[0]),
     service.from('products' as never).select('tipo_produto, stock').eq('company_id', companyId).eq('active', true),
     service.from('appointments').select('start_at, status').eq('company_id', companyId),
+    isGeral
+      ? service.from('projetos' as never).select('status')
+      : Promise.resolve({ data: [] as { status: string }[] }),
   ])
 
   // KPI 1 — Contas a receber
@@ -125,7 +130,43 @@ export default async function DashboardPage() {
     { name: 'Entregue', value: (ordens ?? []).filter(o => o.status === 'entregue').length, color: '#0DB57A' },
   ]
 
-  const kpis = [
+  // Gráfico: Projetos por status (nicho Geral)
+  const projetosList = (projetos ?? []) as { status: string }[]
+  const projetosData = [
+    { name: 'Planejamento', value: projetosList.filter(p => p.status === 'planejamento').length, color: '#1A56FF' },
+    { name: 'Andamento', value: projetosList.filter(p => p.status === 'andamento').length, color: '#F59E0B' },
+    { name: 'Revisão', value: projetosList.filter(p => p.status === 'revisao').length, color: '#8B5CF6' },
+    { name: 'Concluído', value: projetosList.filter(p => p.status === 'concluido').length, color: '#0DB57A' },
+  ]
+
+  // Gráfico: Receita x Despesa (últimos 6 meses, nicho Geral)
+  const contasPagarList = (contasPagar ?? []) as { valor: number; status: string; pago_em: string | null }[]
+  const receitaDespesaData = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+    const ds = d.toISOString()
+    const de = new Date(now.getFullYear(), now.getMonth() - 5 + i + 1, 1).toISOString()
+    const receita = (transactions ?? []).filter(t => t.status === 'paid' && (t.paid_at ?? t.created_at) >= ds && (t.paid_at ?? t.created_at) < de).reduce((s, t) => s + Number(t.amount), 0)
+    const despesa = contasPagarList.filter(c => c.status === 'pago' && c.pago_em && c.pago_em >= ds && c.pago_em < de).reduce((s, c) => s + Number(c.valor), 0)
+    return { mes: meses[d.getMonth()], receita, despesa }
+  })
+
+  // Ticket médio geral e por cliente (nicho Geral)
+  const vendasPagas = txList.filter(t => t.status === 'paid')
+  const ticketMedioGeral = vendasPagas.length > 0 ? vendasTotais / vendasPagas.length : 0
+  const qtdPorCliente: Record<string, number> = {}
+  vendasPagas.filter(t => t.contact_id).forEach(t => { qtdPorCliente[t.contact_id!] = (qtdPorCliente[t.contact_id!] ?? 0) + 1 })
+  const ticketMedioPorCliente = Object.entries(gastoPorCliente)
+    .map(([id, gasto]) => ({ id, contact: contactMap.get(id), ticket: gasto / (qtdPorCliente[id] ?? 1) }))
+    .filter(x => x.contact)
+    .sort((a, b) => b.ticket - a.ticket).slice(0, 5)
+
+  const kpis = isGeral ? [
+    { label: 'Contas a Receber', value: fmt(aReceber), icon: ArrowUpCircle, color: '#0DB57A', bg: 'linear-gradient(135deg,#0DB57A,#0a9e6a)', href: '/dashboard/financeiro' },
+    { label: 'Contas a Pagar', value: fmt(aPagar), icon: ArrowDownCircle, color: '#EF4444', bg: 'linear-gradient(135deg,#EF4444,#DC2626)', href: '/dashboard/financeiro' },
+    { label: 'Aniversariantes', value: String(aniversariantes.length), icon: Gift, color: '#F59E0B', bg: 'linear-gradient(135deg,#F59E0B,#D97706)', href: '/dashboard/clientes' },
+    { label: 'Projetos em Andamento', value: String(projetosList.filter(p => p.status === 'andamento').length), icon: Briefcase, color: '#1A56FF', bg: 'linear-gradient(135deg,#1A56FF,#1445DD)', href: '/dashboard/projetos' },
+    { label: 'Ticket Médio', value: fmt(ticketMedioGeral), icon: BarChart2, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/relatorios' },
+  ] : [
     { label: 'Contas a Receber', value: fmt(aReceber), icon: ArrowUpCircle, color: '#0DB57A', bg: 'linear-gradient(135deg,#0DB57A,#0a9e6a)', href: '/dashboard/financeiro' },
     { label: 'Contas a Pagar', value: fmt(aPagar), icon: ArrowDownCircle, color: '#EF4444', bg: 'linear-gradient(135deg,#EF4444,#DC2626)', href: '/dashboard/financeiro' },
     { label: 'Aniversariantes', value: String(aniversariantes.length), icon: Gift, color: '#F59E0B', bg: 'linear-gradient(135deg,#F59E0B,#D97706)', href: '/dashboard/clientes' },
@@ -133,7 +174,17 @@ export default async function DashboardPage() {
     { label: 'Receitas Vencidas', value: String(receitasVencidas.length), icon: Eye, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/receitas' },
   ]
 
-  const donutCard = (
+  const secondaryCard = isGeral ? (
+    <GlowCard>
+      <div className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart2 className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+          <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Receita x Despesa</h2>
+        </div>
+        <ReceitaDespesaChart data={receitaDespesaData} />
+      </div>
+    </GlowCard>
+  ) : (
     <GlowCard>
       <div className="p-5">
         <div className="flex items-center gap-2 mb-4">
@@ -288,26 +339,26 @@ export default async function DashboardPage() {
                 <EvolucaoVendasChart data={evolucao} />
               </div>
             </GlowCard>
-            {donutCard}
+            {secondaryCard}
           </div>
         )}
 
-        {/* Segunda linha — no modo vendedor inclui o Estoque para equilibrar */}
+        {/* Segunda linha — no modo vendedor inclui o card secundário para equilibrar */}
         <div className="grid grid-cols-3 gap-4">
-          {ocultar && donutCard}
-          {/* Funil de produção */}
+          {ocultar && secondaryCard}
+          {/* Funil de produção / projetos */}
           <GlowCard className={ocultar ? '' : 'col-span-2'}>
             <div className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <FileText className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
-                  <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Ordens de Serviço por Status</h2>
+                  {isGeral ? <Briefcase className="size-4 text-[#1A56FF]" strokeWidth={1.5} /> : <FileText className="size-4 text-[#1A56FF]" strokeWidth={1.5} />}
+                  <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{isGeral ? 'Projetos por Status' : 'Ordens de Serviço por Status'}</h2>
                 </div>
-                <Link href="/dashboard/ordens-servico" className="text-xs text-[#1A56FF] font-semibold hover:underline flex items-center gap-1">
-                  Monitor de Produção <ChevronRight className="size-3" />
+                <Link href={isGeral ? '/dashboard/projetos' : '/dashboard/ordens-servico'} className="text-xs text-[#1A56FF] font-semibold hover:underline flex items-center gap-1">
+                  {isGeral ? 'Ver Projetos' : 'Monitor de Produção'} <ChevronRight className="size-3" />
                 </Link>
               </div>
-              <OSFunnelChart data={osData} />
+              <OSFunnelChart data={isGeral ? projetosData : osData} />
             </div>
           </GlowCard>
 
@@ -341,6 +392,39 @@ export default async function DashboardPage() {
             </div>
           </GlowCard>
         </div>
+
+        {/* Ticket Médio por Cliente (nicho Geral) */}
+        {isGeral && (
+          <GlowCard>
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart2 className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+                <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Ticket Médio por Cliente</h2>
+              </div>
+              {ticketMedioPorCliente.length === 0 ? (
+                <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhuma compra registrada ainda</p>
+              ) : (
+                <div className="space-y-2">
+                  {ticketMedioPorCliente.map((c, i) => {
+                    const ct = c.contact as { name: string | null; phone: string } | undefined
+                    return (
+                      <div key={c.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F7F6F3] transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                            style={{ background: i === 0 ? 'linear-gradient(135deg,#8B5CF6,#7C3AED)' : 'linear-gradient(135deg,#C4B5FD,#8B5CF6)' }}>
+                            {(ct?.name ?? ct?.phone ?? '?')[0].toUpperCase()}
+                          </div>
+                          <p className="text-sm font-semibold text-[#1C1B18]">{ct?.name ?? ct?.phone}</p>
+                        </div>
+                        <span className="text-sm font-black text-[#8B5CF6]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(c.ticket)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </GlowCard>
+        )}
       </div>
     </div>
   )

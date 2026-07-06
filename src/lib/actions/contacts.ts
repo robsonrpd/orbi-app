@@ -78,6 +78,42 @@ export async function updateContact(id: string, formData: FormData) {
   return { success: true }
 }
 
+const MAX_IMPORT_ROWS = 1000
+
+/** Importa contatos em lote (vindos de uma planilha Excel/CSV lida no navegador). */
+export async function importarContatos(rows: { name: string | null; phone: string; email: string | null; origem: string | null }[]) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!Array.isArray(rows) || rows.length === 0) return { error: 'Nenhuma linha para importar.' }
+  if (rows.length > MAX_IMPORT_ROWS) return { error: `Máximo de ${MAX_IMPORT_ROWS} linhas por importação.` }
+
+  const service = createServiceClient()
+  const { data: existentes } = await service.from('contacts').select('phone').eq('company_id', companyId)
+  const telefonesExistentes = new Set((existentes ?? []).map(c => c.phone))
+
+  let criados = 0, ignorados = 0, invalidos = 0
+  const vistosNestaImportacao = new Set<string>()
+
+  for (const r of rows) {
+    const phone = (r.phone ?? '').replace(/\D/g, '')
+    if (!phone || phone.length < 8 || phone.length > 20) { invalidos++; continue }
+    if (telefonesExistentes.has(phone) || vistosNestaImportacao.has(phone)) { ignorados++; continue }
+
+    const name = r.name?.trim().slice(0, 200) || null
+    const email = r.email?.trim().slice(0, 200) || null
+    const origem = r.origem?.trim().slice(0, 100) || 'Importação'
+
+    const { error } = await service.from('contacts').insert({
+      company_id: companyId, name, phone, email, origem, lgpd_consent: 'nao_informado', active: true,
+    })
+    if (!error) { criados++; vistosNestaImportacao.add(phone) } else { invalidos++ }
+  }
+
+  revalidatePath('/dashboard/clientes')
+  revalidatePath('/dashboard/funil')
+  return { success: true, criados, ignorados, invalidos }
+}
+
 export async function deleteContact(id: string) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }

@@ -10,6 +10,7 @@ export const PERMISSOES: { key: string; label: string; href: string | null }[] =
   { key: 'receitas', label: 'Receitas (RX)', href: '/dashboard/receitas' },
   { key: 'orcamentos', label: 'Orçamentos', href: '/dashboard/orcamentos' },
   { key: 'ordens', label: 'Ordens de Serviço', href: '/dashboard/ordens-servico' },
+  { key: 'projetos', label: 'Projetos', href: '/dashboard/projetos' },
   { key: 'produtos', label: 'Produtos / Estoque / Vendas', href: '/dashboard/produtos' },
   { key: 'precos', label: 'Alterar preços de produtos', href: null },
   { key: 'financeiro', label: 'Financeiro', href: '/dashboard/financeiro' },

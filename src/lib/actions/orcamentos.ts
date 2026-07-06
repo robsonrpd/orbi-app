@@ -17,12 +17,16 @@ export async function createOrcamento(payload: {
   desconto: number
   validade: string | null
   observacoes: string
+  anexoUrl?: string | null
+  anexoNome?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
 
   if (!payload.clienteNome?.trim() && !payload.contactId) return { error: 'Informe o cliente.' }
-  if (!payload.itens || payload.itens.length === 0) return { error: 'Adicione ao menos um item.' }
+  if ((!payload.itens || payload.itens.length === 0) && !payload.anexoUrl) {
+    return { error: 'Adicione ao menos um item ou anexe um arquivo modelo.' }
+  }
 
   const subtotal = payload.itens.reduce((s, i) => s + (Number(i.valor) * Number(i.qtd)), 0)
   const total = Math.max(0, subtotal - Number(payload.desconto || 0))
@@ -42,6 +46,8 @@ export async function createOrcamento(payload: {
     itens: payload.itens, desconto: payload.desconto || 0, total,
     validade: payload.validade || null, status: 'aberto',
     observacoes: payload.observacoes?.trim() || null,
+    anexo_url: payload.anexoUrl || null,
+    anexo_nome: payload.anexoNome || null,
   })
   if (error) return { error: 'Erro ao criar orçamento.' }
 

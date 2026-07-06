@@ -36,3 +36,19 @@ export async function saveCompanyLogo(logoUrl: string | null) {
   revalidatePath('/dashboard', 'layout')
   return { success: true }
 }
+
+/** Salva a meta de faturamento mensal (usada em Relatórios > Financeiro). */
+export async function salvarMetaMensal(valor: number) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (isNaN(valor) || valor < 0) return { error: 'Valor inválido.' }
+
+  const service = createServiceClient()
+  const { data: current } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const settings = { ...(current?.settings as Record<string, unknown> ?? {}), meta_faturamento_mensal: valor }
+  const { error } = await service.from('companies').update({ settings }).eq('id', companyId)
+  if (error) return { error: 'Erro ao salvar meta.' }
+
+  revalidatePath('/dashboard/relatorios')
+  return { success: true }
+}

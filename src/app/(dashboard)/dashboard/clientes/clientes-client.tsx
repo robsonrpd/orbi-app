@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { UserPlus, Download, Phone, Tag, ChevronRight } from 'lucide-react'
+import { UserPlus, Download, Upload, Phone, Tag, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NovoClienteModal } from '@/components/orbi/novo-cliente-modal'
 import { ClienteDetalheModal } from '@/components/orbi/cliente-detalhe-modal'
+import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
 
 type Contact = {
   id: string
@@ -30,8 +31,22 @@ function formatDate(str: string) {
 
 export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats: Record<string, Stats> }) {
   const [modalOpen, setModalOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [detalhe, setDetalhe] = useState<Contact | null>(null)
   const statsFor = (id: string): Stats => stats[id] ?? { totalGasto: 0, numAgendamentos: 0, numCompras: 0, devendo: 0, formas: {}, produtos: [] }
+
+  async function exportarExcel() {
+    const XLSX = await import('xlsx')
+    const dados = contacts.map(c => ({
+      Nome: c.name ?? '', Telefone: c.phone, Email: c.email ?? '',
+      Origem: c.origem ?? '', Tags: (c.tags ?? []).join(', '),
+      'Data de Nascimento': c.data_nascimento ?? '', 'Cadastrado em': formatDate(c.created_at),
+    }))
+    const ws = XLSX.utils.json_to_sheet(dados)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
+    XLSX.writeFile(wb, `clientes-${new Date().toISOString().split('T')[0]}.xlsx`)
+  }
 
   return (
     <>
@@ -41,8 +56,13 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
             Todos os clientes
           </h2>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs border-[#EAE8E1] text-[#8C8880] hover:text-[#2E2D29] gap-1.5">
-              <Download className="size-3.5" /> Exportar CSV
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}
+              className="h-8 text-xs border-[#EAE8E1] text-[#8C8880] hover:text-[#2E2D29] gap-1.5">
+              <Upload className="size-3.5" /> Importar
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportarExcel}
+              className="h-8 text-xs border-[#EAE8E1] text-[#8C8880] hover:text-[#2E2D29] gap-1.5">
+              <Download className="size-3.5" /> Exportar Excel
             </Button>
             <Button size="sm" onClick={() => setModalOpen(true)}
               className="h-8 text-xs bg-[#1A56FF] hover:bg-[#1445DD] text-white gap-1.5">
@@ -121,6 +141,7 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
       </div>
 
       <NovoClienteModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <ImportarContatosModal open={importOpen} onClose={() => setImportOpen(false)} />
       {detalhe && <ClienteDetalheModal contact={detalhe} stats={statsFor(detalhe.id)} onClose={() => setDetalhe(null)} />}
     </>
   )

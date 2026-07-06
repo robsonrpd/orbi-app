@@ -51,6 +51,25 @@ export function EstoqueDonut({ data }: { data: EstoquePoint[] }) {
   )
 }
 
+type ReceitaDespesaPoint = { mes: string; receita: number; despesa: number }
+
+export function ReceitaDespesaChart({ data }: { data: ReceitaDespesaPoint[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#EAE8E1" vertical={false} />
+        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#8C8880' }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={(v) => fmtK(Number(v))} tick={{ fontSize: 11, fill: '#8C8880' }} axisLine={false} tickLine={false} />
+        <Tooltip
+          formatter={(v) => fmt(Number(v))}
+          contentStyle={{ borderRadius: 12, border: '1px solid #EAE8E1', fontSize: 12, fontFamily: 'Sora, sans-serif' }} />
+        <Bar dataKey="receita" name="Receita" fill="#0DB57A" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="despesa" name="Despesa" fill="#EF4444" radius={[6, 6, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
 export function OSFunnelChart({ data }: { data: OSPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={200}>

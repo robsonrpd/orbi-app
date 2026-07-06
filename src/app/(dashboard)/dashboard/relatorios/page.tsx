@@ -12,15 +12,20 @@ export default async function RelatoriosPage() {
   const [
     { data: transactions }, { data: ordens }, { data: orcamentos },
     { data: products }, { data: vendedores }, { data: receitas }, { data: contacts },
+    { data: contasPagar }, { data: company },
   ] = await Promise.all([
-    service.from('transactions').select('amount, status, created_at, paid_at, contacts(name, phone)').eq('company_id', companyId),
+    service.from('transactions').select('amount, status, created_at, paid_at, contact_id, contacts(name, phone)').eq('company_id', companyId),
     service.from('ordens_servico').select('total, medico, vendedor, status, created_at, itens').eq('company_id', companyId),
     service.from('orcamentos').select('total, vendedor, status, created_at, itens').eq('company_id', companyId),
     service.from('products' as never).select('name, price, cost_price, stock, tipo_produto').eq('company_id', companyId).eq('active', true),
     service.from('vendedores').select('nome, comissao_percent').eq('company_id', companyId).eq('active', true),
     service.from('receitas').select('data_receita, contacts(name, phone)').eq('company_id', companyId),
-    service.from('contacts').select('name, phone, data_nascimento').eq('company_id', companyId),
+    service.from('contacts').select('id, name, phone, email, origem, data_nascimento, created_at').eq('company_id', companyId),
+    service.from('contas_pagar' as never).select('descricao, fornecedor, valor, status, vencimento, pago_em').eq('company_id', companyId),
+    service.from('companies').select('settings').eq('id', companyId).single(),
   ])
+
+  const metaMensal = Number((company?.settings as { meta_faturamento_mensal?: number } | null)?.meta_faturamento_mensal ?? 0)
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
@@ -34,6 +39,8 @@ export default async function RelatoriosPage() {
           vendedores={(vendedores ?? []) as never}
           receitas={(receitas ?? []) as never}
           contacts={(contacts ?? []) as never}
+          contasPagar={(contasPagar ?? []) as never}
+          metaMensal={metaMensal}
         />
       </div>
     </div>

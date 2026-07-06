@@ -6,7 +6,7 @@ import { NovoOrcamentoModal } from '@/components/orbi/novo-orcamento-modal'
 import { updateOrcamentoStatus, converterEmOS, deleteOrcamento } from '@/lib/actions/orcamentos'
 import {
   FileText, Plus, Search, Trash2, Loader2, Calendar, User,
-  Check, X as XIcon, ArrowRight, MessageSquare, Clock
+  Check, X as XIcon, ArrowRight, MessageSquare, Clock, Paperclip, Download
 } from 'lucide-react'
 
 type Contact = { id: string; name: string | null; phone: string }
@@ -18,6 +18,7 @@ type Orcamento = {
   cliente_nome: string | null; cliente_telefone: string | null; vendedor: string | null
   itens: Item[]; total: number; validade: string | null; status: string
   created_at: string; contacts: Contact | null
+  anexo_url: string | null; anexo_nome: string | null
 }
 
 function fmt(v: number) {
@@ -67,6 +68,21 @@ export function OrcamentosClient({ orcamentos, contacts, services, products, ven
   const aprovados = orcamentos.filter(o => o.status === 'aprovado').length
   const valorAberto = orcamentos.filter(o => o.status === 'aberto').reduce((s, o) => s + Number(o.total), 0)
 
+  function exportarCSV() {
+    const headers = ['Número', 'Cliente', 'Telefone', 'Vendedor', 'Itens', 'Total', 'Status', 'Validade', 'Criado em']
+    const rows = orcamentos.map(o => [
+      String(o.numero), o.contacts?.name ?? o.cliente_nome ?? '', o.contacts?.phone ?? o.cliente_telefone ?? '',
+      o.vendedor ?? '', String(o.itens.length), String(o.total), STATUS[o.status]?.label ?? o.status,
+      o.validade ?? '', new Date(o.created_at).toLocaleDateString('pt-BR'),
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `orcamentos-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <div className="space-y-5">
@@ -97,11 +113,18 @@ export function OrcamentosClient({ orcamentos, contacts, services, products, ven
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nº ou cliente..."
               className="h-10 pl-9 pr-4 w-64 rounded-xl border border-[#EAE8E1] bg-white text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
           </div>
-          <button onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-            <Plus className="size-4" /> Novo Orçamento
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={exportarCSV}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-bold text-[#8C8880] bg-white border border-[#EAE8E1] transition-all hover:text-[#1A56FF] hover:border-[#1A56FF]/40"
+              style={{ fontFamily: 'Barlow, sans-serif' }}>
+              <Download className="size-4" /> Exportar
+            </button>
+            <button onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+              style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+              <Plus className="size-4" /> Novo Orçamento
+            </button>
+          </div>
         </div>
 
         {orcamentos.length === 0 ? (
@@ -127,6 +150,12 @@ export function OrcamentosClient({ orcamentos, contacts, services, products, ven
                       <div className="flex items-center gap-3 mt-0.5">
                         <span className="text-xs text-[#C8C5BB]">{o.itens.length} {o.itens.length === 1 ? 'item' : 'itens'}</span>
                         {o.validade && <span className="flex items-center gap-1 text-xs text-[#8C8880]"><Clock className="size-3" />Válido até {fmtDate(o.validade)}</span>}
+                        {o.anexo_url && (
+                          <a href={o.anexo_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                            className="flex items-center gap-1 text-xs text-[#1A56FF] hover:underline">
+                            <Paperclip className="size-3" /> {o.anexo_nome ?? 'Anexo'}
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -8,7 +8,7 @@ export default async function OrcamentosPage() {
   const companyId = await getEffectiveCompanyId()
 
   const [{ data: orcamentos }, { data: contacts }, { data: services }, { data: products }, { data: vendedores }] = await Promise.all([
-    service.from('orcamentos').select('*, contacts(id, name, phone)')
+    service.from('orcamentos').select('*, anexo_url, anexo_nome, contacts(id, name, phone)')
       .eq('company_id', companyId).order('numero', { ascending: false }),
     service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
     service.from('services').select('id, name, price').eq('company_id', companyId).eq('active', true),

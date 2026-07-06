@@ -2,19 +2,22 @@
 
 import { useState, useMemo } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
+import { salvarMetaMensal } from '@/lib/actions/empresa'
 import {
   TrendingUp, DollarSign, Package, Users, Stethoscope,
-  ShoppingBag, Eye, Award, BarChart2, Percent, Crown
+  ShoppingBag, Eye, Award, BarChart2, Percent, Crown,
+  Target, Scale, Loader2, Check, Mail, Tag
 } from 'lucide-react'
 
 type Item = { tipo: string; descricao: string; valor: number; qtd: number }
-type Tx = { amount: number; status: string; created_at: string; paid_at: string | null; contacts: { name: string | null; phone: string } | null }
+type Tx = { amount: number; status: string; created_at: string; paid_at: string | null; contact_id: string | null; contacts: { name: string | null; phone: string } | null }
 type OS = { total: number; medico: string | null; vendedor: string | null; status: string; created_at: string; itens: Item[] }
 type Orc = { total: number; vendedor: string | null; status: string; created_at: string; itens: Item[] }
 type Prod = { name: string; price: number; cost_price: number; stock: number; tipo_produto: string | null }
 type Vend = { nome: string; comissao_percent: number }
 type Rec = { data_receita: string; contacts: { name: string | null; phone: string } | null }
-type Ct = { name: string | null; phone: string; data_nascimento: string | null }
+type Ct = { id: string; name: string | null; phone: string; email: string | null; origem: string | null; data_nascimento: string | null; created_at: string }
+type Cp = { descricao: string; fornecedor: string | null; valor: number; status: string; vencimento: string | null; pago_em: string | null }
 
 function fmt(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
@@ -29,6 +32,7 @@ const PERIODS = [
 const CATEGORIES = [
   { key: 'vendas', label: 'Vendas', icon: ShoppingBag },
   { key: 'financeiro', label: 'Financeiro', icon: DollarSign },
+  { key: 'dre', label: 'DRE', icon: Scale },
   { key: 'estoque', label: 'Estoque', icon: Package },
   { key: 'clientes', label: 'Clientes', icon: Users },
 ]
@@ -36,11 +40,16 @@ const CATEGORIES = [
 type Props = {
   transactions: Tx[]; ordens: OS[]; orcamentos: Orc[]
   products: Prod[]; vendedores: Vend[]; receitas: Rec[]; contacts: Ct[]
+  contasPagar: Cp[]; metaMensal: number
 }
 
-export function RelatoriosClient({ transactions, ordens, orcamentos, products, vendedores, receitas, contacts }: Props) {
+export function RelatoriosClient({ transactions, ordens, orcamentos, products, vendedores, receitas, contacts, contasPagar, metaMensal }: Props) {
   const [period, setPeriod] = useState('mes')
   const [cat, setCat] = useState('vendas')
+  const [meta, setMeta] = useState(metaMensal)
+  const [metaInput, setMetaInput] = useState(metaMensal ? String(metaMensal) : '')
+  const [savingMeta, setSavingMeta] = useState(false)
+  const [metaSalva, setMetaSalva] = useState(false)
 
   const { start, end } = useMemo(() => {
     const now = new Date()
@@ -90,6 +99,44 @@ export function RelatoriosClient({ transactions, ordens, orcamentos, products, v
     const comissaoPct = vendedores.find(vd => vd.nome.toLowerCase() === nome.toLowerCase())?.comissao_percent ?? 0
     return { nome, ...v, comissao: v.total * Number(comissaoPct) / 100 }
   }).sort((a, b) => b.total - a.total)
+
+  // Ticket médio por cliente (dentro do período selecionado)
+  const qtdPorClienteVend: Record<string, number> = {}
+  const gastoPorClienteVend: Record<string, number> = {}
+  txP.filter(t => t.status === 'paid' && t.contact_id).forEach(t => {
+    qtdPorClienteVend[t.contact_id!] = (qtdPorClienteVend[t.contact_id!] ?? 0) + 1
+    gastoPorClienteVend[t.contact_id!] = (gastoPorClienteVend[t.contact_id!] ?? 0) + Number(t.amount)
+  })
+  const ticketPorCliente = Object.entries(gastoPorClienteVend)
+    .map(([id, gasto]) => {
+      const tx = txP.find(t => t.contact_id === id)
+      return { nome: tx?.contacts?.name ?? tx?.contacts?.phone ?? '—', ticket: gasto / qtdPorClienteVend[id], qtd: qtdPorClienteVend[id] }
+    })
+    .sort((a, b) => b.ticket - a.ticket).slice(0, 8)
+
+  // === META DO MÊS (sempre referente ao mês corrente, independente do filtro de período) ===
+  async function salvarMeta() {
+    setSavingMeta(true)
+    const valor = parseFloat(metaInput.replace(',', '.')) || 0
+    const r = await salvarMetaMensal(valor)
+    setSavingMeta(false)
+    if (!r?.error) { setMeta(valor); setMetaSalva(true); setTimeout(() => setMetaSalva(false), 2500) }
+  }
+  const nowMeta = new Date()
+  const monthStartMeta = new Date(nowMeta.getFullYear(), nowMeta.getMonth(), 1).toISOString()
+  const faturamentoMesAtual = transactions.filter(t => t.status === 'paid' && (t.paid_at ?? t.created_at) >= monthStartMeta).reduce((s, t) => s + Number(t.amount), 0)
+  const pctMeta = meta > 0 ? Math.min(100, Math.round((faturamentoMesAtual / meta) * 100)) : 0
+
+  // === DRE (Demonstrativo de Resultado) ===
+  const despesasP = contasPagar.filter(c => c.status === 'pago' && c.pago_em && inRange(c.pago_em))
+  const totalDespesas = despesasP.reduce((s, c) => s + Number(c.valor), 0)
+  const lucroLiquido = faturamento - totalDespesas
+  const fornecedorMap = new Map<string, number>()
+  despesasP.forEach(c => {
+    const nome = c.fornecedor || c.descricao
+    fornecedorMap.set(nome, (fornecedorMap.get(nome) ?? 0) + Number(c.valor))
+  })
+  const despesasPorFornecedor = [...fornecedorMap.entries()].map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total)
 
   // === ESTOQUE ===
   const valorEstoque = products.reduce((s, p) => s + (Number(p.cost_price) * (p.stock ?? 0)), 0)
@@ -150,9 +197,14 @@ export function RelatoriosClient({ transactions, ordens, orcamentos, products, v
               rows={porMedico.map((m, i) => ({ rank: i + 1, label: m.nome, sub: `${m.qtd} O.S.`, value: fmt(m.total) }))}
               empty="Nenhuma O.S. com médico no período" />
           </div>
-          <ReportTable title="Desempenho de Vendedores" icon={Award} accent="#F59E0B"
-            rows={porVendedor.map((v, i) => ({ rank: i + 1, label: v.nome, sub: `${v.qtd} vendas · comissão ${fmt(v.comissao)}`, value: fmt(v.total) }))}
-            empty="Nenhuma venda com vendedor no período" />
+          <div className="grid grid-cols-2 gap-4">
+            <ReportTable title="Desempenho de Vendedores" icon={Award} accent="#F59E0B"
+              rows={porVendedor.map((v, i) => ({ rank: i + 1, label: v.nome, sub: `${v.qtd} vendas · comissão ${fmt(v.comissao)}`, value: fmt(v.total) }))}
+              empty="Nenhuma venda com vendedor no período" />
+            <ReportTable title="Ticket Médio por Cliente" icon={BarChart2} accent="#8B5CF6"
+              rows={ticketPorCliente.map((c, i) => ({ rank: i + 1, label: c.nome, sub: `${c.qtd} compra${c.qtd > 1 ? 's' : ''}`, value: fmt(c.ticket) }))}
+              empty="Sem vendas com cliente identificado no período" />
+          </div>
         </div>
       )}
 
@@ -165,9 +217,72 @@ export function RelatoriosClient({ transactions, ordens, orcamentos, products, v
             <MetricBig label="Em Atraso" value={fmt(transactions.filter(t => t.status === 'overdue').reduce((s, t) => s + Number(t.amount), 0))} icon={DollarSign} color="#EF4444" bg="#FEF2F2" />
             <MetricBig label="Margem Média" value={`${margemMedia}%`} icon={Percent} color="#8B5CF6" bg="#F5F3FF" />
           </div>
+
+          {/* Meta do mês */}
+          <GlowCard>
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Target className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+                  <h3 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Meta do Mês</h3>
+                </div>
+                {metaSalva && <span className="flex items-center gap-1 text-xs font-bold text-[#0DB57A]"><Check className="size-3.5" /> Salvo</span>}
+              </div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="relative flex-1 max-w-[180px]">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#8C8880]">R$</span>
+                  <input value={metaInput} onChange={e => setMetaInput(e.target.value)} placeholder="0,00"
+                    className="w-full h-10 pl-8 pr-3 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF]" />
+                </div>
+                <button onClick={salvarMeta} disabled={savingMeta}
+                  className="h-10 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-1.5" style={{ background: '#1A56FF', fontFamily: 'Barlow, sans-serif' }}>
+                  {savingMeta ? <Loader2 className="size-3.5 animate-spin" /> : 'Salvar meta'}
+                </button>
+              </div>
+              {meta > 0 ? (
+                <>
+                  <div className="flex items-center justify-between text-xs text-[#8C8880] mb-1.5">
+                    <span>{fmt(faturamentoMesAtual)} de {fmt(meta)}</span>
+                    <span className="font-bold" style={{ color: pctMeta >= 100 ? '#0DB57A' : '#1A56FF' }}>{pctMeta}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-[#F7F6F3] overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pctMeta}%`, background: pctMeta >= 100 ? '#0DB57A' : '#1A56FF' }} />
+                  </div>
+                </>
+              ) : <p className="text-xs text-[#C8C5BB]">Defina uma meta de faturamento mensal para acompanhar o progresso.</p>}
+            </div>
+          </GlowCard>
+
           <ReportTable title="Maiores Clientes (por gasto)" icon={Crown} accent="#F59E0B"
             rows={topClientes.map((c, i) => ({ rank: i + 1, label: c.nome, sub: '', value: fmt(c.total) }))}
             empty="Sem dados de venda no período" />
+        </div>
+      )}
+
+      {/* DRE */}
+      {cat === 'dre' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <MetricBig label="Receita Total" value={fmt(faturamento)} icon={TrendingUp} color="#0DB57A" bg="#E6F9F3" />
+            <MetricBig label="Despesas Totais" value={fmt(totalDespesas)} icon={DollarSign} color="#EF4444" bg="#FEF2F2" />
+            <MetricBig label="Lucro Líquido" value={fmt(lucroLiquido)} icon={Scale} color={lucroLiquido >= 0 ? '#0DB57A' : '#EF4444'} bg={lucroLiquido >= 0 ? '#E6F9F3' : '#FEF2F2'} />
+          </div>
+          <GlowCard>
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Scale className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+                <h3 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Demonstrativo de Resultado</h3>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between py-2 border-b border-[#F7F6F3]"><span className="text-[#8C8880]">(+) Receita total</span><span className="font-bold text-[#0DB57A]">{fmt(faturamento)}</span></div>
+                <div className="flex items-center justify-between py-2 border-b border-[#F7F6F3]"><span className="text-[#8C8880]">(−) Despesas pagas</span><span className="font-bold text-red-500">{fmt(totalDespesas)}</span></div>
+                <div className="flex items-center justify-between py-2.5"><span className="font-bold text-[#1C1B18]">(=) Lucro líquido</span><span className="text-lg font-black" style={{ fontFamily: 'Fraunces, serif', color: lucroLiquido >= 0 ? '#0DB57A' : '#EF4444' }}>{fmt(lucroLiquido)}</span></div>
+              </div>
+            </div>
+          </GlowCard>
+          <ReportTable title="Despesas por Fornecedor" icon={DollarSign} accent="#EF4444"
+            rows={despesasPorFornecedor.map((d, i) => ({ rank: i + 1, label: d.nome, sub: '', value: fmt(d.total) }))}
+            empty="Nenhuma despesa paga no período" />
         </div>
       )}
 
@@ -201,6 +316,42 @@ export function RelatoriosClient({ transactions, ordens, orcamentos, products, v
               rows={aniversariantes.map((c, i) => ({ rank: i + 1, label: c.name ?? c.phone, sub: `Dia ${new Date(c.data_nascimento! + 'T12:00:00').getDate()}`, value: '' }))}
               empty="Nenhum aniversariante este mês" />
           </div>
+
+          {/* Relatório completo de clientes e contatos */}
+          <GlowCard>
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+                <h3 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Clientes e Contatos</h3>
+              </div>
+              {contacts.length === 0 ? (
+                <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhum contato cadastrado</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#EAE8E1]">
+                        {['Nome', 'Telefone', 'E-mail', 'Origem', 'Cadastro'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#8C8880]" style={{ fontFamily: 'Barlow, sans-serif' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F7F6F3]">
+                      {contacts.map(c => (
+                        <tr key={c.id}>
+                          <td className="px-3 py-2.5 font-semibold text-[#1C1B18]">{c.name ?? '—'}</td>
+                          <td className="px-3 py-2.5 text-[#8C8880]">{c.phone}</td>
+                          <td className="px-3 py-2.5 text-[#8C8880] flex items-center gap-1">{c.email ? <><Mail className="size-3" /> {c.email}</> : '—'}</td>
+                          <td className="px-3 py-2.5 text-[#8C8880]">{c.origem ? <span className="flex items-center gap-1"><Tag className="size-3" /> {c.origem}</span> : '—'}</td>
+                          <td className="px-3 py-2.5 text-[#8C8880]">{new Date(c.created_at).toLocaleDateString('pt-BR')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </GlowCard>
         </div>
       )}
     </div>

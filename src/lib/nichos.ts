@@ -14,22 +14,22 @@ export const NICHOS: Nicho[] = [
   {
     key: 'otica', label: 'Ótica', emoji: '👓',
     descricao: 'Óculos, lentes, receitas e laboratório.',
-    esconder: [],
+    esconder: ['/dashboard/projetos'],
   },
   {
     key: 'barbearia', label: 'Barbearia / Salão', emoji: '💈',
     descricao: 'Agenda, serviços, comissão e produtos.',
-    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
+    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico', '/dashboard/projetos'],
   },
   {
     key: 'loja', label: 'Loja / Varejo', emoji: '🛍️',
     descricao: 'Estoque, PDV, crediário e clientes.',
-    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
+    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico', '/dashboard/projetos'],
   },
   {
     key: 'clinica', label: 'Clínica / Estética', emoji: '🩺',
     descricao: 'Agendamentos, serviços e ficha de clientes.',
-    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico'],
+    esconder: ['/dashboard/receitas', '/dashboard/ordens-servico', '/dashboard/projetos'],
   },
   {
     key: 'geral', label: 'Geral / Outro', emoji: '🏢',

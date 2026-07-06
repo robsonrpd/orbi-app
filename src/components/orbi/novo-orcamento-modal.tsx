@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { createOrcamento } from '@/lib/actions/orcamentos'
 import {
   X, FileText, User, Phone, Calendar, Plus, Trash2,
-  Loader2, Check, Wrench, Package, UserCheck
+  Loader2, Check, Wrench, Package, UserCheck, Paperclip
 } from 'lucide-react'
 
 type Contact = { id: string; name: string | null; phone: string }
@@ -36,6 +36,8 @@ export function NovoOrcamentoModal({ open, onClose, contacts, services, products
   const [observacoes, setObservacoes] = useState('')
   const [desconto, setDesconto] = useState('')
   const [itens, setItens] = useState<Item[]>([])
+  const [anexo, setAnexo] = useState<{ url: string; nome: string } | null>(null)
+  const [uploadingAnexo, setUploadingAnexo] = useState(false)
 
   // mostra a lista ao focar (mesmo sem digitar); filtra ao digitar
   const filtered = contacts.filter(c =>
@@ -61,6 +63,21 @@ export function NovoOrcamentoModal({ open, onClose, contacts, services, products
   const subtotal = itens.reduce((s, i) => s + (Number(i.valor) * Number(i.qtd)), 0)
   const total = Math.max(0, subtotal - Number(desconto || 0))
 
+  async function handleAnexoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAnexo(true); setError(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (res.ok && data.url) setAnexo({ url: data.url, nome: file.name })
+      else setError(data.error ?? 'Erro ao anexar arquivo.')
+    } catch { setError('Erro ao anexar arquivo.') }
+    setUploadingAnexo(false)
+  }
+
   async function handleSubmit() {
     setLoading(true); setError(null)
     const result = await createOrcamento({
@@ -68,6 +85,7 @@ export function NovoOrcamentoModal({ open, onClose, contacts, services, products
       clienteNome: modoCliente === 'cadastrado' ? (selectedContact?.name ?? selectedContact?.phone ?? '') : clienteNome,
       clienteTelefone: modoCliente === 'cadastrado' ? (selectedContact?.phone ?? '') : clienteTel,
       vendedor, itens, desconto: Number(desconto || 0), validade: validade || null, observacoes,
+      anexoUrl: anexo?.url ?? null, anexoNome: anexo?.nome ?? null,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
@@ -152,6 +170,20 @@ export function NovoOrcamentoModal({ open, onClose, contacts, services, products
               <div><label className={labelCls}>Observações</label>
                 <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} rows={3} placeholder="Detalhes..."
                   className="w-full resize-none rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] px-3 py-2 text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" /></div>
+
+              <div><label className={labelCls}><Paperclip className="size-3" /> Anexar arquivo modelo (opcional)</label>
+                {anexo ? (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] px-3 h-10">
+                    <span className="text-xs text-[#1C1B18] truncate flex items-center gap-1.5"><FileText className="size-3.5 text-[#1A56FF] shrink-0" /> {anexo.nome}</span>
+                    <button type="button" onClick={() => setAnexo(null)} className="text-red-400 hover:text-red-500 shrink-0"><X className="size-3.5" /></button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 h-10 rounded-xl border border-dashed border-[#EAE8E1] bg-[#F7F6F3] text-xs text-[#8C8880] cursor-pointer hover:border-[#1A56FF] transition-colors">
+                    {uploadingAnexo ? <Loader2 className="size-3.5 animate-spin" /> : <><Paperclip className="size-3.5" /> PDF, Word ou Excel já pronto</>}
+                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={handleAnexoUpload} disabled={uploadingAnexo} className="hidden" />
+                  </label>
+                )}
+              </div>
             </div>
 
             {/* Direita — itens */}
