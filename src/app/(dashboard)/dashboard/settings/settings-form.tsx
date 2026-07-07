@@ -1,24 +1,33 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Building2, User, CreditCard, Save, Loader2, Zap, Check } from 'lucide-react'
+import { salvarDadosConta } from '@/lib/actions/perfil'
+import { Building2, User, CreditCard, Save, Loader2, Zap, Check, MessageCircle, ArrowRight } from 'lucide-react'
 
-export function SettingsForm({ userData, userEmail }: { userData: Record<string, unknown> | null; userEmail: string }) {
+export function SettingsForm({ userData, userEmail, waInstance }: { userData: Record<string, unknown> | null; userEmail: string; waInstance: string | null }) {
+  const router = useRouter()
   const company = userData?.companies as Record<string, unknown> | null
+  const [nomeEmpresa, setNomeEmpresa] = useState((company?.name as string) ?? '')
+  const [nomeUsuario, setNomeUsuario] = useState((userData?.name as string) ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const plan = (company?.plan as string) ?? 'essencial'
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 800))
+    setSaving(true); setError(null)
+    const r = await salvarDadosConta({ nomeUsuario, nomeEmpresa })
     setSaving(false)
+    if (r?.error) { setError(r.error); return }
     setSaved(true)
+    router.refresh()
     setTimeout(() => setSaved(false), 2000)
   }
 
@@ -60,18 +69,27 @@ export function SettingsForm({ userData, userEmail }: { userData: Record<string,
           </h2>
         </div>
 
+        {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
+
         <div className="grid grid-cols-2 gap-5">
           <div className="space-y-1.5">
             <Label className="text-sm font-medium text-[#2E2D29]">Nome do negócio</Label>
-            <Input defaultValue={(company?.name as string) ?? ''}
+            <Input value={nomeEmpresa} onChange={e => setNomeEmpresa(e.target.value)}
               className="h-10 border-[#EAE8E1] focus-visible:ring-[#1A56FF]" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-[#2E2D29]">Instância WhatsApp</Label>
-            <Input defaultValue={(company?.whatsapp_instance as string) ?? ''}
-              placeholder="nome-da-instancia"
-              className="h-10 border-[#EAE8E1] focus-visible:ring-[#1A56FF]" />
-            <p className="text-xs text-[#C8C5BB]">Nome da instância na Evolution API</p>
+            <Label className="text-sm font-medium text-[#2E2D29]">WhatsApp</Label>
+            <div className="h-10 px-3 rounded-md border border-[#EAE8E1] bg-[#F7F6F3] flex items-center justify-between">
+              {waInstance ? (
+                <span className="flex items-center gap-1.5 text-sm font-medium text-[#0DB57A]"><Check className="size-3.5" /> Conectado</span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-sm text-[#8C8880]"><MessageCircle className="size-3.5" /> Não conectado</span>
+              )}
+              <Link href="/dashboard/ia" className="flex items-center gap-1 text-xs font-semibold text-[#1A56FF] hover:underline">
+                Conectar <ArrowRight className="size-3" />
+              </Link>
+            </div>
+            <p className="text-xs text-[#C8C5BB]">A conexão é feita por QR Code em Conexão &amp; IA</p>
           </div>
         </div>
 
@@ -85,7 +103,7 @@ export function SettingsForm({ userData, userEmail }: { userData: Record<string,
           <div className="grid grid-cols-2 gap-5">
             <div className="space-y-1.5">
               <Label className="text-sm font-medium text-[#2E2D29]">Seu nome</Label>
-              <Input defaultValue={(userData?.name as string) ?? ''}
+              <Input value={nomeUsuario} onChange={e => setNomeUsuario(e.target.value)}
                 className="h-10 border-[#EAE8E1] focus-visible:ring-[#1A56FF]" />
             </div>
             <div className="space-y-1.5">
