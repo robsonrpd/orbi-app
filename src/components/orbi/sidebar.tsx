@@ -71,12 +71,13 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
   const [waOpen, setWaOpen] = useState(waAtivo)
   const [logo, setLogo] = useState<string | null>(logoUrl ?? null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [logoError, setLogoError] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setUploadingLogo(true)
+    setUploadingLogo(true); setLogoError(null)
     const fd = new FormData()
     fd.append('file', file)
     try {
@@ -84,10 +85,16 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
       const data = await res.json()
       if (res.ok && data.url) {
         setLogo(data.url)
-        await saveCompanyLogo(data.url)
+        const r = await saveCompanyLogo(data.url)
+        if (r?.error) setLogoError(r.error)
+      } else {
+        setLogoError(data.error ?? 'Erro ao enviar a logo.')
       }
-    } catch { /* ignora */ }
+    } catch {
+      setLogoError('Falha de conexão ao enviar a logo.')
+    }
     setUploadingLogo(false)
+    if (logoInputRef.current) logoInputRef.current.value = ''
   }
 
   function isActive(href: string, exact?: boolean) {
@@ -136,6 +143,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
           )}
           <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
         </div>
+        {logoError && <p className="text-center text-[10px] font-medium text-red-400 mt-1.5 leading-snug">{logoError}</p>}
         {companyName && <p className="text-center text-xs font-semibold text-white/70 mt-2 truncate">{companyName}</p>}
         <Link href="/dashboard" className="flex items-center justify-center gap-1 mt-1.5">
           <span className="text-sm font-black text-white/40 tracking-tight" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
