@@ -4,8 +4,13 @@ import { useState, useRef } from 'react'
 import { updateContact, deleteContact } from '@/lib/actions/contacts'
 import {
   X, Phone, Mail, Cake, Clock,
-  Edit2, Loader2, Check, MapPin, Trash2, AlertCircle, CreditCard, ShoppingBag
+  Edit2, Loader2, Check, MapPin, Trash2, AlertCircle, CreditCard, ShoppingBag, MessageCircle
 } from 'lucide-react'
+
+function waLink(phone: string) {
+  const d = (phone || '').replace(/\D/g, '')
+  return `https://wa.me/${d.startsWith('55') ? d : `55${d}`}`
+}
 
 type Contact = {
   id: string; name: string | null; phone: string; email: string | null
@@ -109,7 +114,7 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
           /* MODO VISUALIZAÇÃO */
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             {/* Contato */}
-            <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
               <span className="flex items-center gap-1.5 text-[#2E2D29]"><Phone className="size-3.5 text-[#C8C5BB]" /> {contact.phone}</span>
               {contact.email && <span className="flex items-center gap-1.5 text-[#2E2D29]"><Mail className="size-3.5 text-[#C8C5BB]" /> {contact.email}</span>}
               {contact.data_nascimento && <span className="flex items-center gap-1.5 text-[#2E2D29]"><Cake className="size-3.5 text-[#C8C5BB]" /> {fmtDate(contact.data_nascimento)}</span>}
@@ -182,6 +187,11 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
             <div className="flex gap-3">
+              <a href={waLink(contact.phone)} target="_blank" rel="noopener noreferrer"
+                className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{ fontFamily: 'Barlow, sans-serif', background: '#0DB57A', boxShadow: '0 4px 16px rgba(13,181,122,0.35)' }}>
+                <MessageCircle className="size-4" /> WhatsApp
+              </a>
               <button onClick={() => setEditing(true)}
                 className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
