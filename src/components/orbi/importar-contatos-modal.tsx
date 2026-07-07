@@ -6,7 +6,7 @@ import { importarContatos } from '@/lib/actions/contacts'
 import { X, Upload, FileSpreadsheet, Loader2, Check, AlertTriangle } from 'lucide-react'
 
 type Props = { open: boolean; onClose: () => void }
-type Resultado = { criados: number; ignorados: number; invalidos: number }
+type Resultado = { criados: number; jaExistiamNoOrbi: number; duplicadosNaPlanilha: number; invalidos: number }
 
 const COLUNAS = {
   name: ['nome', 'cliente', 'name', 'contato'],
@@ -77,7 +77,7 @@ export function ImportarContatosModal({ open, onClose }: Props) {
       const r = await importarContatos(rows)
       setLoading(false)
       if (r?.error) { setError(r.error); return }
-      setResultado({ criados: r.criados ?? 0, ignorados: r.ignorados ?? 0, invalidos: r.invalidos ?? 0 })
+      setResultado({ criados: r.criados ?? 0, jaExistiamNoOrbi: r.jaExistiamNoOrbi ?? 0, duplicadosNaPlanilha: r.duplicadosNaPlanilha ?? 0, invalidos: r.invalidos ?? 0 })
       router.refresh()
     } catch {
       setLoading(false)
@@ -124,14 +124,18 @@ export function ImportarContatosModal({ open, onClose }: Props) {
                 <Check className="size-5" />
                 <p className="text-sm font-bold">Importação concluída!</p>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="rounded-xl bg-[#E6F9F3] p-3">
                   <p className="text-xl font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>{resultado.criados}</p>
                   <p className="text-[10px] text-[#8C8880] uppercase font-bold mt-1">Criados</p>
                 </div>
                 <div className="rounded-xl bg-[#FEF3C7] p-3">
-                  <p className="text-xl font-black text-[#F59E0B]" style={{ fontFamily: 'Fraunces, serif' }}>{resultado.ignorados}</p>
-                  <p className="text-[10px] text-[#8C8880] uppercase font-bold mt-1">Já existiam</p>
+                  <p className="text-xl font-black text-[#F59E0B]" style={{ fontFamily: 'Fraunces, serif' }}>{resultado.jaExistiamNoOrbi}</p>
+                  <p className="text-[10px] text-[#8C8880] uppercase font-bold mt-1">Já estavam no Orbi</p>
+                </div>
+                <div className="rounded-xl bg-[#FEF3C7] p-3">
+                  <p className="text-xl font-black text-[#F59E0B]" style={{ fontFamily: 'Fraunces, serif' }}>{resultado.duplicadosNaPlanilha}</p>
+                  <p className="text-[10px] text-[#8C8880] uppercase font-bold mt-1">Duplicados na planilha</p>
                 </div>
                 <div className="rounded-xl bg-[#FEF2F2] p-3">
                   <p className="text-xl font-black text-red-500" style={{ fontFamily: 'Fraunces, serif' }}>{resultado.invalidos}</p>

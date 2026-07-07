@@ -91,13 +91,14 @@ export async function importarContatos(rows: { name: string | null; phone: strin
   const { data: existentes } = await service.from('contacts').select('phone').eq('company_id', companyId)
   const telefonesExistentes = new Set((existentes ?? []).map(c => c.phone))
 
-  let criados = 0, ignorados = 0, invalidos = 0
+  let criados = 0, jaExistiamNoOrbi = 0, duplicadosNaPlanilha = 0, invalidos = 0
   const vistosNestaImportacao = new Set<string>()
 
   for (const r of rows) {
     const phone = (r.phone ?? '').replace(/\D/g, '')
     if (!phone || phone.length < 8 || phone.length > 20) { invalidos++; continue }
-    if (telefonesExistentes.has(phone) || vistosNestaImportacao.has(phone)) { ignorados++; continue }
+    if (telefonesExistentes.has(phone)) { jaExistiamNoOrbi++; continue }
+    if (vistosNestaImportacao.has(phone)) { duplicadosNaPlanilha++; continue }
 
     const name = r.name?.trim().slice(0, 200) || null
     const email = r.email?.trim().slice(0, 200) || null
@@ -111,7 +112,7 @@ export async function importarContatos(rows: { name: string | null; phone: strin
 
   revalidatePath('/dashboard/clientes')
   revalidatePath('/dashboard/funil')
-  return { success: true, criados, ignorados, invalidos }
+  return { success: true, criados, jaExistiamNoOrbi, duplicadosNaPlanilha, invalidos }
 }
 
 export async function deleteContact(id: string) {
