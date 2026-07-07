@@ -60,6 +60,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   const [tags, setTags] = useState<string[]>(lead.tags ?? [])
   const [novaTag, setNovaTag] = useState('')
   const [responsavel, setResp] = useState(lead.responsavel_id ?? '')
+  const [avisando, setAvisando] = useState(false)
+  const [avisado, setAvisado] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
 
@@ -160,7 +162,12 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   }
   function removerTag(t: string) { setTags(tags.filter(x => x !== t)) }
   async function mudarEtapa(n: string) { setEtapa(n); await atualizarLead(lead.id, { etapa: n }); onChange(lead.id, { funil_etapa: n }) }
-  async function mudarResp(id: string) { setResp(id); await setResponsavel(lead.id, id || null) }
+  async function mudarResp(id: string) {
+    setResp(id)
+    if (id) setAvisando(true)
+    await setResponsavel(lead.id, id || null)
+    if (id) { setAvisando(false); setAvisado(true); setTimeout(() => setAvisado(false), 2500) }
+  }
 
   async function addTarefa() {
     if (!tTit.trim()) return
@@ -300,6 +307,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   <option value="">— Ninguém</option>
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
                 </select>
+                {avisando && <p className="text-[11px] text-[#8C8880] mt-1">Avisando no WhatsApp dele...</p>}
+                {avisado && <p className="flex items-center gap-1 text-[11px] text-[#0DB57A] mt-1"><Check className="size-3" strokeWidth={2.5} /> Vendedor avisado no WhatsApp</p>}
               </div>
               {/* Status da negociação */}
               <div>

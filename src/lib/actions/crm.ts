@@ -154,8 +154,35 @@ export async function setResponsavel(contactId: string, vendedorId: string | nul
   const { error } = await service.from('contacts')
     .update({ responsavel_id: vendedorId } as never).eq('id', contactId).eq('company_id', companyId)
   if (error) return { error: 'Erro ao salvar responsável.' }
+
+  if (vendedorId) await notificarHandoff(service, companyId, contactId, vendedorId)
+
   revalidatePath('/dashboard/funil')
   return { success: true }
+}
+
+/** Avisa o vendedor no WhatsApp dele que um lead foi atribuído, com link direto pro cliente. */
+async function notificarHandoff(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, vendedorId: string) {
+  const [{ data: contact }, { data: vendedor }, { data: comp }] = await Promise.all([
+    service.from('contacts').select('name, phone').eq('id', contactId).eq('company_id', companyId).single(),
+    service.from('vendedores').select('nome, telefone').eq('id', vendedorId).eq('company_id', companyId).single(),
+    service.from('companies').select('name, settings').eq('id', companyId).single(),
+  ])
+  if (!contact?.phone || !vendedor?.telefone) return // sem telefone de um dos lados, não há como avisar
+
+  const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+  if (!instance) return // whatsapp não conectado, segue sem avisar
+
+  const clienteNumero = (contact.phone || '').replace(/\D/g, '')
+  const clienteWa = clienteNumero.startsWith('55') ? clienteNumero : `55${clienteNumero}`
+  const vendedorNumero = (vendedor.telefone || '').replace(/\D/g, '')
+  const vendedorWa = vendedorNumero.startsWith('55') ? vendedorNumero : `55${vendedorNumero}`
+
+  const nomeCliente = contact.name || 'Cliente sem nome'
+  const link = `https://wa.me/${clienteWa}`
+  const texto = `🎯 Novo lead pra você, ${vendedor.nome}!\n\n*${nomeCliente}*\n${contact.phone}\n\nToque no link pra abrir a conversa direto:\n${link}`
+
+  try { await enviarTexto(instance, vendedorWa, texto) } catch { /* aviso é best-effort — não deve quebrar a atribuição do lead */ }
 }
 
 /* ---------- Tarefas ---------- */
