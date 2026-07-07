@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { NovoClienteModal } from '@/components/orbi/novo-cliente-modal'
 import { ClienteDetalheModal } from '@/components/orbi/cliente-detalhe-modal'
 import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
-import { contarImportados, excluirImportados } from '@/lib/actions/contacts'
+import { listarImportacoes, excluirImportacao, excluirImportados } from '@/lib/actions/contacts'
 
 type Contact = {
   id: string
@@ -52,26 +52,34 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const statsFor = (id: string): Stats => stats[id] ?? { totalGasto: 0, numAgendamentos: 0, numCompras: 0, devendo: 0, formas: {}, produtos: [] }
 
-  // excluir contatos importados (desfazer planilha)
+  // excluir importações (por planilha/lote)
   const [excluirOpen, setExcluirOpen] = useState(false)
-  const [contandoImportados, setContandoImportados] = useState(false)
-  const [totalImportados, setTotalImportados] = useState<number | null>(null)
-  const [excluindo, setExcluindo] = useState(false)
-  const [resultadoExclusao, setResultadoExclusao] = useState<{ excluidos: number; falharam: number } | null>(null)
+  const [carregandoLotes, setCarregandoLotes] = useState(false)
+  const [lotes, setLotes] = useState<{ batchId: string; total: number; criadoPor: string | null; dataMaisRecente: string }[]>([])
+  const [semLote, setSemLote] = useState(0)
+  const [confirmando, setConfirmando] = useState<string | null>(null)
+  const [excluindoId, setExcluindoId] = useState<string | null>(null)
+  const [msgResultado, setMsgResultado] = useState<string | null>(null)
 
   async function abrirExcluirImportados() {
-    setExcluirOpen(true); setResultadoExclusao(null); setContandoImportados(true)
-    const r = await contarImportados()
-    setContandoImportados(false)
-    setTotalImportados(r.total ?? 0)
+    setExcluirOpen(true); setMsgResultado(null); setConfirmando(null); setCarregandoLotes(true)
+    const r = await listarImportacoes()
+    setCarregandoLotes(false)
+    setLotes(r.lotes ?? [])
+    setSemLote(r.semLote ?? 0)
   }
-  async function confirmarExcluirImportados() {
-    setExcluindo(true)
-    const r = await excluirImportados()
-    setExcluindo(false)
-    if (r.success) { setResultadoExclusao({ excluidos: r.excluidos ?? 0, falharam: r.falharam ?? 0 }); router.refresh() }
+  async function excluirLote(batchId: string) {
+    setExcluindoId(batchId); setConfirmando(null)
+    const r = batchId === 'sem-lote' ? await excluirImportados() : await excluirImportacao(batchId)
+    setExcluindoId(null)
+    if (r.success) {
+      setMsgResultado(`${r.excluidos ?? 0} contato${(r.excluidos ?? 0) === 1 ? '' : 's'} excluído${(r.excluidos ?? 0) === 1 ? '' : 's'}${(r.falharam ?? 0) > 0 ? ` (${r.falharam} não puderam ser removidos por ter vendas/agendamentos vinculados)` : ''}.`)
+      setLotes(ls => ls.filter(l => l.batchId !== batchId))
+      if (batchId === 'sem-lote') setSemLote(0)
+      router.refresh()
+    }
   }
-  function fecharExcluirImportados() { setExcluirOpen(false); setTotalImportados(null); setResultadoExclusao(null) }
+  function fecharExcluirImportados() { setExcluirOpen(false); setLotes([]); setSemLote(0); setMsgResultado(null); setConfirmando(null) }
 
   function ordenarPor(key: SortKey) {
     if (key === sortKey) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return }
@@ -124,7 +132,7 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
             </Button>
             <Button variant="outline" size="sm" onClick={abrirExcluirImportados}
               className="h-8 text-xs border-[#EAE8E1] text-red-500 hover:text-red-600 hover:bg-red-50 gap-1.5">
-              <Trash2 className="size-3.5" /> Excluir importados
+              <Trash2 className="size-3.5" /> Excluir planilhas
             </Button>
             <Button size="sm" onClick={() => setModalOpen(true)}
               className="h-8 text-xs bg-[#1A56FF] hover:bg-[#1445DD] text-white gap-1.5">
@@ -213,48 +221,74 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
       <ImportarContatosModal open={importOpen} onClose={() => setImportOpen(false)} />
       {detalhe && <ClienteDetalheModal contact={detalhe} stats={statsFor(detalhe.id)} onClose={() => setDetalhe(null)} />}
 
-      {/* Excluir importados */}
+      {/* Excluir importações */}
       {excluirOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EAE8E1]">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EAE8E1] shrink-0">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 text-red-500" />
-                <p className="text-sm font-bold text-[#1C1B18]">Excluir importados</p>
+                <p className="text-sm font-bold text-[#1C1B18]">Excluir planilhas importadas</p>
               </div>
               <button onClick={fecharExcluirImportados} className="text-[#8C8880] hover:text-[#1C1B18]"><X className="size-5" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              {resultadoExclusao ? (
-                <div className="text-center space-y-2">
-                  <div className="w-12 h-12 rounded-full bg-[#E6F9F3] flex items-center justify-center mx-auto"><Check className="size-6 text-[#0DB57A]" /></div>
-                  <p className="text-sm font-bold text-[#1C1B18]">{resultadoExclusao.excluidos} contato{resultadoExclusao.excluidos === 1 ? '' : 's'} excluído{resultadoExclusao.excluidos === 1 ? '' : 's'}</p>
-                  {resultadoExclusao.falharam > 0 && (
-                    <p className="text-xs text-[#8C8880]">{resultadoExclusao.falharam} não puderam ser excluídos por terem vendas, agendamentos ou O.S. vinculados.</p>
-                  )}
-                  <button onClick={fecharExcluirImportados} className="w-full h-10 rounded-xl text-sm font-bold text-white mt-2" style={{ background: '#1A56FF' }}>Concluir</button>
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {msgResultado && (
+                <div className="flex items-center gap-2 bg-[#E6F9F3] border border-[#0DB57A]/20 text-[#0DB57A] text-sm font-medium rounded-xl px-3 py-2.5">
+                  <Check className="size-4 shrink-0" /> {msgResultado}
                 </div>
+              )}
+              {carregandoLotes ? (
+                <p className="text-sm text-[#8C8880] flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Carregando importações...</p>
+              ) : lotes.length === 0 && semLote === 0 ? (
+                <p className="text-sm text-[#8C8880] text-center py-6">Nenhuma importação de planilha encontrada.</p>
               ) : (
                 <>
-                  {contandoImportados ? (
-                    <p className="text-sm text-[#8C8880] flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Contando contatos importados...</p>
-                  ) : totalImportados === 0 ? (
-                    <p className="text-sm text-[#8C8880]">Nenhum contato com origem &quot;Importação&quot; encontrado.</p>
-                  ) : (
-                    <p className="text-sm text-[#2E2D29]">
-                      Isso vai excluir <strong>permanentemente {totalImportados} contato{totalImportados === 1 ? '' : 's'}</strong> que
-                      {' '}vieram de importação de planilha (origem = &quot;Importação&quot;). Essa ação não pode ser desfeita.
-                    </p>
+                  <p className="text-xs text-[#8C8880]">Escolha qual planilha importada você quer excluir. Cada uma só afeta os contatos daquela importação.</p>
+                  {lotes.map(l => (
+                    <div key={l.batchId} className="rounded-xl border border-[#EAE8E1] p-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#1C1B18]">{l.total} contato{l.total === 1 ? '' : 's'}</p>
+                        <p className="text-xs text-[#8C8880]">Importado {formatDate(l.dataMaisRecente)}{l.criadoPor ? ` por ${l.criadoPor}` : ''}</p>
+                      </div>
+                      {confirmando === l.batchId ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => setConfirmando(null)} className="text-xs font-semibold text-[#8C8880] px-2 py-1.5">Cancelar</button>
+                          <button onClick={() => excluirLote(l.batchId)} disabled={excluindoId === l.batchId}
+                            className="flex items-center gap-1 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-500 hover:bg-red-600">
+                            {excluindoId === l.batchId ? <Loader2 className="size-3.5 animate-spin" /> : 'Confirmar'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmando(l.batchId)}
+                          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-red-500 border border-[#EAE8E1] hover:bg-red-50">
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {semLote > 0 && (
+                    <div className="rounded-xl border border-[#EAE8E1] p-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#1C1B18]">{semLote} contato{semLote === 1 ? '' : 's'}</p>
+                        <p className="text-xs text-[#8C8880]">Importação antiga (sem identificação de lote)</p>
+                      </div>
+                      {confirmando === 'sem-lote' ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => setConfirmando(null)} className="text-xs font-semibold text-[#8C8880] px-2 py-1.5">Cancelar</button>
+                          <button onClick={() => excluirLote('sem-lote')} disabled={excluindoId === 'sem-lote'}
+                            className="flex items-center gap-1 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-500 hover:bg-red-600">
+                            {excluindoId === 'sem-lote' ? <Loader2 className="size-3.5 animate-spin" /> : 'Confirmar'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmando('sem-lote')}
+                          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-red-500 border border-[#EAE8E1] hover:bg-red-50">
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
                   )}
-                  <div className="flex gap-3">
-                    <button onClick={fecharExcluirImportados} className="flex-1 h-10 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>
-                    {(totalImportados ?? 0) > 0 && (
-                      <button onClick={confirmarExcluirImportados} disabled={excluindo || contandoImportados}
-                        className="flex-1 h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-colors">
-                        {excluindo ? <Loader2 className="size-4 animate-spin" /> : <><Trash2 className="size-4" /> Excluir</>}
-                      </button>
-                    )}
-                  </div>
                 </>
               )}
             </div>

@@ -90,6 +90,7 @@ export async function importarContatos(rows: { name: string | null; phone: strin
   if (rows.length > MAX_IMPORT_ROWS) return { error: `Máximo de ${MAX_IMPORT_ROWS} linhas por importação.` }
 
   const criadoPor = await getCurrentUserName()
+  const batchId = crypto.randomUUID()
   const service = createServiceClient()
   const { data: existentes } = await service.from('contacts').select('phone').eq('company_id', companyId)
   const telefonesExistentes = new Set((existentes ?? []).map(c => c.phone))
@@ -110,34 +111,82 @@ export async function importarContatos(rows: { name: string | null; phone: strin
     const { error } = await service.from('contacts').insert({
       company_id: companyId, name, phone, email, origem, lgpd_consent: 'nao_informado', active: true,
       criado_por: criadoPor ? `${criadoPor} (planilha)` : 'Importação (planilha)',
-    })
+      import_batch_id: batchId,
+    } as never)
     if (!error) { criados++; vistosNestaImportacao.add(phone) } else { invalidos++ }
   }
 
   revalidatePath('/dashboard/clientes')
   revalidatePath('/dashboard/funil')
-  return { success: true, criados, jaExistiamNoOrbi, duplicadosNaPlanilha, invalidos }
+  return { success: true, criados, jaExistiamNoOrbi, duplicadosNaPlanilha, invalidos, batchId }
 }
 
-/** Conta quantos contatos vieram de importação de planilha (para confirmar antes de excluir em massa). */
+/** Lista as importações de planilha já feitas (agrupadas por lote), mais recentes primeiro. */
+export async function listarImportacoes() {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
+  const { data } = await service.from('contacts')
+    .select('import_batch_id, criado_por, created_at, origem')
+    .eq('company_id', companyId).eq('origem', 'Importação')
+    .order('created_at', { ascending: false })
+
+  const porLote = new Map<string, { total: number; criadoPor: string | null; dataMaisRecente: string }>()
+  let semLote = 0
+  ;(data ?? []).forEach(c => {
+    const lote = (c as { import_batch_id: string | null }).import_batch_id
+    if (!lote) { semLote++; return }
+    const atual = porLote.get(lote)
+    if (!atual) porLote.set(lote, { total: 1, criadoPor: c.criado_por, dataMaisRecente: c.created_at })
+    else atual.total++
+  })
+
+  const lotes = [...porLote.entries()].map(([batchId, v]) => ({ batchId, ...v }))
+  return { lotes, semLote }
+}
+
+/** Exclui apenas os contatos de UMA importação específica (identificada pelo lote). */
+export async function excluirImportacao(batchId: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!batchId) return { error: 'Lote inválido.' }
+
+  const service = createServiceClient()
+  const { data: contatos } = await service.from('contacts')
+    .select('id').eq('company_id', companyId).eq('import_batch_id', batchId as never)
+  if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
+
+  let excluidos = 0, falharam = 0
+  for (const c of contatos) {
+    const { error } = await service.from('contacts').delete().eq('id', c.id).eq('company_id', companyId)
+    if (error) falharam++; else excluidos++
+  }
+
+  revalidatePath('/dashboard/clientes')
+  revalidatePath('/dashboard/funil')
+  return { success: true, excluidos, falharam }
+}
+
+/** Conta contatos de importações antigas sem lote identificado (feitas antes do rastreio por lote existir). */
 export async function contarImportados() {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
   const service = createServiceClient()
   const { count } = await service.from('contacts')
     .select('id', { count: 'exact', head: true })
-    .eq('company_id', companyId).eq('origem', 'Importação')
+    .eq('company_id', companyId).eq('origem', 'Importação').is('import_batch_id', null)
   return { total: count ?? 0 }
 }
 
-/** Exclui todos os contatos que vieram de importação de planilha (origem = 'Importação'). */
+/** Exclui os contatos de importações antigas sem lote identificado. */
 export async function excluirImportados() {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
 
   const service = createServiceClient()
   const { data: contatos } = await service.from('contacts')
-    .select('id').eq('company_id', companyId).eq('origem', 'Importação')
+    .select('id').eq('company_id', companyId).eq('origem', 'Importação').is('import_batch_id', null)
   if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
 
   let excluidos = 0, falharam = 0
