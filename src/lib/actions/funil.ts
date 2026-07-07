@@ -1,7 +1,7 @@
 'use server'
 
 import { createServiceClient } from '@/lib/supabase/server'
-import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
+import { getEffectiveCompanyId as getCompanyId, getCurrentUserName } from '@/lib/auth/company'
 import { FUNIL_KEYS } from '@/lib/funil'
 import { revalidatePath } from 'next/cache'
 
@@ -25,6 +25,7 @@ export async function criarLead(nome: string, telefone: string) {
   if (!companyId) return { error: 'Não autenticado.' }
   if (!telefone?.trim()) return { error: 'Telefone é obrigatório.' }
 
+  const criadoPor = await getCurrentUserName()
   const service = createServiceClient()
   const { error } = await service.from('contacts').insert({
     company_id: companyId,
@@ -33,6 +34,7 @@ export async function criarLead(nome: string, telefone: string) {
     origem: 'Manual',
     funil_etapa: 'novo',
     active: true,
+    criado_por: criadoPor,
   } as never)
   if (error) return { error: 'Erro ao criar lead.' }
   revalidatePath('/dashboard/funil')

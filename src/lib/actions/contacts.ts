@@ -1,7 +1,7 @@
 'use server'
 
 import { createServiceClient } from '@/lib/supabase/server'
-import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
+import { getEffectiveCompanyId as getCompanyId, getCurrentUserName } from '@/lib/auth/company'
 import { revalidatePath } from 'next/cache'
 
 function extractFields(formData: FormData) {
@@ -43,10 +43,12 @@ export async function createContact(formData: FormData) {
   if (f.phone.length > 20) return { error: 'Telefone inválido.' }
   if (f.name && f.name.length > 200) return { error: 'Nome muito longo.' }
 
+  const criadoPor = await getCurrentUserName()
   const service = createServiceClient()
   const { error } = await service.from('contacts').insert({
     company_id: companyId,
     ...f,
+    criado_por: criadoPor,
   })
 
   if (error) {
@@ -87,6 +89,7 @@ export async function importarContatos(rows: { name: string | null; phone: strin
   if (!Array.isArray(rows) || rows.length === 0) return { error: 'Nenhuma linha para importar.' }
   if (rows.length > MAX_IMPORT_ROWS) return { error: `Máximo de ${MAX_IMPORT_ROWS} linhas por importação.` }
 
+  const criadoPor = await getCurrentUserName()
   const service = createServiceClient()
   const { data: existentes } = await service.from('contacts').select('phone').eq('company_id', companyId)
   const telefonesExistentes = new Set((existentes ?? []).map(c => c.phone))
@@ -106,6 +109,7 @@ export async function importarContatos(rows: { name: string | null; phone: strin
 
     const { error } = await service.from('contacts').insert({
       company_id: companyId, name, phone, email, origem, lgpd_consent: 'nao_informado', active: true,
+      criado_por: criadoPor ? `${criadoPor} (planilha)` : 'Importação (planilha)',
     })
     if (!error) { criados++; vistosNestaImportacao.add(phone) } else { invalidos++ }
   }

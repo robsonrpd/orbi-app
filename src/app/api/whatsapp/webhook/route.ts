@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
     if (chave && !contactId) {
       const { data: novo, error: capErr } = await service.from('contacts').insert({
         company_id: company.id, name: e.pushName?.trim() || null, phone: numero,
-        origem: 'WhatsApp', funil_etapa: 'novo', active: true,
+        origem: 'WhatsApp', funil_etapa: 'novo', active: true, criado_por: 'WhatsApp',
       } as never).select('id').single()
       if (capErr) console.error('[wh capErr]', capErr.message)
       contactId = (novo as { id?: string })?.id

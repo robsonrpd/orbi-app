@@ -30,6 +30,16 @@ export async function getEffectiveCompanyId(): Promise<string | null> {
   return realId
 }
 
+/** Nome do usuário logado (para atribuir "quem inseriu" em cadastros feitos na UI). */
+export async function getCurrentUserName(): Promise<string | null> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const service = createServiceClient()
+  const { data } = await service.from('users').select('name').eq('id', user.id).single()
+  return data?.name ?? null
+}
+
 /**
  * Se houver impersonation ativa (e o usuário for super-admin), retorna o nome da empresa.
  */
