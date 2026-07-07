@@ -119,6 +119,38 @@ export async function importarContatos(rows: { name: string | null; phone: strin
   return { success: true, criados, jaExistiamNoOrbi, duplicadosNaPlanilha, invalidos }
 }
 
+/** Conta quantos contatos vieram de importação de planilha (para confirmar antes de excluir em massa). */
+export async function contarImportados() {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+  const { count } = await service.from('contacts')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId).eq('origem', 'Importação')
+  return { total: count ?? 0 }
+}
+
+/** Exclui todos os contatos que vieram de importação de planilha (origem = 'Importação'). */
+export async function excluirImportados() {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
+  const { data: contatos } = await service.from('contacts')
+    .select('id').eq('company_id', companyId).eq('origem', 'Importação')
+  if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
+
+  let excluidos = 0, falharam = 0
+  for (const c of contatos) {
+    const { error } = await service.from('contacts').delete().eq('id', c.id).eq('company_id', companyId)
+    if (error) falharam++; else excluidos++
+  }
+
+  revalidatePath('/dashboard/clientes')
+  revalidatePath('/dashboard/funil')
+  return { success: true, excluidos, falharam }
+}
+
 export async function deleteContact(id: string) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }

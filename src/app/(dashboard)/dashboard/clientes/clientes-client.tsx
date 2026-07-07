@@ -1,11 +1,16 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { UserPlus, Download, Upload, Phone, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Tag as TagIcon, User } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import {
+  UserPlus, Download, Upload, Phone, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Tag as TagIcon, User,
+  Trash2, Loader2, AlertTriangle, X, Check,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NovoClienteModal } from '@/components/orbi/novo-cliente-modal'
 import { ClienteDetalheModal } from '@/components/orbi/cliente-detalhe-modal'
 import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
+import { contarImportados, excluirImportados } from '@/lib/actions/contacts'
 
 type Contact = {
   id: string
@@ -39,12 +44,34 @@ const COLS: { key: SortKey; label: string }[] = [
 ]
 
 export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats: Record<string, Stats> }) {
+  const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [detalhe, setDetalhe] = useState<Contact | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const statsFor = (id: string): Stats => stats[id] ?? { totalGasto: 0, numAgendamentos: 0, numCompras: 0, devendo: 0, formas: {}, produtos: [] }
+
+  // excluir contatos importados (desfazer planilha)
+  const [excluirOpen, setExcluirOpen] = useState(false)
+  const [contandoImportados, setContandoImportados] = useState(false)
+  const [totalImportados, setTotalImportados] = useState<number | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
+  const [resultadoExclusao, setResultadoExclusao] = useState<{ excluidos: number; falharam: number } | null>(null)
+
+  async function abrirExcluirImportados() {
+    setExcluirOpen(true); setResultadoExclusao(null); setContandoImportados(true)
+    const r = await contarImportados()
+    setContandoImportados(false)
+    setTotalImportados(r.total ?? 0)
+  }
+  async function confirmarExcluirImportados() {
+    setExcluindo(true)
+    const r = await excluirImportados()
+    setExcluindo(false)
+    if (r.success) { setResultadoExclusao({ excluidos: r.excluidos ?? 0, falharam: r.falharam ?? 0 }); router.refresh() }
+  }
+  function fecharExcluirImportados() { setExcluirOpen(false); setTotalImportados(null); setResultadoExclusao(null) }
 
   function ordenarPor(key: SortKey) {
     if (key === sortKey) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return }
@@ -94,6 +121,10 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
             <Button variant="outline" size="sm" onClick={exportarExcel}
               className="h-8 text-xs border-[#EAE8E1] text-[#8C8880] hover:text-[#2E2D29] gap-1.5">
               <Download className="size-3.5" /> Exportar Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={abrirExcluirImportados}
+              className="h-8 text-xs border-[#EAE8E1] text-red-500 hover:text-red-600 hover:bg-red-50 gap-1.5">
+              <Trash2 className="size-3.5" /> Excluir importados
             </Button>
             <Button size="sm" onClick={() => setModalOpen(true)}
               className="h-8 text-xs bg-[#1A56FF] hover:bg-[#1445DD] text-white gap-1.5">
@@ -181,6 +212,55 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
       <NovoClienteModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <ImportarContatosModal open={importOpen} onClose={() => setImportOpen(false)} />
       {detalhe && <ClienteDetalheModal contact={detalhe} stats={statsFor(detalhe.id)} onClose={() => setDetalhe(null)} />}
+
+      {/* Excluir importados */}
+      {excluirOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EAE8E1]">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 text-red-500" />
+                <p className="text-sm font-bold text-[#1C1B18]">Excluir importados</p>
+              </div>
+              <button onClick={fecharExcluirImportados} className="text-[#8C8880] hover:text-[#1C1B18]"><X className="size-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {resultadoExclusao ? (
+                <div className="text-center space-y-2">
+                  <div className="w-12 h-12 rounded-full bg-[#E6F9F3] flex items-center justify-center mx-auto"><Check className="size-6 text-[#0DB57A]" /></div>
+                  <p className="text-sm font-bold text-[#1C1B18]">{resultadoExclusao.excluidos} contato{resultadoExclusao.excluidos === 1 ? '' : 's'} excluído{resultadoExclusao.excluidos === 1 ? '' : 's'}</p>
+                  {resultadoExclusao.falharam > 0 && (
+                    <p className="text-xs text-[#8C8880]">{resultadoExclusao.falharam} não puderam ser excluídos por terem vendas, agendamentos ou O.S. vinculados.</p>
+                  )}
+                  <button onClick={fecharExcluirImportados} className="w-full h-10 rounded-xl text-sm font-bold text-white mt-2" style={{ background: '#1A56FF' }}>Concluir</button>
+                </div>
+              ) : (
+                <>
+                  {contandoImportados ? (
+                    <p className="text-sm text-[#8C8880] flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Contando contatos importados...</p>
+                  ) : totalImportados === 0 ? (
+                    <p className="text-sm text-[#8C8880]">Nenhum contato com origem &quot;Importação&quot; encontrado.</p>
+                  ) : (
+                    <p className="text-sm text-[#2E2D29]">
+                      Isso vai excluir <strong>permanentemente {totalImportados} contato{totalImportados === 1 ? '' : 's'}</strong> que
+                      {' '}vieram de importação de planilha (origem = &quot;Importação&quot;). Essa ação não pode ser desfeita.
+                    </p>
+                  )}
+                  <div className="flex gap-3">
+                    <button onClick={fecharExcluirImportados} className="flex-1 h-10 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>
+                    {(totalImportados ?? 0) > 0 && (
+                      <button onClick={confirmarExcluirImportados} disabled={excluindo || contandoImportados}
+                        className="flex-1 h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-colors">
+                        {excluindo ? <Loader2 className="size-4 animate-spin" /> : <><Trash2 className="size-4" /> Excluir</>}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
