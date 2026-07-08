@@ -120,7 +120,12 @@ export async function iniciarConversa(numero: string, texto: string) {
   const existente = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
 
   const env = await enviarTexto(instance, numeroFmt, limpo)
-  if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
+  if (!env.ok) {
+    const d = env.data as { message?: string | string[]; error?: string; response?: { message?: string | string[] } } | null
+    const detalhe = d?.response?.message ?? d?.message ?? d?.error ?? (typeof d === 'string' ? d : null)
+    const texto = Array.isArray(detalhe) ? detalhe.join(' ') : detalhe
+    return { error: `Falha ao enviar pelo WhatsApp${env.status ? ` (${env.status})` : ''}${texto ? `: ${texto}` : '.'}` }
+  }
 
   const nova: Msg = { role: 'human', content: limpo, ts: new Date().toISOString() }
 

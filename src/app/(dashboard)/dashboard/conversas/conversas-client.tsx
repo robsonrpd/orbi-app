@@ -63,6 +63,7 @@ async function uploadArquivo(file: File): Promise<string | null> {
 export function ConversasClient({ conversasIniciais }: { conversasIniciais: ConversaResumo[] }) {
   const searchParams = useSearchParams()
   const telParam = searchParams.get('tel')
+  const nomeParam = searchParams.get('nome')
   const [conversas, setConversas] = useState(conversasIniciais)
   const [selecionada, setSelecionada] = useState<string | null>(
     () => telParam ? achaConversaPorTel(telParam, conversasIniciais) : (conversasIniciais[0]?.id ?? null)
@@ -247,10 +248,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
           <>
             <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
-                {iniciais(telParam)}
+                {iniciais(nomeParam ?? telParam)}
               </div>
               <div>
-                <p className="text-sm font-bold text-[#1C1B18]">Nova conversa</p>
+                <p className="text-sm font-bold text-[#1C1B18]">{nomeParam ?? 'Nova conversa'}</p>
                 <p className="text-xs text-[#8C8880]">{telParam}</p>
               </div>
             </div>

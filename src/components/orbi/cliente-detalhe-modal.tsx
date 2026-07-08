@@ -8,8 +8,10 @@ import {
   Edit2, Loader2, Check, MapPin, Trash2, AlertCircle, CreditCard, ShoppingBag, MessageCircle
 } from 'lucide-react'
 
-function conversaLink(phone: string) {
-  return `/dashboard/conversas?tel=${(phone || '').replace(/\D/g, '')}`
+function conversaLink(phone: string, nome: string | null) {
+  const params = new URLSearchParams({ tel: (phone || '').replace(/\D/g, '') })
+  if (nome) params.set('nome', nome)
+  return `/dashboard/conversas?${params.toString()}`
 }
 
 type Contact = {
@@ -187,7 +189,7 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
             <div className="flex gap-3">
-              <Link href={conversaLink(contact.phone)}
+              <Link href={conversaLink(contact.phone, contact.name)}
                 className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#0DB57A', boxShadow: '0 4px 16px rgba(13,181,122,0.35)' }}>
                 <MessageCircle className="size-4" /> WhatsApp
