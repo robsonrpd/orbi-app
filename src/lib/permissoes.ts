@@ -20,6 +20,7 @@ export const PERMISSOES: { key: string; label: string; href: string | null }[] =
   { key: 'avaliacoes', label: 'Avaliações', href: '/dashboard/avaliacoes' },
   { key: 'indicacoes', label: 'Ganhe uma Mensalidade', href: '/dashboard/indicacoes' },
   { key: 'ia', label: 'Inteligência IA', href: '/dashboard/ia' },
+  { key: 'envio_massa', label: 'Envio em Massa (WhatsApp)', href: '/dashboard/envio-massa' },
 ]
 
 // Mapa href -> chave de bloqueio (para esconder menus no Modo Vendedor)

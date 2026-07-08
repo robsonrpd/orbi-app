@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Calendar, Users, DollarSign,
   Bot, MessageSquare, Settings, LogOut, Eye,
-  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal, Crown, Gift, KanbanSquare, Globe, Briefcase,
+  Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal, Crown, Gift, KanbanSquare, Globe, Briefcase, Send,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -46,6 +46,7 @@ const orbiWhatsapp = {
     { href: '/dashboard/ia', label: 'Conexão & IA', icon: Bot },
     { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
     { href: '/dashboard/funil', label: 'CRM (Funil)', icon: KanbanSquare },
+    { href: '/dashboard/envio-massa', label: 'Envio em Massa', icon: Send },
   ],
 }
 
