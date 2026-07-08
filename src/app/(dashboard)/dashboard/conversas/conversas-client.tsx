@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa,
   type ConversaResumo,
@@ -26,6 +27,13 @@ const ANEXO_ITENS = [
   { icon: Book, label: 'Catálogo', cor: '#8D6E63', ativo: false },
   { icon: Zap, label: 'Resposta rápida', cor: '#FBC02D', ativo: false },
 ]
+
+function achaConversaPorTel(tel: string | null, lista: ConversaResumo[]) {
+  if (!tel) return null
+  const chave = tel.replace(/\D/g, '').slice(-8)
+  if (!chave) return null
+  return lista.find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)?.id ?? null
+}
 
 function iniciais(nome: string) {
   return nome.trim().slice(0, 1).toUpperCase() || '?'
@@ -53,8 +61,13 @@ async function uploadArquivo(file: File): Promise<string | null> {
 }
 
 export function ConversasClient({ conversasIniciais }: { conversasIniciais: ConversaResumo[] }) {
+  const searchParams = useSearchParams()
+  const telParam = searchParams.get('tel')
   const [conversas, setConversas] = useState(conversasIniciais)
-  const [selecionada, setSelecionada] = useState<string | null>(conversasIniciais[0]?.id ?? null)
+  const [selecionada, setSelecionada] = useState<string | null>(
+    () => achaConversaPorTel(telParam, conversasIniciais) ?? conversasIniciais[0]?.id ?? null
+  )
+  const [naoEncontrada, setNaoEncontrada] = useState(!!telParam && !achaConversaPorTel(telParam, conversasIniciais))
   const [mensagens, setMensagens] = useState<Msg[]>([])
   const [busca, setBusca] = useState('')
   const [texto, setTexto] = useState('')
@@ -221,9 +234,9 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
       <div className="flex-1 flex flex-col relative" style={{ background: '#EDEDED' }}>
         {!ativa ? (
           <div className="flex-1 flex items-center justify-center text-[#8C8880] text-sm">
-            <div className="text-center">
+            <div className="text-center max-w-xs px-4">
               <MessageCircle className="size-10 mx-auto mb-2 text-[#C8C5BB]" strokeWidth={1.5} />
-              Selecione uma conversa
+              {naoEncontrada ? 'Nenhuma conversa de WhatsApp com esse cliente ainda.' : 'Selecione uma conversa'}
             </div>
           </div>
         ) : (

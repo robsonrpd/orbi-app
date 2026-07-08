@@ -1,15 +1,15 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import Link from 'next/link'
 import { updateContact, deleteContact } from '@/lib/actions/contacts'
 import {
   X, Phone, Mail, Cake, Clock,
   Edit2, Loader2, Check, MapPin, Trash2, AlertCircle, CreditCard, ShoppingBag, MessageCircle
 } from 'lucide-react'
 
-function waLink(phone: string) {
-  const d = (phone || '').replace(/\D/g, '')
-  return `https://wa.me/${d.startsWith('55') ? d : `55${d}`}`
+function conversaLink(phone: string) {
+  return `/dashboard/conversas?tel=${(phone || '').replace(/\D/g, '')}`
 }
 
 type Contact = {
@@ -187,11 +187,11 @@ export function ClienteDetalheModal({ contact, stats, onClose }: { contact: Cont
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
             <div className="flex gap-3">
-              <a href={waLink(contact.phone)} target="_blank" rel="noopener noreferrer"
+              <Link href={conversaLink(contact.phone)}
                 className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#0DB57A', boxShadow: '0 4px 16px rgba(13,181,122,0.35)' }}>
                 <MessageCircle className="size-4" /> WhatsApp
-              </a>
+              </Link>
               <button onClick={() => setEditing(true)}
                 className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
