@@ -5,7 +5,7 @@ import { GlowCard } from '@/components/orbi/glow-card'
 import { createVendedor, updateVendedor, deleteVendedor } from '@/lib/actions/vendedores'
 import { criarLoginVendedor, removerLoginVendedor } from '@/lib/actions/vendedor-login'
 import { Users, Plus, Phone, Mail, Trash2, Loader2, X, Check, Edit2, ShieldCheck, Lock, KeyRound, LogIn } from 'lucide-react'
-import { PERMISSOES as AREAS } from '@/lib/permissoes'
+import { PERMISSOES as ALL_AREAS } from '@/lib/permissoes'
 
 type Vendedor = {
   id: string; nome: string; telefone: string | null; email: string | null
@@ -19,7 +19,9 @@ const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','P
 
 type Termo = { singular: string; plural: string }
 
-export function VendedoresClient({ vendedores, termo = { singular: 'Vendedor', plural: 'Vendedores' } }: { vendedores: Vendedor[]; termo?: Termo }) {
+export function VendedoresClient({ vendedores, termo = { singular: 'Vendedor', plural: 'Vendedores' }, esconderNicho = [] }: { vendedores: Vendedor[]; termo?: Termo; esconderNicho?: string[] }) {
+  // só mostra permissões de módulos que existem pro nicho desta empresa
+  const AREAS = ALL_AREAS.filter(a => !a.href || !esconderNicho.includes(a.href))
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Vendedor | null>(null)
   const [viewing, setViewing] = useState<Vendedor | null>(null)

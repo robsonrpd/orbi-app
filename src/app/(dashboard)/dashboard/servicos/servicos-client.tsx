@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createService, updateService, deleteService } from '@/lib/actions/services'
 import { FotoUpload } from '@/components/orbi/foto-upload'
-import { Plus, Clock, DollarSign, Edit2, Trash2, Scissors, X, Loader2, Check } from 'lucide-react'
+import { Plus, Clock, DollarSign, Edit2, Trash2, Sparkles, X, Loader2, Check } from 'lucide-react'
 
 type Service = {
   id: string
@@ -75,7 +75,7 @@ export function ServicosClient({ services, sugestoes = [] }: { services: Service
           <h2 className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
             Meus Serviços
           </h2>
-          <p className="text-sm text-[#8C8880] mt-0.5">Gerencie os serviços oferecidos pela sua ótica</p>
+          <p className="text-sm text-[#8C8880] mt-0.5">Gerencie os serviços oferecidos pelo seu negócio</p>
         </div>
         <button onClick={openNew}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
@@ -88,7 +88,7 @@ export function ServicosClient({ services, sugestoes = [] }: { services: Service
         <GlowCard>
           <div className="p-16 flex flex-col items-center gap-4">
             <div className="w-16 h-16 rounded-2xl bg-[#EEF2FF] flex items-center justify-center">
-              <Scissors className="size-7 text-[#1A56FF]" strokeWidth={1.5} />
+              <Sparkles className="size-7 text-[#1A56FF]" strokeWidth={1.5} />
             </div>
             <div className="text-center">
               <p className="text-base font-bold text-[#1C1B18]">Nenhum serviço cadastrado</p>
@@ -170,7 +170,7 @@ export function ServicosClient({ services, sugestoes = [] }: { services: Service
               style={{ background: 'linear-gradient(135deg, #0A0F1E, #1A56FF)' }}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                  <Scissors className="size-4 text-white" strokeWidth={1.5} />
+                  <Sparkles className="size-4 text-white" strokeWidth={1.5} />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-white">{editingService ? 'Editar Serviço' : 'Adicionar Serviço'}</p>

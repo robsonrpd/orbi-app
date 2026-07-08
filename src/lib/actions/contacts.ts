@@ -200,6 +200,27 @@ export async function excluirImportados() {
   return { success: true, excluidos, falharam }
 }
 
+/** Exclui TODOS os contatos importados de planilha, de qualquer lote (inclusive antigos sem lote). */
+export async function excluirTodasImportacoes() {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
+  const { data: contatos } = await service.from('contacts')
+    .select('id').eq('company_id', companyId).eq('origem', 'Importação')
+  if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
+
+  let excluidos = 0, falharam = 0
+  for (const c of contatos) {
+    const { error } = await service.from('contacts').delete().eq('id', c.id).eq('company_id', companyId)
+    if (error) falharam++; else excluidos++
+  }
+
+  revalidatePath('/dashboard/clientes')
+  revalidatePath('/dashboard/funil')
+  return { success: true, excluidos, falharam }
+}
+
 export async function deleteContact(id: string) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }

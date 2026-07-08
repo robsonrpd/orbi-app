@@ -11,7 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useState, useRef } from 'react'
-import { Camera, Loader2, ChevronDown, MessageCircle } from 'lucide-react'
+import { Camera, Loader2, ChevronDown, MessageCircle, Building2 } from 'lucide-react'
 import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
 import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
@@ -129,11 +129,13 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
           className={`group relative rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center h-20 ${canEditLogo ? 'cursor-pointer hover:border-[#1A56FF]/60' : ''} transition-colors`}>
           {logo ? (
             <img src={logo} alt={companyName ?? 'Logo'} className="w-full h-full object-contain p-2" />
-          ) : (
+          ) : canEditLogo ? (
             <div className="flex flex-col items-center gap-1 text-white/40">
               {uploadingLogo ? <Loader2 className="size-5 animate-spin" />
                 : <><Camera className="size-5" strokeWidth={1.5} /><span className="text-[10px]">Adicionar logo</span></>}
             </div>
+          ) : (
+            <Building2 className="size-6 text-white/25" strokeWidth={1.5} />
           )}
           {canEditLogo && logo && (
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">

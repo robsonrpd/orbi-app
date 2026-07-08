@@ -28,7 +28,8 @@ export default async function DashboardPage() {
   const companyName = companyRow?.name ?? 'Minha Ótica'
   const isGeral = companyRow?.business_type === 'geral'
   const firstName = userRow?.name?.split(' ')[0] ?? 'usuário'
-  const hour = new Date().getHours()
+  // hora local do Brasil — o servidor roda em UTC, então new Date().getHours() dava saudação errada
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 
   const now = new Date()

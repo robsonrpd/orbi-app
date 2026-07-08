@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { NovoClienteModal } from '@/components/orbi/novo-cliente-modal'
 import { ClienteDetalheModal } from '@/components/orbi/cliente-detalhe-modal'
 import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
-import { listarImportacoes, excluirImportacao, excluirImportados } from '@/lib/actions/contacts'
+import { listarImportacoes, excluirImportacao, excluirImportados, excluirTodasImportacoes } from '@/lib/actions/contacts'
 
 type Contact = {
   id: string
@@ -70,12 +70,14 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
   }
   async function excluirLote(batchId: string) {
     setExcluindoId(batchId); setConfirmando(null)
-    const r = batchId === 'sem-lote' ? await excluirImportados() : await excluirImportacao(batchId)
+    const r = batchId === 'tudo' ? await excluirTodasImportacoes()
+      : batchId === 'sem-lote' ? await excluirImportados()
+      : await excluirImportacao(batchId)
     setExcluindoId(null)
     if (r.success) {
       setMsgResultado(`${r.excluidos ?? 0} contato${(r.excluidos ?? 0) === 1 ? '' : 's'} excluído${(r.excluidos ?? 0) === 1 ? '' : 's'}${(r.falharam ?? 0) > 0 ? ` (${r.falharam} não puderam ser removidos por ter vendas/agendamentos vinculados)` : ''}.`)
-      setLotes(ls => ls.filter(l => l.batchId !== batchId))
-      if (batchId === 'sem-lote') setSemLote(0)
+      if (batchId === 'tudo') { setLotes([]); setSemLote(0) }
+      else { setLotes(ls => ls.filter(l => l.batchId !== batchId)); if (batchId === 'sem-lote') setSemLote(0) }
       router.refresh()
     }
   }
@@ -244,7 +246,30 @@ export function ClientesClient({ contacts, stats }: { contacts: Contact[]; stats
                 <p className="text-sm text-[#8C8880] text-center py-6">Nenhuma importação de planilha encontrada.</p>
               ) : (
                 <>
-                  <p className="text-xs text-[#8C8880]">Escolha qual planilha importada você quer excluir. Cada uma só afeta os contatos daquela importação.</p>
+                  <p className="text-xs text-[#8C8880]">Escolha qual planilha importada você quer excluir, ou apague tudo de uma vez.</p>
+
+                  {/* Excluir tudo */}
+                  <div className="rounded-xl border border-red-200 bg-red-50/50 p-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-red-600">Excluir tudo</p>
+                      <p className="text-xs text-red-400">Remove todas as importações de uma vez ({lotes.reduce((s, l) => s + l.total, 0) + semLote} contatos)</p>
+                    </div>
+                    {confirmando === 'tudo' ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button onClick={() => setConfirmando(null)} className="text-xs font-semibold text-[#8C8880] px-2 py-1.5">Cancelar</button>
+                        <button onClick={() => excluirLote('tudo')} disabled={excluindoId === 'tudo'}
+                          className="flex items-center gap-1 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700">
+                          {excluindoId === 'tudo' ? <Loader2 className="size-3.5 animate-spin" /> : 'Confirmar'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmando('tudo')}
+                        className="shrink-0 flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-500 hover:bg-red-600">
+                        <Trash2 className="size-3.5" /> Excluir tudo
+                      </button>
+                    )}
+                  </div>
+
                   {lotes.map(l => (
                     <div key={l.batchId} className="rounded-xl border border-[#EAE8E1] p-3 flex items-center justify-between gap-3">
                       <div>
