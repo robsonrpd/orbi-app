@@ -4,6 +4,7 @@ import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { Topbar } from '@/components/orbi/topbar'
 import { SettingsForm } from './settings-form'
 import { NichoSelector } from '@/components/orbi/nicho-selector'
+import { MinhasEmpresas } from '@/components/orbi/minhas-empresas'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -22,6 +23,11 @@ export default async function SettingsPage() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <NichoSelector atual={company?.business_type ?? null} />
         <SettingsForm userData={userData} userEmail={user?.email ?? ''} waInstance={waInstance} />
+        {userRow?.role !== 'staff' && (
+          <div className="max-w-2xl">
+            <MinhasEmpresas />
+          </div>
+        )}
       </div>
     </div>
   )

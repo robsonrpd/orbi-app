@@ -10,13 +10,14 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { useState, useRef } from 'react'
-import { Camera, Loader2, ChevronDown, MessageCircle, Building2 } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Camera, Loader2, ChevronDown, MessageCircle, Building2, Check } from 'lucide-react'
 import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
 import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
 import { useMobileNav } from '@/components/orbi/mobile-nav'
 import { termoEquipe } from '@/lib/nichos'
+import { listarMinhasEmpresas, trocarEmpresaAtiva, type MinhaEmpresa } from '@/lib/actions/empresas'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -57,6 +58,24 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
   const { open, setOpen } = useMobileNav()
   const m = modo ?? { funcionario: false, bloqueios: [], temPin: false, vendedorNome: null, fonte: null }
   const equipe = termoEquipe(businessType)
+
+  // troca rápida de empresa (dono com mais de uma empresa no mesmo login)
+  const [empresas, setEmpresas] = useState<MinhaEmpresa[]>([])
+  const [empresaAtivaId, setEmpresaAtivaId] = useState<string | null>(null)
+  const [empresaMenuOpen, setEmpresaMenuOpen] = useState(false)
+  const [trocandoEmpresa, setTrocandoEmpresa] = useState(false)
+  useEffect(() => {
+    if (m.funcionario) return // vendedor/modo funcionário nunca troca de empresa
+    listarMinhasEmpresas().then(r => { setEmpresas(r.empresas); setEmpresaAtivaId(r.ativaId) })
+  }, [m.funcionario])
+  async function trocarEmpresa(id: string) {
+    setEmpresaMenuOpen(false)
+    if (id === empresaAtivaId) return
+    setTrocandoEmpresa(true)
+    const r = await trocarEmpresaAtiva(id)
+    if (!r?.error) { router.push('/dashboard'); router.refresh() }
+    setTrocandoEmpresa(false)
+  }
   function podeVer(href: string) {
     if (esconderNicho.includes(href)) return false      // nicho da empresa
     if (!m.funcionario) return true
@@ -146,7 +165,36 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
           <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
         </div>
         {logoError && <p className="text-center text-[10px] font-medium text-red-400 mt-1.5 leading-snug">{logoError}</p>}
-        {companyName && <p className="text-center text-xs font-semibold text-white/70 mt-2 truncate">{companyName}</p>}
+        {empresas.length > 1 ? (
+          <div className="relative mt-2">
+            <button onClick={() => setEmpresaMenuOpen(o => !o)} disabled={trocandoEmpresa}
+              className="w-full flex items-center justify-center gap-1 text-xs font-semibold text-white/70 hover:text-white transition-colors">
+              {trocandoEmpresa ? <Loader2 className="size-3 animate-spin" /> : (
+                <>
+                  <span className="truncate max-w-[140px]">{companyName}</span>
+                  <ChevronDown className={`size-3 shrink-0 transition-transform ${empresaMenuOpen ? 'rotate-180' : ''}`} />
+                </>
+              )}
+            </button>
+            {empresaMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setEmpresaMenuOpen(false)} />
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-xl overflow-hidden shadow-xl border border-white/10"
+                  style={{ background: '#0D1635' }}>
+                  {empresas.map(emp => (
+                    <button key={emp.id} onClick={() => trocarEmpresa(emp.id)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-left hover:bg-white/5 transition-colors">
+                      <span className="truncate text-white/80">{emp.name}</span>
+                      {emp.id === empresaAtivaId && <Check className="size-3 text-[#1A56FF] shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          companyName && <p className="text-center text-xs font-semibold text-white/70 mt-2 truncate">{companyName}</p>
+        )}
         <Link href="/dashboard" className="flex items-center justify-center gap-1 mt-1.5">
           <span className="text-sm font-black text-white/40 tracking-tight" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.03em' }}>
             <Eye className="size-3 inline mb-0.5 mr-0.5" strokeWidth={2} />Orbi<span style={{ color: '#1A56FF' }}>.</span>
