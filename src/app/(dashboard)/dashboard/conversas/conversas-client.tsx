@@ -65,7 +65,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const telParam = searchParams.get('tel')
   const [conversas, setConversas] = useState(conversasIniciais)
   const [selecionada, setSelecionada] = useState<string | null>(
-    () => achaConversaPorTel(telParam, conversasIniciais) ?? conversasIniciais[0]?.id ?? null
+    () => telParam ? achaConversaPorTel(telParam, conversasIniciais) : (conversasIniciais[0]?.id ?? null)
   )
   const [naoEncontrada, setNaoEncontrada] = useState(!!telParam && !achaConversaPorTel(telParam, conversasIniciais))
   const [mensagens, setMensagens] = useState<Msg[]>([])
