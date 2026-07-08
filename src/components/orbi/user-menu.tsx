@@ -34,9 +34,9 @@ export function UserMenu() {
       <div className="relative" ref={ref}>
         <button onClick={() => setOpen(o => !o)}
           className="flex items-center gap-2 pl-1.5 pr-2.5 h-9 rounded-full border border-[#EAE8E1] hover:bg-[#F7F6F3] transition-all">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-            style={{ background: '#1A56FF' }}>
-            {me?.logoUrl ? <img src={me.logoUrl} alt="" className="w-full h-full rounded-full object-cover" /> : initial}
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
+            style={{ background: me?.logoUrl ? '#F7F6F3' : '#1A56FF' }}>
+            {me?.logoUrl ? <img src={me.logoUrl} alt="" className="w-full h-full object-contain p-0.5" /> : initial}
           </div>
           <span className="text-xs font-semibold text-[#1C1B18] hidden sm:block max-w-[120px] truncate">
             {me?.companyName || 'Minha empresa'}

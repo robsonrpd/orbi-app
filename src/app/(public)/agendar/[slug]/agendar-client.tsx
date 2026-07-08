@@ -130,7 +130,9 @@ export function AgendarClient({ slug, companyId, companyName, logoUrl, services,
             Orbi<span style={{ color: cor }}>.</span>
           </span>
           {logoUrl && (
-            <img src={logoUrl} alt={companyName} className="w-14 h-14 rounded-2xl object-cover mx-auto mt-4 border border-white/10" />
+            <div className="w-14 h-14 rounded-2xl mx-auto mt-4 border border-white/10 bg-white/5 flex items-center justify-center overflow-hidden">
+              <img src={logoUrl} alt={companyName} className="w-full h-full object-contain p-1.5" />
+            </div>
           )}
           <h1 className="text-2xl font-black text-white mt-2" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
             {companyName}
