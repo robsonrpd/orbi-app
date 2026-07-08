@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 type Midia = { tipo: string; url: string; nome?: string }
@@ -73,6 +73,9 @@ async function resolverConversa(conversaId: string) {
   const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
   if (!instance) return { error: 'WhatsApp não conectado.' as const }
 
+  const st = await statusInstancia(instance)
+  if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão & IA e escaneie o QR Code de novo pra reconectar.' as const }
+
   return { service, conv, instance }
 }
 
@@ -115,6 +118,9 @@ export async function iniciarConversa(numero: string, texto: string) {
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
   const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
   if (!instance) return { error: 'WhatsApp não conectado.' }
+
+  const st = await statusInstancia(instance)
+  if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão & IA e escaneie o QR Code de novo pra reconectar.' }
 
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const existente = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
