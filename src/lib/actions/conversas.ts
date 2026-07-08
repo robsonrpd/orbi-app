@@ -98,6 +98,52 @@ export async function responderConversa(conversaId: string, texto: string) {
   return { success: true as const }
 }
 
+/** Inicia uma conversa nova com um número que ainda não tem conversa registrada (ex: a partir da ficha do cliente). */
+export async function iniciarConversa(numero: string, texto: string) {
+  const limpo = texto.trim()
+  if (!limpo) return { error: 'Digite uma mensagem.' }
+
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const d = (numero || '').replace(/\D/g, '')
+  if (!d) return { error: 'Número inválido.' }
+  const numeroFmt = d.startsWith('55') ? d : `55${d}`
+  const chave = numeroFmt.slice(-8)
+
+  const service = createServiceClient()
+  const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+  if (!instance) return { error: 'WhatsApp não conectado.' }
+
+  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
+  const existente = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+
+  const env = await enviarTexto(instance, numeroFmt, limpo)
+  if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
+
+  const nova: Msg = { role: 'human', content: limpo, ts: new Date().toISOString() }
+
+  if (existente) {
+    const messages = [...((existente.messages as Msg[] | null) ?? []), nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', existente.id)
+    revalidatePath('/dashboard/conversas')
+    return { success: true as const, conversaId: existente.id }
+  }
+
+  const { data: contacts } = await service.from('contacts').select('id, phone').eq('company_id', companyId)
+  const contact = (contacts ?? []).find(c => (c.phone ?? '').replace(/\D/g, '').slice(-8) === chave)
+
+  const { data: criada, error } = await service.from('conversations').insert({
+    company_id: companyId, contact_id: contact?.id ?? null, numero: numeroFmt,
+    messages: [nova], handled_by_ai: false, last_message_at: new Date().toISOString(),
+  }).select('id').single()
+  if (error || !criada) return { error: 'Mensagem enviada, mas houve um erro ao salvar a conversa.' }
+
+  revalidatePath('/dashboard/conversas')
+  return { success: true as const, conversaId: criada.id }
+}
+
 /** Envia uma imagem ou documento (já hospedado em uma URL pública) pelo WhatsApp. */
 export async function enviarMidiaConversa(conversaId: string, p: { url: string; mediatype: 'image' | 'document' | 'video'; fileName?: string }) {
   const r = await resolverConversa(conversaId)

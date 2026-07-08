@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
-  listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa,
+  listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
@@ -112,14 +112,25 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const ativa = conversas.find(c => c.id === selecionada) ?? null
 
   async function handleEnviar() {
-    if (!selecionada || !texto.trim()) return
+    if (!texto.trim()) return
+    if (!selecionada && !(naoEncontrada && telParam)) return
     setEnviando(true)
     const t = texto.trim()
     setTexto('')
-    const res = await responderConversa(selecionada, t)
+
+    const res = selecionada
+      ? await responderConversa(selecionada, t)
+      : await iniciarConversa(telParam!, t)
+
     setEnviando(false)
     if (!('error' in res)) {
-      setMensagens(prev => [...prev, { role: 'human', content: t, ts: new Date().toISOString() }])
+      if (!selecionada && 'conversaId' in res) {
+        setNaoEncontrada(false)
+        setSelecionada((res as { conversaId: string }).conversaId)
+        setMensagens([{ role: 'human', content: t, ts: new Date().toISOString() }])
+      } else {
+        setMensagens(prev => [...prev, { role: 'human', content: t, ts: new Date().toISOString() }])
+      }
       listarConversas().then(setConversas)
     } else {
       setErro(res.error ?? 'Erro ao enviar.')
@@ -232,11 +243,46 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
 
       {/* Thread */}
       <div className="flex-1 flex flex-col relative" style={{ background: '#EDEDED' }}>
-        {!ativa ? (
+        {!ativa && naoEncontrada && telParam ? (
+          <>
+            <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
+                {iniciais(telParam)}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#1C1B18]">Nova conversa</p>
+                <p className="text-xs text-[#8C8880]">{telParam}</p>
+              </div>
+            </div>
+            <div className="flex-1 flex items-center justify-center text-[#8C8880] text-sm">
+              <div className="text-center max-w-xs px-4">
+                <MessageCircle className="size-10 mx-auto mb-2 text-[#C8C5BB]" strokeWidth={1.5} />
+                Nenhuma conversa com esse cliente ainda. Envie a primeira mensagem abaixo pra começar.
+              </div>
+            </div>
+            {erro && (
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg px-3 py-1.5 shadow"
+                onClick={() => setErro(null)}>
+                {erro}
+              </div>
+            )}
+            <div className="p-3 bg-white border-t border-[#EAE8E1] flex items-center gap-1.5 shrink-0">
+              <input value={texto} onChange={e => setTexto(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEnviar() } }}
+                placeholder="Digite a primeira mensagem..."
+                className="flex-1 h-10 px-4 rounded-full border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all" />
+              <button onClick={handleEnviar} disabled={enviando || !texto.trim()}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 disabled:opacity-50 transition-all"
+                style={{ background: '#1A56FF' }}>
+                {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              </button>
+            </div>
+          </>
+        ) : !ativa ? (
           <div className="flex-1 flex items-center justify-center text-[#8C8880] text-sm">
             <div className="text-center max-w-xs px-4">
               <MessageCircle className="size-10 mx-auto mb-2 text-[#C8C5BB]" strokeWidth={1.5} />
-              {naoEncontrada ? 'Nenhuma conversa de WhatsApp com esse cliente ainda.' : 'Selecione uma conversa'}
+              Selecione uma conversa
             </div>
           </div>
         ) : (
