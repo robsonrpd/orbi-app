@@ -19,7 +19,7 @@ export const PERMISSOES: { key: string; label: string; href: string | null }[] =
   { key: 'vendedores', label: 'Gerenciar Vendedores', href: '/dashboard/vendedores' },
   { key: 'avaliacoes', label: 'Avaliações', href: '/dashboard/avaliacoes' },
   { key: 'indicacoes', label: 'Ganhe uma Mensalidade', href: '/dashboard/indicacoes' },
-  { key: 'ia', label: 'Inteligência IA', href: '/dashboard/ia' },
+  { key: 'ia', label: 'Conexão WhatsApp', href: '/dashboard/ia' },
   { key: 'envio_massa', label: 'Envio em Massa (WhatsApp)', href: '/dashboard/envio-massa' },
 ]
 

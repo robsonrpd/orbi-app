@@ -1,4 +1,4 @@
-import { UserPlus, Settings, Bot } from 'lucide-react'
+import { UserPlus, Settings, MessageCircle } from 'lucide-react'
 import { LaptopMockup } from './laptop-mockup'
 
 const steps = [
@@ -15,10 +15,10 @@ const steps = [
     desc: 'Suba sua logo, cadastre produtos/serviços, horários e conecte o WhatsApp da sua loja.',
   },
   {
-    icon: Bot,
+    icon: MessageCircle,
     step: '3',
-    title: 'A IA assume o atendimento',
-    desc: 'Seus clientes são atendidos automaticamente, agendam horários e você acompanha tudo pelo painel.',
+    title: 'Atenda pelo painel',
+    desc: 'As conversas do WhatsApp chegam direto no CRM — você responde, agenda e acompanha tudo em um só lugar.',
   },
 ]
 

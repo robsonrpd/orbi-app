@@ -7,7 +7,7 @@ const faqs = [
   {
     icon: Settings,
     q: 'Como configurar meu negócio pela primeira vez?',
-    a: 'Vá em Funcionamento para definir os dias/horários de atendimento, depois em Serviços para cadastrar o que você oferece. Por fim, conecte seu WhatsApp em OrbiWhatsapp → Conexão & IA.',
+    a: 'Vá em Funcionamento para definir os dias/horários de atendimento, depois em Serviços para cadastrar o que você oferece. Por fim, conecte seu WhatsApp em OrbiWhatsapp → Conexão WhatsApp.',
   },
   {
     icon: CreditCard,

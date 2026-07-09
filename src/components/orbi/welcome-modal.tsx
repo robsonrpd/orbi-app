@@ -35,7 +35,7 @@ const plans = [
 
 const features = [
   { icon: Calendar, text: 'Agendamentos online 24/7' },
-  { icon: MessageSquare, text: 'IA no WhatsApp 24 horas' },
+  { icon: MessageSquare, text: 'WhatsApp integrado ao CRM' },
   { icon: DollarSign, text: 'Cobranças e financeiro' },
   { icon: Users, text: 'CRM completo de clientes' },
 ]

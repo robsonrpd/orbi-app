@@ -15,7 +15,7 @@ export function Footer() {
               </span>
             </Link>
             <p className="mt-3 text-sm text-[#8C8880] leading-relaxed">
-              O sistema que trabalha enquanto você descansa. Gestão 360° com IA para o seu negócio.
+              O sistema que trabalha enquanto você descansa. Gestão 360° para o seu negócio.
             </p>
           </div>
 

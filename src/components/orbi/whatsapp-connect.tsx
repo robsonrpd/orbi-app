@@ -75,7 +75,7 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
               <CheckCircle2 className="size-5 text-[#0DB57A]" />
               <div>
                 <p className="text-sm font-bold text-[#0DB57A]">WhatsApp conectado!</p>
-                <p className="text-xs text-[#8C8880]">A IA já responde os clientes automaticamente.</p>
+                <p className="text-xs text-[#8C8880]">As mensagens já aparecem em Conversas e no CRM.</p>
               </div>
             </div>
             <button onClick={desconectar} className="flex items-center gap-2 text-sm font-semibold text-red-500 hover:underline">
@@ -86,7 +86,7 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
 
         {(estado === 'idle' || estado === 'erro') && (
           <div className="space-y-3">
-            <p className="text-sm text-[#8C8880]">Conecte o WhatsApp da sua loja pra IA atender os clientes 24h.</p>
+            <p className="text-sm text-[#8C8880]">Conecte o WhatsApp da sua loja pra receber as mensagens dos clientes direto no Conversas e no CRM.</p>
             {erro && <p className="text-xs text-red-500">{erro}</p>}
             <button onClick={conectar}
               className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"

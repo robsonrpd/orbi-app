@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase/server'
-import { buildSystemPrompt } from '@/lib/claude/buildSystemPrompt'
-import { enviarTexto, getMediaBase64 } from '@/lib/evolution'
+import { getMediaBase64 } from '@/lib/evolution'
 import { sendEmail } from '@/lib/email'
 
-// dá tempo pra IA + download de mídia terminarem antes do timeout padrão da Vercel
-// (sem isso, a Evolution API pode reenviar o mesmo webhook e a IA responde 2x — risco de bloqueio)
+// dá tempo pro download de mídia terminar antes do timeout padrão da Vercel
+// (sem isso, a Evolution API pode reenviar o mesmo webhook e processar a mensagem 2x)
 export const maxDuration = 60
 
 // Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
@@ -27,9 +25,9 @@ export async function POST(req: NextRequest) {
 
   // identifica a empresa pela instância. O nome é "<slug>-<timestamp>" (timestamp sem hífen),
   // então removo o último segmento pra obter o slug. Mantém fallback pro slug exato (legado).
-  type Comp = { id: string; name: string; ai_name: string | null; ai_context: string | null; business_type: string | null; slug: string; settings: Record<string, unknown> }
+  type Comp = { id: string; name: string; business_type: string | null; slug: string; settings: Record<string, unknown> }
   const service = createServiceClient()
-  const sel = 'id, name, ai_name, ai_context, business_type, slug, settings'
+  const sel = 'id, name, business_type, slug, settings'
   const slugCandidato = instance.replace(/-[a-z0-9]+$/i, '')
 
   let company = (await service.from('companies').select(sel).eq('slug', slugCandidato).maybeSingle()).data as Comp | null
@@ -79,9 +77,6 @@ export async function POST(req: NextRequest) {
   const eventos = Array.isArray(raw) ? raw : raw ? [raw] : []
   if (eventos.length === 0) return NextResponse.json({ ok: true })
 
-  const iaPausada = !!(company.settings as { ia_pausada?: boolean })?.ia_pausada
-  const claude = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null
-
   // contatos da empresa (id por últimos 8 dígitos do telefone) — captura sem duplicar
   const { data: contatos } = await service.from('contacts').select('id, phone').eq('company_id', company.id)
   const idPorChave = new Map<string, string>()
@@ -98,8 +93,8 @@ export async function POST(req: NextRequest) {
     if (!numero) continue
     const chave = numero.replace(/\D/g, '').slice(-8)
 
-    // dedup: a Evolution pode reenviar o mesmo webhook (timeout/retry) — sem isso, a IA
-    // processaria e responderia a MESMA mensagem 2x, o que é um forte sinal de bot pro WhatsApp.
+    // dedup: a Evolution pode reenviar o mesmo webhook (timeout/retry) — sem isso, a mesma
+    // mensagem seria salva/processada 2x na conversa, o que é um forte sinal de bot pro WhatsApp.
     // só pula se for MESMO duplicata (23505 = chave única violada); qualquer outro erro
     // (ex: tabela ainda não criada) não pode travar o atendimento — segue processando.
     if (e.key?.id) {
@@ -158,27 +153,8 @@ export async function POST(req: NextRequest) {
       if (contactId && chave) idPorChave.set(chave, contactId)
     }
 
-    let reply: string | null = null
-    let escalou = false
-    if (texto.trim() && !iaPausada && claude) {
-      try {
-        const resp = await claude.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 400,
-          system: buildSystemPrompt(company),
-          messages: [{ role: 'user', content: texto }],
-        })
-        const rawTxt = resp.content[0]?.type === 'text' ? resp.content[0].text : ''
-        escalou = rawTxt.trimStart().startsWith('[ESCALAR]')
-        reply = rawTxt.replace('[ESCALAR]', '').trim() || null
-        if (reply) await enviarTexto(instance, numero, reply)
-      } catch (err) {
-        console.error('whatsapp IA:', err)
-      }
-    }
-
-    // salva/atualiza a conversa (histórico)
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, reply, escalou, iaPausada, midia)
+    // salva/atualiza a conversa (histórico) — sem resposta automática, alguém da equipe responde pelo Conversas/CRM
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia)
   }
 
   return NextResponse.json({ ok: true })
@@ -207,10 +183,10 @@ async function avisarDesconexao(
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
             <h2 style="color:#E0383D">WhatsApp desconectado</h2>
-            <p>O WhatsApp da empresa <strong>${company.name}</strong> caiu e a IA/atendimento automático está parado.</p>
+            <p>O WhatsApp da empresa <strong>${company.name}</strong> caiu — as mensagens não vão chegar até reconectar.</p>
             <p>Reconecte o quanto antes para não deixar os clientes sem resposta:</p>
             <p><a href="${url}/dashboard/ia" style="background:#1A56FF;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none">Reconectar WhatsApp</a></p>
-            <p style="color:#8C8880;font-size:13px">Vá em Conexão & IA → Conectar e escaneie o QR code.</p>
+            <p style="color:#8C8880;font-size:13px">Vá em Conexão WhatsApp → Conectar e escaneie o QR code.</p>
           </div>`,
       })
     }
@@ -267,7 +243,7 @@ async function registrarSaida(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, aiReply: string | null, escalou: boolean, iaPausada: boolean, midia?: Midia,
+  userMsg: string, midia?: Midia,
 ) {
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
@@ -275,14 +251,12 @@ async function salvarConversa(
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
   const agora = new Date().toISOString()
   const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ts: agora, ...(midia ? { midia } : {}) }]
-  if (aiReply) novas.push({ role: 'assistant', content: aiReply, ts: agora })
 
   const patch: Record<string, unknown> = {
     messages: novas.slice(-40),
     last_message_at: new Date().toISOString(),
-    handled_by_ai: !!aiReply && !iaPausada,
+    handled_by_ai: false,
   }
-  if (escalou) patch.escalated_at = new Date().toISOString()
 
   if (conv) {
     const { error } = await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)

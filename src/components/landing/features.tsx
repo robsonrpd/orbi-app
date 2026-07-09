@@ -1,10 +1,10 @@
-import { Bot, Calendar, Users, DollarSign, Package, BarChart3 } from 'lucide-react'
+import { MessageCircle, Calendar, Users, DollarSign, Package, BarChart3 } from 'lucide-react'
 
 const features = [
   {
-    icon: Bot,
-    title: 'IA no WhatsApp',
-    desc: 'Responde clientes 24h, tira dúvidas, marca horários e avisa quando um atendimento precisa de um humano.',
+    icon: MessageCircle,
+    title: 'WhatsApp integrado',
+    desc: 'Todas as conversas do WhatsApp em um só lugar, com cada cliente virando lead automaticamente no seu CRM.',
   },
   {
     icon: Calendar,

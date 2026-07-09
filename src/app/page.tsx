@@ -10,13 +10,13 @@ import { CTA } from '@/components/landing/cta'
 import { Footer } from '@/components/landing/footer'
 
 export const metadata: Metadata = {
-  title: 'Orbi — Gestão 360° com IA para óticas, salões, lojas e clínicas',
-  description: 'O sistema que trabalha enquanto você descansa. Agendamentos, CRM, financeiro, estoque e atendimento automático no WhatsApp com IA. Teste grátis por 14 dias.',
-  keywords: ['gestão para óticas', 'sistema para óticas', 'CRM WhatsApp', 'IA no WhatsApp', 'agenda online', 'sistema para barbearia', 'sistema para clínica', 'ERP pequenos negócios'],
+  title: 'Orbi — Gestão 360° para óticas, salões, lojas e clínicas',
+  description: 'O sistema que trabalha enquanto você descansa. Agendamentos, CRM, financeiro, estoque e WhatsApp integrado. Teste grátis por 14 dias.',
+  keywords: ['gestão para óticas', 'sistema para óticas', 'CRM WhatsApp', 'WhatsApp integrado', 'agenda online', 'sistema para barbearia', 'sistema para clínica', 'ERP pequenos negócios'],
   alternates: { canonical: 'https://www.orbisistem.com.br/' },
   openGraph: {
-    title: 'Orbi — Gestão 360° com IA para o seu negócio',
-    description: 'Agendamentos, CRM, financeiro e atendimento automático no WhatsApp com IA. Teste grátis por 14 dias, sem cartão de crédito.',
+    title: 'Orbi — Gestão 360° para o seu negócio',
+    description: 'Agendamentos, CRM, financeiro e WhatsApp integrado. Teste grátis por 14 dias, sem cartão de crédito.',
     url: 'https://www.orbisistem.com.br/',
     siteName: 'Orbi',
     images: [{ url: '/brand/Fundo.png', width: 1536, height: 1024, alt: 'Orbi — Gestão 360° para o seu negócio' }],
@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Orbi — Gestão 360° com IA para o seu negócio',
-    description: 'Agendamentos, CRM, financeiro e atendimento automático no WhatsApp com IA. Teste grátis por 14 dias.',
+    title: 'Orbi — Gestão 360° para o seu negócio',
+    description: 'Agendamentos, CRM, financeiro e WhatsApp integrado. Teste grátis por 14 dias.',
     images: ['/brand/Fundo.png'],
   },
 }
@@ -37,7 +37,7 @@ const jsonLd = {
   name: 'Orbi',
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
-  description: 'Sistema de gestão 360° com IA para óticas, salões, lojas e clínicas — agendamentos, CRM, financeiro, estoque e atendimento automático no WhatsApp.',
+  description: 'Sistema de gestão 360° para óticas, salões, lojas e clínicas — agendamentos, CRM, financeiro, estoque e WhatsApp integrado.',
   offers: {
     '@type': 'AggregateOffer',
     priceCurrency: 'BRL',

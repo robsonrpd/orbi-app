@@ -13,8 +13,8 @@ const faqs = [
     a: 'Sim. O painel é responsivo e pode ser adicionado à tela inicial do seu celular (Android ou iPhone), funcionando como um aplicativo.',
   },
   {
-    q: 'A IA realmente atende meus clientes pelo WhatsApp?',
-    a: 'Sim. Você conecta o WhatsApp da sua loja e a IA responde dúvidas, agenda horários e, quando necessário, avisa que um atendimento precisa de um humano.',
+    q: 'Como funciona o WhatsApp no Orbi?',
+    a: 'Você conecta o WhatsApp da sua loja e todas as conversas caem direto no painel — cada cliente já vira um lead no CRM automaticamente, e você (ou sua equipe) responde tudo por ali, sem precisar ficar trocando de aplicativo.',
   },
   {
     q: 'O Orbi serve para o meu tipo de negócio?',

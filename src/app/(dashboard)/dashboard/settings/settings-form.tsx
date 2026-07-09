@@ -89,7 +89,7 @@ export function SettingsForm({ userData, userEmail, waInstance }: { userData: Re
                 Conectar <ArrowRight className="size-3" />
               </Link>
             </div>
-            <p className="text-xs text-[#C8C5BB]">A conexão é feita por QR Code em Conexão &amp; IA</p>
+            <p className="text-xs text-[#C8C5BB]">A conexão é feita por QR Code em Conexão WhatsApp</p>
           </div>
         </div>
 

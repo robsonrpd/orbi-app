@@ -74,7 +74,7 @@ async function resolverConversa(conversaId: string) {
   if (!instance) return { error: 'WhatsApp não conectado.' as const }
 
   const st = await statusInstancia(instance)
-  if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão & IA e escaneie o QR Code de novo pra reconectar.' as const }
+  if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão WhatsApp e escaneie o QR Code de novo pra reconectar.' as const }
 
   return { service, conv, instance }
 }
@@ -126,7 +126,7 @@ export async function iniciarConversa(numero: string, texto: string, opts?: { co
   if (!instance) return { error: 'WhatsApp não conectado.' }
 
   const st = await statusInstancia(instance)
-  if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão & IA e escaneie o QR Code de novo pra reconectar.' }
+  if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão WhatsApp e escaneie o QR Code de novo pra reconectar.' }
 
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const existente = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)

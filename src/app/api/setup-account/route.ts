@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     const slug = toSlug(companyName || 'empresa') + '-' + user.id.slice(0, 6)
 
-    // 3. Cria a empresa (guarda telefone do dono em settings para suporte/IA)
+    // 3. Cria a empresa (guarda telefone do dono em settings para suporte)
     const ownerPhone = (phone ?? '').replace(/\D/g, '')
     const { data: company, error: companyError } = await service
       .from('companies')

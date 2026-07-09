@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Calendar, Users, DollarSign,
-  Bot, MessageSquare, Settings, LogOut, Eye,
+  MessageSquare, Settings, LogOut, Eye,
   Scissors, Clock, Package, Star, Glasses, FileText, UserCog, ClipboardList, BarChart3, Wallet, SlidersHorizontal, Crown, Gift, KanbanSquare, Globe, Briefcase, Send,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -43,7 +43,7 @@ const navItems = [
 const orbiWhatsapp = {
   label: 'OrbiWhatsapp',
   children: [
-    { href: '/dashboard/ia', label: 'Conexão & IA', icon: Bot },
+    { href: '/dashboard/ia', label: 'Conexão WhatsApp', icon: MessageCircle },
     { href: '/dashboard/conversas', label: 'Conversas', icon: MessageSquare },
     { href: '/dashboard/funil', label: 'CRM (Funil)', icon: KanbanSquare },
     { href: '/dashboard/envio-massa', label: 'Envio em Massa', icon: Send },

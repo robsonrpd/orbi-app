@@ -55,7 +55,7 @@ export async function criarBroadcast(payload: {
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
   const settings = (comp?.settings as { wa_instance?: string; wa_primeira_conexao?: string } | null) ?? null
   const instance = settings?.wa_instance
-  if (!instance) return { error: 'Conecte o WhatsApp em Conexão & IA antes de fazer um envio em massa.' }
+  if (!instance) return { error: 'Conecte o WhatsApp em Conexão WhatsApp antes de fazer um envio em massa.' }
 
   const aquecimento = statusAquecimento(settings?.wa_primeira_conexao, limiteDesejado)
   const limiteDiario = aquecimento.limite

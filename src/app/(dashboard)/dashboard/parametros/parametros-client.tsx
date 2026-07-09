@@ -38,11 +38,11 @@ const SECOES = [
     ]
   },
   {
-    titulo: 'Mensagens automáticas (IA)', icon: MessageSquare, params: [
+    titulo: 'Mensagens automáticas', icon: MessageSquare, params: [
       { key: 'enviar_os_agradecimento', label: 'Enviar O.S. junto com agradecimento', desc: 'WhatsApp envia resumo do pedido ao cliente' },
-      { key: 'avisar_status_producao', label: 'Avisar mudança de status no WhatsApp', desc: 'IA avisa "óculos pronto" automaticamente' },
-      { key: 'avisar_receita_vencida', label: 'Avisar receita vencida', desc: 'IA lembra o cliente de revisar a vista após 1 ano' },
-      { key: 'felicitar_aniversario', label: 'Felicitar aniversariantes', desc: 'IA envia parabéns + oferta no aniversário' },
+      { key: 'avisar_status_producao', label: 'Avisar mudança de status no WhatsApp', desc: 'Avisa "óculos pronto" automaticamente' },
+      { key: 'avisar_receita_vencida', label: 'Avisar receita vencida', desc: 'Lembra o cliente de revisar a vista após 1 ano' },
+      { key: 'felicitar_aniversario', label: 'Felicitar aniversariantes', desc: 'Envia parabéns + oferta no aniversário' },
     ]
   },
 ]

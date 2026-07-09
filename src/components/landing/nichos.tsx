@@ -29,7 +29,7 @@ const nichos = [
     dor: 'Clientes ligam fora do horário, faltam sem avisar e a agenda vira uma bagunça impossível de gerenciar sozinho.',
     solucoes: [
       'Agendamento online 24h sem telefone',
-      'IA confirma e lembra o cliente no WhatsApp',
+      'Conversas do WhatsApp direto no painel',
       'Controle de comissão por profissional',
       'Fila de espera automática',
     ],

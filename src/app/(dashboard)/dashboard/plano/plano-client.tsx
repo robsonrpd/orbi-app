@@ -6,19 +6,19 @@ const PLANS = [
   {
     key: 'individual', icon: Zap, label: 'Individual', price: 97,
     desc: 'Ideal para óticas com um único responsável.',
-    features: ['1 usuário', 'Agendamentos ilimitados', 'CRM de clientes', 'IA no WhatsApp', 'Financeiro básico'],
+    features: ['1 usuário', 'Agendamentos ilimitados', 'CRM de clientes', 'WhatsApp integrado', 'Financeiro básico'],
     highlight: false, badge: null,
   },
   {
     key: 'equipe', icon: Users, label: 'Equipe', price: 197,
     desc: 'Para óticas com equipe e múltiplos atendentes.',
-    features: ['Até 3 usuários', 'Tudo do Individual', 'CRM completo + tags', 'IA avançada', 'Cobranças', 'Relatórios mensais'],
+    features: ['Até 3 usuários', 'Tudo do Individual', 'CRM completo + tags', 'Envio em massa no WhatsApp', 'Cobranças', 'Relatórios mensais'],
     highlight: true, badge: 'MAIS POPULAR',
   },
   {
     key: 'ilimitado', icon: InfinityIcon, label: 'Ilimitado', price: 297,
     desc: 'Para óticas em expansão sem limites.',
-    features: ['Usuários ilimitados', 'Tudo do Equipe', 'IA multi-instância', 'Relatórios avançados', 'Suporte prioritário'],
+    features: ['Usuários ilimitados', 'Tudo do Equipe', 'Múltiplas empresas no mesmo login', 'Relatórios avançados', 'Suporte prioritário'],
     highlight: false, badge: null,
   },
 ]

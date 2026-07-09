@@ -19,7 +19,7 @@ export function Hero() {
           style={{ background: 'rgba(26,86,255,0.15)', border: '1px solid rgba(26,86,255,0.25)' }}>
           <Sparkles className="size-3.5" style={{ color: '#93AAFF' }} />
           <span className="text-xs font-bold tracking-[2px] uppercase text-[#93AAFF]" style={{ fontFamily: 'Barlow, sans-serif' }}>
-            Gestão 360° com IA
+            Gestão 360°
           </span>
         </div>
 
@@ -32,8 +32,8 @@ export function Hero() {
         </h1>
 
         <p className="mt-6 text-base sm:text-lg text-white/60 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 fill-mode-both">
-          Agendamentos, clientes, financeiro, estoque e atendimento automático no WhatsApp —
-          tudo em um só painel, com uma IA cuidando do seu negócio 24 horas por dia.
+          Agendamentos, clientes, financeiro, estoque e WhatsApp integrado —
+          tudo em um só painel, pra você administrar seu negócio sem perder tempo com planilha.
         </p>
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
@@ -61,7 +61,7 @@ export function Hero() {
           style={{ boxShadow: '0 30px 80px -20px rgba(0,0,0,0.6)' }}>
           <Image
             src="/brand/Fundo.png"
-            alt="Painel Orbi — Dashboard, CRM e atendimento com IA"
+            alt="Painel Orbi — Dashboard, CRM e WhatsApp integrado"
             width={1536}
             height={1024}
             className="w-full h-auto"
