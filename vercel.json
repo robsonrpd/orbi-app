@@ -8,10 +8,5 @@
       "path": "/api/cron/overdue",
       "schedule": "0 9 * * *"
     }
-  ],
-  "functions": {
-    "src/app/api/whatsapp/route.ts": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }

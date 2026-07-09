@@ -5,6 +5,10 @@ import { buildSystemPrompt } from '@/lib/claude/buildSystemPrompt'
 import { enviarTexto, getMediaBase64 } from '@/lib/evolution'
 import { sendEmail } from '@/lib/email'
 
+// dá tempo pra IA + download de mídia terminarem antes do timeout padrão da Vercel
+// (sem isso, a Evolution API pode reenviar o mesmo webhook e a IA responde 2x — risco de bloqueio)
+export const maxDuration = 60
+
 // Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
 export async function POST(req: NextRequest) {
   // valida o token secreto (se configurado) — barra POSTs forjados de terceiros
@@ -87,12 +91,22 @@ export async function POST(req: NextRequest) {
   }
 
   for (const ev of eventos) {
-    const e = ev as { key?: { remoteJid?: string; fromMe?: boolean }; message?: Record<string, unknown>; pushName?: string }
+    const e = ev as { key?: { remoteJid?: string; fromMe?: boolean; id?: string }; message?: Record<string, unknown>; pushName?: string }
     const jid = e.key?.remoteJid ?? ''
     if (jid.endsWith('@g.us')) continue      // ignora grupos
     const numero = jid.split('@')[0]
     if (!numero) continue
     const chave = numero.replace(/\D/g, '').slice(-8)
+
+    // dedup: a Evolution pode reenviar o mesmo webhook (timeout/retry) — sem isso, a IA
+    // processaria e responderia a MESMA mensagem 2x, o que é um forte sinal de bot pro WhatsApp.
+    // só pula se for MESMO duplicata (23505 = chave única violada); qualquer outro erro
+    // (ex: tabela ainda não criada) não pode travar o atendimento — segue processando.
+    if (e.key?.id) {
+      const { error: dedupErr } = await service.from('whatsapp_mensagens_processadas' as never)
+        .insert({ message_id: `${instance}:${e.key.id}` } as never)
+      if (dedupErr && (dedupErr as { code?: string }).code === '23505') continue
+    }
 
     // monta o conteúdo: texto, legenda ou rótulo da mídia (foto/áudio/doc/etc.)
     const msg = e.message ?? {}
