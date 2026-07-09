@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { FUNIL_ETAPAS } from '@/lib/funil'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
-import { setResponsavel, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
+import { setResponsavel, avisarVendedorHandoff, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
 import {
   X, Send, Loader2, Mail, MapPin, Tag, Check, MessageCircle, DollarSign, Plus,
   UserCog, CheckSquare, Square, Calendar, Zap, StickyNote, Trash2, Star, ShoppingBag, FileText,
@@ -62,6 +62,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   const [responsavel, setResp] = useState(lead.responsavel_id ?? '')
   const [avisando, setAvisando] = useState(false)
   const [avisado, setAvisado] = useState(false)
+  const [avisoErro, setAvisoErro] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
 
@@ -164,9 +165,16 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   async function mudarEtapa(n: string) { setEtapa(n); await atualizarLead(lead.id, { etapa: n }); onChange(lead.id, { funil_etapa: n }) }
   async function mudarResp(id: string) {
     setResp(id)
-    if (id) setAvisando(true)
+    setAvisado(false)
     await setResponsavel(lead.id, id || null)
-    if (id) { setAvisando(false); setAvisado(true); setTimeout(() => setAvisado(false), 2500) }
+  }
+  async function avisarVendedor() {
+    if (!responsavel) return
+    setAvisando(true); setAvisoErro(null)
+    const r = await avisarVendedorHandoff(lead.id, responsavel)
+    setAvisando(false)
+    if (!r?.error) { setAvisado(true); setTimeout(() => setAvisado(false), 2500) }
+    else setAvisoErro(r.error)
   }
 
   async function addTarefa() {
@@ -307,8 +315,14 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   <option value="">— Ninguém</option>
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
                 </select>
-                {avisando && <p className="text-[11px] text-[#8C8880] mt-1">Avisando no WhatsApp dele...</p>}
+                {responsavel && !avisado && (
+                  <button type="button" onClick={avisarVendedor} disabled={avisando}
+                    className="w-full mt-1.5 h-8 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#1A56FF] bg-[#EEF2FF] hover:bg-[#E0E7FF] transition-colors disabled:opacity-60">
+                    {avisando ? <Loader2 className="size-3 animate-spin" /> : <><MessageCircle className="size-3" /> Avisar {vendedores.find(v => v.id === responsavel)?.nome} no WhatsApp</>}
+                  </button>
+                )}
                 {avisado && <p className="flex items-center gap-1 text-[11px] text-[#0DB57A] mt-1"><Check className="size-3" strokeWidth={2.5} /> Vendedor avisado no WhatsApp</p>}
+                {avisoErro && <p className="text-[11px] text-red-500 mt-1">{avisoErro}</p>}
               </div>
               {/* Status da negociação */}
               <div>

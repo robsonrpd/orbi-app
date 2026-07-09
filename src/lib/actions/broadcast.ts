@@ -2,6 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId, getCurrentUserName } from '@/lib/auth/company'
+import { statusAquecimento } from '@/lib/whatsapp-warmup'
 import { revalidatePath } from 'next/cache'
 
 const INTERVALO_MIN = 8
@@ -43,7 +44,7 @@ export async function criarBroadcast(payload: {
   if (!payload.todos && payload.origens.length === 0) return { error: 'Escolha "Todos os clientes" ou pelo menos uma origem.' }
 
   const intervaloSegundos = Math.min(INTERVALO_MAX, Math.max(INTERVALO_MIN, Math.round(payload.intervaloSegundos) || 15))
-  const limiteDiario = Math.min(LIMITE_MAX, Math.max(LIMITE_MIN, Math.round(payload.limiteDiario) || 100))
+  const limiteDesejado = Math.min(LIMITE_MAX, Math.max(LIMITE_MIN, Math.round(payload.limiteDiario) || 100))
 
   const service = createServiceClient()
 
@@ -52,8 +53,12 @@ export async function criarBroadcast(payload: {
   if (emAndamento) return { error: 'Já existe um envio em massa em andamento. Pause ou cancele antes de criar um novo.' }
 
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
-  const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+  const settings = (comp?.settings as { wa_instance?: string; wa_primeira_conexao?: string } | null) ?? null
+  const instance = settings?.wa_instance
   if (!instance) return { error: 'Conecte o WhatsApp em Conexão & IA antes de fazer um envio em massa.' }
+
+  const aquecimento = statusAquecimento(settings?.wa_primeira_conexao, limiteDesejado)
+  const limiteDiario = aquecimento.limite
 
   let query = service.from('contacts').select('id, name, phone, origem').eq('company_id', companyId).eq('active', true)
   if (!payload.todos) query = query.in('origem', payload.origens)
@@ -80,7 +85,20 @@ export async function criarBroadcast(payload: {
   }
 
   revalidatePath('/dashboard/envio-massa')
-  return { success: true, total: destinatarios.length }
+  return {
+    success: true, total: destinatarios.length, limiteAplicado: limiteDiario,
+    limiteReduzidoPorAquecimento: aquecimento.aquecendo && limiteDiario < limiteDesejado,
+  }
+}
+
+/** Status de aquecimento do WhatsApp da empresa (pra mostrar na tela antes de criar a campanha). */
+export async function obterAquecimentoWhatsApp() {
+  const companyId = await getCompanyId()
+  if (!companyId) return null
+  const service = createServiceClient()
+  const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const primeiraConexao = (comp?.settings as { wa_primeira_conexao?: string } | null)?.wa_primeira_conexao ?? null
+  return statusAquecimento(primeiraConexao, LIMITE_MAX)
 }
 
 async function contarStatus(service: ReturnType<typeof createServiceClient>, broadcastId: string) {

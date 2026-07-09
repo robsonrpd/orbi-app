@@ -87,12 +87,18 @@ async function registrarSaida(service: ReturnType<typeof createServiceClient>, c
 }
 
 /** Envia uma resposta manual de texto pelo WhatsApp e registra na conversa. */
-export async function responderConversa(conversaId: string, texto: string) {
+export async function responderConversa(conversaId: string, texto: string, opts?: { confirmarPrimeiroContato?: boolean }) {
   const limpo = texto.trim()
   if (!limpo) return { error: 'Digite uma mensagem.' }
 
   const r = await resolverConversa(conversaId)
   if ('error' in r) return r
+
+  // segurança: mandar mensagem pra quem nunca escreveu primeiro é o principal gatilho de bloqueio do WhatsApp
+  const jaRecebemos = ((r.conv.messages as Msg[] | null) ?? []).some(m => m.role === 'user')
+  if (!jaRecebemos && !opts?.confirmarPrimeiroContato) {
+    return { avisoPrimeiroContato: true as const }
+  }
 
   const env = await enviarTexto(r.instance, r.conv.numero, limpo)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
@@ -102,7 +108,7 @@ export async function responderConversa(conversaId: string, texto: string) {
 }
 
 /** Inicia uma conversa nova com um número que ainda não tem conversa registrada (ex: a partir da ficha do cliente). */
-export async function iniciarConversa(numero: string, texto: string) {
+export async function iniciarConversa(numero: string, texto: string, opts?: { confirmarPrimeiroContato?: boolean }) {
   const limpo = texto.trim()
   if (!limpo) return { error: 'Digite uma mensagem.' }
 
@@ -124,6 +130,12 @@ export async function iniciarConversa(numero: string, texto: string) {
 
   const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
   const existente = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+
+  // segurança: mandar mensagem pra quem nunca escreveu primeiro é o principal gatilho de bloqueio do WhatsApp
+  const jaRecebemos = existente ? ((existente.messages as Msg[] | null) ?? []).some(m => m.role === 'user') : false
+  if (!jaRecebemos && !opts?.confirmarPrimeiroContato) {
+    return { avisoPrimeiroContato: true as const }
+  }
 
   const env = await enviarTexto(instance, numeroFmt, limpo)
   if (!env.ok) {

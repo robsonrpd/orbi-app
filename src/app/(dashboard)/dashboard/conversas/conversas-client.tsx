@@ -9,6 +9,7 @@ import {
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
+  AlertTriangle, X,
 } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string }
@@ -78,6 +79,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const [anexoOpen, setAnexoOpen] = useState(false)
   const [gravando, setGravando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [confirmarPrimeiroContato, setConfirmarPrimeiroContato] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mediatypeRef = useRef<'image' | 'document' | 'video'>('image')
@@ -112,18 +114,26 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   })
   const ativa = conversas.find(c => c.id === selecionada) ?? null
 
-  async function handleEnviar() {
-    if (!texto.trim()) return
+  async function handleEnviar(forcarPrimeiroContato = false) {
+    const t = forcarPrimeiroContato ? confirmarPrimeiroContato : texto.trim()
+    if (!t) return
     if (!selecionada && !(naoEncontrada && telParam)) return
     setEnviando(true)
-    const t = texto.trim()
-    setTexto('')
+    if (!forcarPrimeiroContato) setTexto('')
 
+    const opts = forcarPrimeiroContato ? { confirmarPrimeiroContato: true } : undefined
     const res = selecionada
-      ? await responderConversa(selecionada, t)
-      : await iniciarConversa(telParam!, t)
+      ? await responderConversa(selecionada, t, opts)
+      : await iniciarConversa(telParam!, t, opts)
 
     setEnviando(false)
+
+    if ('avisoPrimeiroContato' in res && res.avisoPrimeiroContato) {
+      setConfirmarPrimeiroContato(t)
+      return
+    }
+    setConfirmarPrimeiroContato(null)
+
     if (!('error' in res)) {
       if (!selecionada && 'conversaId' in res) {
         setNaoEncontrada(false)
@@ -272,7 +282,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEnviar() } }}
                 placeholder="Digite a primeira mensagem..."
                 className="flex-1 h-10 px-4 rounded-full border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all" />
-              <button onClick={handleEnviar} disabled={enviando || !texto.trim()}
+              <button onClick={() => handleEnviar()} disabled={enviando || !texto.trim()}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 disabled:opacity-50 transition-all"
                 style={{ background: '#1A56FF' }}>
                 {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -380,7 +390,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                 className="flex-1 h-10 px-4 rounded-full border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all disabled:opacity-60" />
 
               {texto.trim() ? (
-                <button onClick={handleEnviar} disabled={enviando}
+                <button onClick={() => handleEnviar()} disabled={enviando}
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 disabled:opacity-50 transition-all"
                   style={{ background: '#1A56FF' }}>
                   {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -396,6 +406,32 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
           </>
         )}
       </div>
+
+      {confirmarPrimeiroContato && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#EAE8E1] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 text-[#F59E0B]" />
+                <p className="text-sm font-bold text-[#1C1B18]">Primeiro contato</p>
+              </div>
+              <button onClick={() => setConfirmarPrimeiroContato(null)} className="text-[#8C8880] hover:text-[#1C1B18]"><X className="size-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[#2E2D29]">
+                Esse cliente <strong>nunca mandou mensagem pra você</strong>. Iniciar a conversa mandando você primeiro é mais arriscado pro seu WhatsApp
+                (é o principal motivo de bloqueio de números conectados assim). Confirma que quer enviar mesmo assim?
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmarPrimeiroContato(null)} className="flex-1 h-10 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#8C8880]">Cancelar</button>
+                <button onClick={() => handleEnviar(true)} disabled={enviando} className="flex-1 h-10 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white" style={{ background: '#F59E0B' }}>
+                  {enviando ? <Loader2 className="size-4 animate-spin" /> : 'Enviar mesmo assim'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

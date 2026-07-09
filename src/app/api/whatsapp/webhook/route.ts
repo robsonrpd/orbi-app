@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
     if (d?.state === 'open') {
       delete settings.wa_qr
       delete settings.wa_disconnect_alert_sent
+      // marca a 1ª vez que esse número ficou ativo no Orbi — usado pra limitar envios enquanto "esquenta"
+      if (!settings.wa_primeira_conexao) settings.wa_primeira_conexao = new Date().toISOString()
     } else if (d?.state === 'close' && estadoAnterior !== 'close' && !settings.wa_disconnect_alert_sent) {
       settings.wa_disconnect_alert_sent = true
       await avisarDesconexao(service, company)

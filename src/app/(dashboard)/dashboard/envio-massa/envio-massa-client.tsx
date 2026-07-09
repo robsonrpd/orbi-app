@@ -6,8 +6,9 @@ import { GlowCard } from '@/components/orbi/glow-card'
 import {
   criarBroadcast, pausarBroadcast, retomarBroadcast, cancelarBroadcast, type BroadcastResumo,
 } from '@/lib/actions/broadcast'
+import type { StatusAquecimento } from '@/lib/whatsapp-warmup'
 import {
-  Send, AlertTriangle, Users, Clock, Gauge, Pause, Play, X, Loader2, Check, MessageCircle, History,
+  Send, AlertTriangle, Users, Clock, Gauge, Pause, Play, X, Loader2, Check, MessageCircle, History, Flame,
 } from 'lucide-react'
 
 const INTERVALOS = [
@@ -30,9 +31,9 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-type Props = { ativoInicial: BroadcastResumo | null; historicoInicial: BroadcastResumo[]; origens: string[] }
+type Props = { ativoInicial: BroadcastResumo | null; historicoInicial: BroadcastResumo[]; origens: string[]; aquecimento: StatusAquecimento | null }
 
-export function EnvioMassaClient({ ativoInicial, historicoInicial, origens }: Props) {
+export function EnvioMassaClient({ ativoInicial, historicoInicial, origens, aquecimento }: Props) {
   const router = useRouter()
   const [ativo, setAtivo] = useState(ativoInicial)
   const [busy, setBusy] = useState(false)
@@ -60,10 +61,25 @@ export function EnvioMassaClient({ ativoInicial, historicoInicial, origens }: Pr
         </div>
       </div>
 
+      {aquecimento?.aquecendo && (
+        <div className="flex items-start gap-3 rounded-2xl border border-[#1A56FF]/30 bg-[#EEF2FF]/60 p-4">
+          <Flame className="size-5 text-[#1A56FF] shrink-0 mt-0.5" strokeWidth={1.5} />
+          <div className="text-sm text-[#1A3E8C]">
+            <p className="font-bold mb-1">
+              WhatsApp em aquecimento{aquecimento.diasConectado !== null ? ` — conectado há ${aquecimento.diasConectado} dia${aquecimento.diasConectado === 1 ? '' : 's'}` : ''}
+            </p>
+            <p>
+              Limite diário travado em <strong>{aquecimento.limite} mensagens/dia</strong> automaticamente pra proteger o número, mesmo que você configure mais.
+              {aquecimento.proximaFaixaEm ? ` Aumenta em ${aquecimento.proximaFaixaEm} dia${aquecimento.proximaFaixaEm === 1 ? '' : 's'}.` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
       {ativo ? (
         <CampanhaAtiva ativo={ativo} busy={busy} onPausar={pausar} onRetomar={retomar} onCancelar={cancelar} />
       ) : (
-        <NovaCampanha origens={origens} onCriada={() => router.refresh()} />
+        <NovaCampanha origens={origens} limiteMax={aquecimento?.limite ?? 300} onCriada={() => router.refresh()} />
       )}
 
       {historicoInicial.length > 0 && <Historico itens={historicoInicial} />}
@@ -144,16 +160,16 @@ function CampanhaAtiva({ ativo, busy, onPausar, onRetomar, onCancelar }: {
   )
 }
 
-function NovaCampanha({ origens, onCriada }: { origens: string[]; onCriada: () => void }) {
+function NovaCampanha({ origens, limiteMax, onCriada }: { origens: string[]; limiteMax: number; onCriada: () => void }) {
   const [mensagem, setMensagem] = useState('')
   const [todos, setTodos] = useState(true)
   const [origensSel, setOrigensSel] = useState<Set<string>>(new Set())
   const [intervalo, setIntervalo] = useState(15)
-  const [limite, setLimite] = useState('100')
+  const [limite, setLimite] = useState(String(Math.min(100, limiteMax)))
   const [confirmando, setConfirmando] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sucesso, setSucesso] = useState<number | null>(null)
+  const [sucesso, setSucesso] = useState<{ total: number; limiteAplicado: number; reduzido: boolean } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
 
   function toggleOrigem(o: string) {
@@ -168,8 +184,8 @@ function NovaCampanha({ origens, onCriada }: { origens: string[]; onCriada: () =
     })
     setLoading(false)
     if (r?.error) { setError(r.error); setConfirmando(false); return }
-    setSucesso(r.total ?? 0)
-    setTimeout(onCriada, 1200)
+    setSucesso({ total: r.total ?? 0, limiteAplicado: r.limiteAplicado ?? 0, reduzido: !!r.limiteReduzidoPorAquecimento })
+    setTimeout(onCriada, 1800)
   }
 
   if (sucesso !== null) {
@@ -177,8 +193,11 @@ function NovaCampanha({ origens, onCriada }: { origens: string[]; onCriada: () =
       <GlowCard>
         <div className="p-10 flex flex-col items-center gap-3 text-center">
           <div className="w-14 h-14 rounded-full bg-[#E6F9F3] flex items-center justify-center"><Check className="size-7 text-[#0DB57A]" /></div>
-          <p className="text-base font-bold text-[#1C1B18]">Envio iniciado para {sucesso} contato{sucesso === 1 ? '' : 's'}!</p>
+          <p className="text-base font-bold text-[#1C1B18]">Envio iniciado para {sucesso.total} contato{sucesso.total === 1 ? '' : 's'}!</p>
           <p className="text-sm text-[#8C8880]">Acompanhe o progresso aqui na página.</p>
+          {sucesso.reduzido && (
+            <p className="text-xs text-[#F59E0B] bg-[#FEF3C7] rounded-lg px-3 py-1.5">Limite ajustado pra {sucesso.limiteAplicado}/dia por causa do aquecimento do número.</p>
+          )}
         </div>
       </GlowCard>
     )
@@ -236,8 +255,9 @@ function NovaCampanha({ origens, onCriada }: { origens: string[]; onCriada: () =
           </div>
           <div>
             <label className="text-[11px] font-bold text-[#8C8880] uppercase tracking-wider flex items-center gap-1 mb-1"><Gauge className="size-3" /> Limite por dia</label>
-            <input type="number" min={5} max={300} value={limite} onChange={e => setLimite(e.target.value)}
+            <input type="number" min={5} max={limiteMax} value={limite} onChange={e => setLimite(e.target.value)}
               className="w-full h-10 px-3 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF]" />
+            {limiteMax < 300 && <p className="text-[10px] text-[#C8C5BB] mt-1">Máximo de {limiteMax}/dia enquanto o número está em aquecimento.</p>}
           </div>
         </div>
 

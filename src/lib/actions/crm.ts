@@ -155,23 +155,30 @@ export async function setResponsavel(contactId: string, vendedorId: string | nul
     .update({ responsavel_id: vendedorId } as never).eq('id', contactId).eq('company_id', companyId)
   if (error) return { error: 'Erro ao salvar responsável.' }
 
-  if (vendedorId) await notificarHandoff(service, companyId, contactId, vendedorId)
-
   revalidatePath('/dashboard/funil')
   return { success: true }
 }
 
-/** Avisa o vendedor no WhatsApp dele que um lead foi atribuído, com link direto pro cliente. */
-async function notificarHandoff(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, vendedorId: string) {
+/**
+ * Avisa o vendedor no WhatsApp dele que um lead foi atribuído, com link direto pro cliente.
+ * Ação MANUAL (botão) — não dispara sozinho ao trocar o responsável, pra não mandar mensagem
+ * automática pra número que nunca conversou com a empresa (gatilho de bloqueio do WhatsApp).
+ */
+export async function avisarVendedorHandoff(contactId: string, vendedorId: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
   const [{ data: contact }, { data: vendedor }, { data: comp }] = await Promise.all([
     service.from('contacts').select('name, phone').eq('id', contactId).eq('company_id', companyId).single(),
     service.from('vendedores').select('nome, telefone').eq('id', vendedorId).eq('company_id', companyId).single(),
-    service.from('companies').select('name, settings').eq('id', companyId).single(),
+    service.from('companies').select('settings').eq('id', companyId).single(),
   ])
-  if (!contact?.phone || !vendedor?.telefone) return // sem telefone de um dos lados, não há como avisar
+  if (!contact?.phone) return { error: 'Cliente sem telefone.' }
+  if (!vendedor?.telefone) return { error: 'Esse colaborador não tem WhatsApp cadastrado.' }
 
   const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
-  if (!instance) return // whatsapp não conectado, segue sem avisar
+  if (!instance) return { error: 'WhatsApp não conectado.' }
 
   const clienteNumero = (contact.phone || '').replace(/\D/g, '')
   const clienteWa = clienteNumero.startsWith('55') ? clienteNumero : `55${clienteNumero}`
@@ -182,7 +189,9 @@ async function notificarHandoff(service: ReturnType<typeof createServiceClient>,
   const link = `https://wa.me/${clienteWa}`
   const texto = `🎯 Novo lead pra você, ${vendedor.nome}!\n\n*${nomeCliente}*\n${contact.phone}\n\nToque no link pra abrir a conversa direto:\n${link}`
 
-  try { await enviarTexto(instance, vendedorWa, texto) } catch { /* aviso é best-effort — não deve quebrar a atribuição do lead */ }
+  const env = await enviarTexto(instance, vendedorWa, texto)
+  if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp. Confira se o WhatsApp continua conectado.' }
+  return { success: true }
 }
 
 /* ---------- Tarefas ---------- */
