@@ -130,12 +130,14 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    // CAPTURA AUTOMÁTICA: número novo vira lead no funil ("Novo Lead")
+    // CAPTURA AUTOMÁTICA: número novo vira lead na 1ª coluna do funil (personalizada ou "Novo Lead")
     let contactId = chave ? idPorChave.get(chave) : undefined
     if (chave && !contactId) {
+      const funilColunas = (company.settings as { funil_colunas?: { key: string }[] })?.funil_colunas
+      const etapaEntrada = funilColunas && funilColunas.length > 0 ? funilColunas[0].key : 'novo'
       const { data: novo, error: capErr } = await service.from('contacts').insert({
         company_id: company.id, name: e.pushName?.trim() || null, phone: numero,
-        origem: 'WhatsApp', funil_etapa: 'novo', active: true, criado_por: 'WhatsApp',
+        origem: 'WhatsApp', funil_etapa: etapaEntrada, active: true, criado_por: 'WhatsApp',
       } as never).select('id').single()
       if (capErr) console.error('[wh capErr]', capErr.message)
       contactId = (novo as { id?: string })?.id

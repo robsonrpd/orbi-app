@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { FUNIL_ETAPAS } from '@/lib/funil'
+import { type FunilColuna } from '@/lib/funil'
 import { moverLead, criarLead } from '@/lib/actions/funil'
 import { criarMsgPronta, excluirMsgPronta } from '@/lib/actions/crm'
 import { deleteContact } from '@/lib/actions/contacts'
 import { LeadDetalhe, type Lead } from '@/components/orbi/lead-detalhe'
 import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
-import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User, Upload, Download } from 'lucide-react'
+import { PersonalizarColunasModal } from '@/components/orbi/personalizar-colunas-modal'
+import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User, Upload, Download, Palette } from 'lucide-react'
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 function diasDesde(iso: string) { return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) }
@@ -26,9 +27,13 @@ type Vendedor = { id: string; nome: string }
 type MsgPronta = { id: string; titulo: string; texto: string }
 type ProdLoja = { id: string; name: string; price: number }
 
-export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [], produtosLoja = [], companyId = '' }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[]; produtosLoja?: ProdLoja[]; companyId?: string }) {
+export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas = [], produtosLoja = [], companyId = '', colunasIniciais }: { leads: Lead[]; vendedores?: Vendedor[]; msgsProntas?: MsgPronta[]; produtosLoja?: ProdLoja[]; companyId?: string; colunasIniciais: FunilColuna[] }) {
   const [leads, setLeads] = useState<Lead[]>(leadsIniciais)
+  const [colunas, setColunas] = useState<FunilColuna[]>(colunasIniciais)
+  const [personalizarOpen, setPersonalizarOpen] = useState(false)
   const router = useRouter()
+
+  useEffect(() => setColunas(colunasIniciais), [colunasIniciais])
 
   // mantém a lista em dia com o servidor (após router.refresh())
   useEffect(() => { setLeads(leadsIniciais) }, [leadsIniciais])
@@ -64,10 +69,13 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
   const [mpTit, setMpTit] = useState(''); const [mpTxt, setMpTxt] = useState('')
   const [importOpen, setImportOpen] = useState(false)
 
+  const etapaEntrada = colunas[0]?.key ?? 'novo'
+
   async function exportarExcel() {
     const XLSX = await import('xlsx')
     const dados = leads.map(l => ({
-      Nome: l.name ?? '', Telefone: l.phone ?? '', Etapa: l.funil_etapa ?? 'novo',
+      Nome: l.name ?? '', Telefone: l.phone ?? '',
+      Etapa: colunas.find(c => c.key === (l.funil_etapa ?? etapaEntrada))?.label ?? l.funil_etapa ?? '',
       Valor: Number(l.funil_valor ?? 0), Origem: l.origem ?? '', Tags: (l.tags ?? []).join(', '),
       'Cadastrado em': new Date(l.created_at).toLocaleDateString('pt-BR'),
     }))
@@ -87,7 +95,7 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
   const vendMap = new Map(vendedores.map(v => [v.id, v.nome]))
   function leadsDe(k: string) {
     return leads
-      .filter(l => (l.funil_etapa ?? 'novo') === k)
+      .filter(l => (l.funil_etapa ?? etapaEntrada) === k)
       .sort((a, b) => new Date(b.lastMessageAt ?? b.created_at).getTime() - new Date(a.lastMessageAt ?? a.created_at).getTime())
   }
   function totalDe(k: string) { return leadsDe(k).reduce((s, l) => s + Number(l.funil_valor ?? 0), 0) }
@@ -97,7 +105,7 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
     const id = dragId; setDragId(null)
     if (!id) return
     const lead = leads.find(l => l.id === id)
-    if (!lead || (lead.funil_etapa ?? 'novo') === etapa) return
+    if (!lead || (lead.funil_etapa ?? etapaEntrada) === etapa) return
     setLeads(ls => ls.map(l => l.id === id ? { ...l, funil_etapa: etapa } : l))
     await moverLead(id, etapa)
   }
@@ -131,6 +139,10 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
           {leads.length} leads · <strong className="text-[#1A56FF]">{fmt(totalAberto)}</strong> em aberto · clique num card para abrir a conversa
         </p>
         <div className="flex items-center gap-2">
+          <button onClick={() => setPersonalizarOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#2E2D29]">
+            <Palette className="size-4" /> Personalizar colunas
+          </button>
           <button onClick={() => setImportOpen(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#2E2D29]">
             <Upload className="size-4" /> Importar
@@ -152,7 +164,7 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
       </div>
 
       <div className="flex-1 flex gap-3 overflow-x-auto pb-2">
-        {FUNIL_ETAPAS.map(col => {
+        {colunas.map(col => {
           const items = leadsDe(col.key)
           const total = totalDe(col.key)
           return (
@@ -246,7 +258,7 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
         })}
       </div>
 
-      {detalhe && <LeadDetalhe lead={detalhe} onClose={() => setDetalhe(null)} onChange={aplicar} vendedores={vendedores} msgsProntas={msgsProntas} produtosLoja={produtosLoja} />}
+      {detalhe && <LeadDetalhe lead={detalhe} onClose={() => setDetalhe(null)} onChange={aplicar} vendedores={vendedores} msgsProntas={msgsProntas} produtosLoja={produtosLoja} colunas={colunas} />}
 
       {/* Modal mensagens prontas */}
       {msgsOpen && (
@@ -310,6 +322,9 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
       )}
 
       <ImportarContatosModal open={importOpen} onClose={() => setImportOpen(false)} />
+
+      <PersonalizarColunasModal open={personalizarOpen} colunas={colunas} onClose={() => setPersonalizarOpen(false)}
+        onSalvo={novas => { setColunas(novas); router.refresh() }} />
     </div>
   )
 }

@@ -3,7 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto } from '@/lib/evolution'
-import { FUNIL_KEYS } from '@/lib/funil'
+import { obterColunasFunil } from '@/lib/actions/funil-colunas'
 import { revalidatePath } from 'next/cache'
 
 function waNumero(phone: string) {
@@ -63,7 +63,10 @@ export async function atualizarLead(contactId: string, p: {
   if (p.email !== undefined) patch.email = p.email.trim() || null
   if (p.origem !== undefined) patch.origem = p.origem || null
   if (p.valor !== undefined) patch.funil_valor = isNaN(p.valor) ? 0 : p.valor
-  if (p.etapa !== undefined && FUNIL_KEYS.includes(p.etapa)) patch.funil_etapa = p.etapa
+  if (p.etapa !== undefined) {
+    const colunas = await obterColunasFunil()
+    if (colunas.some(c => c.key === p.etapa)) patch.funil_etapa = p.etapa
+  }
   if (p.tags !== undefined) patch.tags = p.tags
   if (p.notes !== undefined) patch.notes = p.notes.trim() || null
 

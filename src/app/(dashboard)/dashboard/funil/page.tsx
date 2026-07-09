@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { obterColunasFunil } from '@/lib/actions/funil-colunas'
 import { Topbar } from '@/components/orbi/topbar'
 import { FunilClient } from './funil-client'
 
@@ -9,12 +10,13 @@ export default async function FunilPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
-  const [{ data: contacts }, { data: convs }, { data: vendedores }] = await Promise.all([
+  const [{ data: contacts }, { data: convs }, { data: vendedores }, colunas] = await Promise.all([
     service.from('contacts')
       .select('id, name, phone, email, origem, tags, notes, funil_etapa, funil_valor, responsavel_id, qualificacao, negociacao_status, created_at')
       .eq('company_id', companyId).eq('active', true).order('created_at', { ascending: false }),
     service.from('conversations').select('id, numero, messages, last_message_at').eq('company_id', companyId),
     service.from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome'),
+    obterColunasFunil(),
   ])
 
   let produtosLoja: { id: string; name: string; price: number }[] = []
@@ -54,7 +56,7 @@ export default async function FunilPage() {
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
       <Topbar title="Funil de Leads" subtitle="Seu CRM — acompanhe e converse com cada lead" />
       <div className="flex-1 overflow-hidden p-6">
-        <FunilClient leads={leads as never} vendedores={vendedores ?? []} msgsProntas={msgsProntas} produtosLoja={produtosLoja} companyId={companyId ?? ''} />
+        <FunilClient leads={leads as never} vendedores={vendedores ?? []} msgsProntas={msgsProntas} produtosLoja={produtosLoja} companyId={companyId ?? ''} colunasIniciais={colunas} />
       </div>
     </div>
   )

@@ -2,14 +2,16 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId, getCurrentUserName } from '@/lib/auth/company'
-import { FUNIL_KEYS } from '@/lib/funil'
+import { FUNIL_DEFAULT } from '@/lib/funil'
+import { obterColunasFunil } from '@/lib/actions/funil-colunas'
 import { revalidatePath } from 'next/cache'
 
 /** Move um lead para outra etapa do funil. */
 export async function moverLead(contactId: string, etapa: string) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
-  if (!FUNIL_KEYS.includes(etapa)) return { error: 'Etapa inválida.' }
+  const colunas = await obterColunasFunil()
+  if (!colunas.some(c => c.key === etapa)) return { error: 'Etapa inválida.' }
 
   const service = createServiceClient()
   const { error } = await service.from('contacts')
@@ -26,13 +28,14 @@ export async function criarLead(nome: string, telefone: string) {
   if (!telefone?.trim()) return { error: 'Telefone é obrigatório.' }
 
   const criadoPor = await getCurrentUserName()
+  const colunas = await obterColunasFunil()
   const service = createServiceClient()
   const { error } = await service.from('contacts').insert({
     company_id: companyId,
     name: nome?.trim() || null,
     phone: telefone.trim(),
     origem: 'Manual',
-    funil_etapa: 'novo',
+    funil_etapa: colunas[0]?.key ?? FUNIL_DEFAULT,
     active: true,
     criado_por: criadoPor,
   } as never)

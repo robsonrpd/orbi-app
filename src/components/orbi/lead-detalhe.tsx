@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { FUNIL_ETAPAS } from '@/lib/funil'
+import { type FunilColuna } from '@/lib/funil'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
 import { setResponsavel, avisarVendedorHandoff, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
 import {
@@ -42,9 +42,9 @@ function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'curren
 function dataBR(s: string | null) { return s ? new Date(s.length <= 10 ? s + 'T12:00:00' : s).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '' }
 const ORIGENS = ['Instagram', 'Facebook', 'Google', 'Indicação de amigo', 'Indicação médica', 'Passou em frente', 'Já era cliente', 'WhatsApp', 'Manual', 'Outro']
 
-export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, produtosLoja }: {
+export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, produtosLoja, colunas }: {
   lead: Lead; onClose: () => void; onChange: (id: string, patch: Partial<Lead>) => void
-  vendedores: Vendedor[]; msgsProntas: MsgPronta[]; produtosLoja: ProdLoja[]
+  vendedores: Vendedor[]; msgsProntas: MsgPronta[]; produtosLoja: ProdLoja[]; colunas: FunilColuna[]
 }) {
   const [msgs, setMsgs] = useState<Msg[]>(lead.messages ?? [])
   const [texto, setTexto] = useState('')
@@ -192,7 +192,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   }
   async function delAnotacao(id: string) { setAnotacoes(a => a.filter(x => x.id !== id)); await excluirAnotacao(id) }
 
-  const etapaInfo = FUNIL_ETAPAS.find(e => e.key === etapa) ?? FUNIL_ETAPAS[0]
+  const etapaInfo = colunas.find(e => e.key === etapa) ?? colunas[0]
   const inputCls = 'w-full h-10 px-3 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all'
   const labelCls = 'text-[10px] font-bold text-[#8C8880] uppercase tracking-wider block mb-1'
   const secTitle = 'text-[11px] font-black text-[#1C1B18] uppercase tracking-wider flex items-center gap-1.5'
@@ -216,7 +216,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
 
         {/* Pipeline */}
         <div className="flex items-center gap-1 px-4 py-2 border-b border-[#EAE8E1] overflow-x-auto shrink-0 bg-[#FAFAF9]">
-          {FUNIL_ETAPAS.map(e => (
+          {colunas.map(e => (
             <button key={e.key} onClick={() => mudarEtapa(e.key)}
               className="px-3 h-7 rounded-full text-[11px] font-bold whitespace-nowrap transition-all"
               style={etapa === e.key ? { background: e.cor, color: '#fff' } : { background: e.bg, color: e.cor }}>
