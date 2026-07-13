@@ -235,10 +235,14 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
             return (
               <button key={c.id} onClick={() => setSelecionada(c.id)}
                 className={`w-full flex items-start gap-2.5 px-3 py-3 border-b border-[#EAE8E1] text-left transition-colors ${ativo ? 'bg-white' : 'hover:bg-white/60'}`}>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                  style={{ background: '#1A56FF' }}>
-                  {iniciais(nome)}
-                </div>
+                {c.contactFoto ? (
+                  <img src={c.contactFoto} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
+                    style={{ background: '#1A56FF' }}>
+                    {iniciais(nome)}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-bold text-[#1C1B18] truncate">{nome}</p>
@@ -299,10 +303,14 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
         ) : (
           <>
             <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                style={{ background: '#1A56FF' }}>
-                {iniciais(ativa.contactName ?? ativa.numero)}
-              </div>
+              {ativa.contactFoto ? (
+                <img src={ativa.contactFoto} alt="" className="w-9 h-9 rounded-full object-cover" />
+              ) : (
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                  style={{ background: '#1A56FF' }}>
+                  {iniciais(ativa.contactName ?? ativa.numero)}
+                </div>
+              )}
               <div>
                 <p className="text-sm font-bold text-[#1C1B18]">{ativa.contactName ?? ativa.numero}</p>
                 <p className="text-xs text-[#8C8880]">{ativa.numero}</p>

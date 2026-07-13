@@ -1,8 +1,10 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { getModo } from '@/lib/auth/modo'
+import { obterPersonalizacaoDashboard } from '@/lib/actions/dashboard-config'
 import { Topbar } from '@/components/orbi/topbar'
 import { GlowCard } from '@/components/orbi/glow-card'
+import { DashboardPersonalizarButton } from '@/components/orbi/dashboard-personalizar-button'
 import { EvolucaoVendasChart, EstoqueDonut, OSFunnelChart, ReceitaDespesaChart } from '@/components/orbi/dashboard-charts'
 import { RelatorioMensal } from '@/components/orbi/relatorio-mensal'
 import {
@@ -11,6 +13,7 @@ import {
   Users, DollarSign, Calendar, UserPlus, Award, Briefcase, BarChart2
 } from 'lucide-react'
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 
 function fmt(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
@@ -27,6 +30,7 @@ export default async function DashboardPage() {
   const { data: companyRow } = await service.from('companies').select('name, business_type').eq('id', companyId).single()
   const companyName = companyRow?.name ?? 'Minha Ótica'
   const isGeral = companyRow?.business_type === 'geral'
+  const personalizacao = await obterPersonalizacaoDashboard(isGeral)
   const firstName = userRow?.name?.split(' ')[0] ?? 'usuário'
   // hora local do Brasil — o servidor roda em UTC, então new Date().getHours() dava saudação errada
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
@@ -161,48 +165,229 @@ export default async function DashboardPage() {
     .filter(x => x.contact)
     .sort((a, b) => b.ticket - a.ticket).slice(0, 5)
 
-  const kpis = isGeral ? [
-    { label: 'Contas a Receber', value: fmt(aReceber), icon: ArrowUpCircle, color: '#0DB57A', bg: 'linear-gradient(135deg,#0DB57A,#0a9e6a)', href: '/dashboard/financeiro' },
-    { label: 'Contas a Pagar', value: fmt(aPagar), icon: ArrowDownCircle, color: '#EF4444', bg: 'linear-gradient(135deg,#EF4444,#DC2626)', href: '/dashboard/financeiro' },
-    { label: 'Aniversariantes', value: String(aniversariantes.length), icon: Gift, color: '#F59E0B', bg: 'linear-gradient(135deg,#F59E0B,#D97706)', href: '/dashboard/clientes' },
-    { label: 'Projetos em Andamento', value: String(projetosList.filter(p => p.status === 'andamento').length), icon: Briefcase, color: '#1A56FF', bg: 'linear-gradient(135deg,#1A56FF,#1445DD)', href: '/dashboard/projetos' },
-    { label: 'Ticket Médio', value: fmt(ticketMedioGeral), icon: BarChart2, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/relatorios' },
-  ] : [
-    { label: 'Contas a Receber', value: fmt(aReceber), icon: ArrowUpCircle, color: '#0DB57A', bg: 'linear-gradient(135deg,#0DB57A,#0a9e6a)', href: '/dashboard/financeiro' },
-    { label: 'Contas a Pagar', value: fmt(aPagar), icon: ArrowDownCircle, color: '#EF4444', bg: 'linear-gradient(135deg,#EF4444,#DC2626)', href: '/dashboard/financeiro' },
-    { label: 'Aniversariantes', value: String(aniversariantes.length), icon: Gift, color: '#F59E0B', bg: 'linear-gradient(135deg,#F59E0B,#D97706)', href: '/dashboard/clientes' },
-    { label: 'Entregas Pendentes', value: String(entregasPendentes), icon: PackageCheck, color: '#1A56FF', bg: 'linear-gradient(135deg,#1A56FF,#1445DD)', href: '/dashboard/ordens-servico' },
-    { label: 'Receitas Vencidas', value: String(receitasVencidas.length), icon: Eye, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/receitas' },
+  const kpis = [
+    { key: 'contas_receber', label: 'Contas a Receber', value: fmt(aReceber), icon: ArrowUpCircle, color: '#0DB57A', bg: 'linear-gradient(135deg,#0DB57A,#0a9e6a)', href: '/dashboard/financeiro' },
+    { key: 'contas_pagar', label: 'Contas a Pagar', value: fmt(aPagar), icon: ArrowDownCircle, color: '#EF4444', bg: 'linear-gradient(135deg,#EF4444,#DC2626)', href: '/dashboard/financeiro' },
+    { key: 'aniversariantes', label: 'Aniversariantes', value: String(aniversariantes.length), icon: Gift, color: '#F59E0B', bg: 'linear-gradient(135deg,#F59E0B,#D97706)', href: '/dashboard/clientes' },
+    isGeral
+      ? { key: 'kpi_producao', label: 'Projetos em Andamento', value: String(projetosList.filter(p => p.status === 'andamento').length), icon: Briefcase, color: '#1A56FF', bg: 'linear-gradient(135deg,#1A56FF,#1445DD)', href: '/dashboard/projetos' }
+      : { key: 'kpi_producao', label: 'Entregas Pendentes', value: String(entregasPendentes), icon: PackageCheck, color: '#1A56FF', bg: 'linear-gradient(135deg,#1A56FF,#1445DD)', href: '/dashboard/ordens-servico' },
+    isGeral
+      ? { key: 'kpi_qualidade', label: 'Ticket Médio', value: fmt(ticketMedioGeral), icon: BarChart2, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/relatorios' }
+      : { key: 'kpi_qualidade', label: 'Receitas Vencidas', value: String(receitasVencidas.length), icon: Eye, color: '#8B5CF6', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', href: '/dashboard/receitas' },
   ]
 
-  const secondaryCard = isGeral ? (
-    <GlowCard>
-      <div className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <BarChart2 className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
-          <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Receita x Despesa</h2>
+  // 4 cards de "resumo" (segunda fileira, cards brancos)
+  const resumo = [
+    { key: 'vendas_totais', label: 'Vendas Totais', value: fmt(vendasTotais), sub: 'Total de faturamento', icon: DollarSign, color: '#0DB57A', bg: '#E6F9F3' },
+    { key: 'total_clientes', label: 'Total de Clientes', value: String(totalClientes), sub: 'Clientes cadastrados', icon: Users, color: '#1A56FF', bg: '#EEF2FF' },
+    { key: 'agendamentos', label: 'Agendamentos', value: String(totalAgendamentos), sub: 'Total de agendamentos', icon: Calendar, color: '#F59E0B', bg: '#FEF3C7' },
+    { key: 'clientes_novos', label: 'Clientes Novos', value: String(clientesNovosHoje), sub: 'Novos hoje', icon: UserPlus, color: '#8B5CF6', bg: '#F5F3FF' },
+  ]
+
+  // seções grandes (cada uma vira um bloco de largura total, na ordem escolhida em Personalizar)
+  const secoesMap: Record<string, ReactNode> = {
+    relatorio_mensal: (
+      <RelatorioMensal transactions={txList as never} appointments={(appointments ?? []) as never} />
+    ),
+    top_clientes: (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Award className="size-4 text-[#F59E0B]" strokeWidth={1.5} />
+            <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Top Clientes</h2>
+          </div>
+          {topClientes.length === 0 ? (
+            <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhuma compra registrada ainda</p>
+          ) : (
+            <div className="space-y-2">
+              {topClientes.map((c, i) => {
+                const ct = c.contact as { name: string | null; phone: string } | undefined
+                return (
+                  <div key={c.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F7F6F3] transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                        style={{ background: i === 0 ? 'linear-gradient(135deg,#F59E0B,#D97706)' : 'linear-gradient(135deg,#93AAFF,#1A56FF)' }}>
+                        {(ct?.name ?? ct?.phone ?? '?')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#1C1B18]">{ct?.name ?? ct?.phone}</p>
+                        <p className="text-xs text-[#C8C5BB]">#{i + 1} maior cliente</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(c.gasto)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
-        <ReceitaDespesaChart data={receitaDespesaData} />
-      </div>
-    </GlowCard>
-  ) : (
-    <GlowCard>
-      <div className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Glasses className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
-          <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Estoque por Tipo</h2>
+      </GlowCard>
+    ),
+    forma_pagamento: porForma.length > 0 ? (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+              <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Receita por Forma de Pagamento</h2>
+            </div>
+            <span className="text-xs text-[#8C8880]">Este mês · {fmt(faturamento)}</span>
+          </div>
+          <div className="flex h-3 rounded-full overflow-hidden mb-3">
+            {porForma.map(f => (
+              <div key={f.forma} style={{ width: `${(f.valor / faturamento) * 100}%`, background: f.cor }} title={f.label} />
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {porForma.map(f => (
+              <div key={f.forma} className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: f.cor }} />
+                <div>
+                  <p className="text-xs text-[#8C8880]">{f.label}</p>
+                  <p className="text-sm font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(f.valor)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <EstoqueDonut data={estoqueData} />
-        <div className="flex items-center justify-center gap-4 mt-2">
-          {estoqueData.map(d => (
-            <span key={d.name} className="flex items-center gap-1 text-[10px] text-[#8C8880]">
-              <span className="w-2 h-2 rounded-full" style={{ background: d.color }} /> {d.name}
-            </span>
-          ))}
+      </GlowCard>
+    ) : null,
+    evolucao_faturamento: (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
+              <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Evolução de Faturamento</h2>
+            </div>
+            <span className="text-xs text-[#8C8880]">Últimos 6 meses</span>
+          </div>
+          <EvolucaoVendasChart data={evolucao} />
         </div>
-      </div>
-    </GlowCard>
-  )
+      </GlowCard>
+    ),
+    secundario: isGeral ? (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart2 className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+            <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Receita x Despesa</h2>
+          </div>
+          <ReceitaDespesaChart data={receitaDespesaData} />
+        </div>
+      </GlowCard>
+    ) : (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Glasses className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+            <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Estoque por Tipo</h2>
+          </div>
+          <EstoqueDonut data={estoqueData} />
+          <div className="flex items-center justify-center gap-4 mt-2">
+            {estoqueData.map(d => (
+              <span key={d.name} className="flex items-center gap-1 text-[10px] text-[#8C8880]">
+                <span className="w-2 h-2 rounded-full" style={{ background: d.color }} /> {d.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </GlowCard>
+    ),
+    funil_status: (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              {isGeral ? <Briefcase className="size-4 text-[#1A56FF]" strokeWidth={1.5} /> : <FileText className="size-4 text-[#1A56FF]" strokeWidth={1.5} />}
+              <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{isGeral ? 'Projetos por Status' : 'Ordens de Serviço por Status'}</h2>
+            </div>
+            <Link href={isGeral ? '/dashboard/projetos' : '/dashboard/ordens-servico'} className="text-xs text-[#1A56FF] font-semibold hover:underline flex items-center gap-1">
+              {isGeral ? 'Ver Projetos' : 'Monitor de Produção'} <ChevronRight className="size-3" />
+            </Link>
+          </div>
+          <OSFunnelChart data={isGeral ? projetosData : osData} />
+        </div>
+      </GlowCard>
+    ),
+    aniversariantes_mes: (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Cake className="size-4 text-[#F59E0B]" strokeWidth={1.5} />
+            <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Aniversariantes do Mês</h2>
+          </div>
+          {aniversariantes.length === 0 ? (
+            <p className="text-sm text-[#C8C5BB] text-center py-8">Nenhum aniversariante este mês</p>
+          ) : (
+            <div className="space-y-2 max-h-44 overflow-y-auto">
+              {aniversariantes.slice(0, 6).map(c => {
+                const dia = new Date(c.data_nascimento! + 'T12:00:00').getDate()
+                return (
+                  <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-[#FEF3C7]/40">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-[#FEF3C7] flex items-center justify-center text-xs font-bold text-[#F59E0B]">
+                        {(c.name ?? c.phone)[0].toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-[#1C1B18]">{c.name ?? c.phone}</span>
+                    </div>
+                    <span className="text-xs font-bold text-[#F59E0B]">Dia {dia}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </GlowCard>
+    ),
+    ticket_medio_cliente: isGeral ? (
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart2 className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+            <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Ticket Médio por Cliente</h2>
+          </div>
+          {ticketMedioPorCliente.length === 0 ? (
+            <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhuma compra registrada ainda</p>
+          ) : (
+            <div className="space-y-2">
+              {ticketMedioPorCliente.map((c, i) => {
+                const ct = c.contact as { name: string | null; phone: string } | undefined
+                return (
+                  <div key={c.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F7F6F3] transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                        style={{ background: i === 0 ? 'linear-gradient(135deg,#8B5CF6,#7C3AED)' : 'linear-gradient(135deg,#C4B5FD,#8B5CF6)' }}>
+                        {(ct?.name ?? ct?.phone ?? '?')[0].toUpperCase()}
+                      </div>
+                      <p className="text-sm font-semibold text-[#1C1B18]">{ct?.name ?? ct?.phone}</p>
+                    </div>
+                    <span className="text-sm font-black text-[#8B5CF6]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(c.ticket)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </GlowCard>
+    ) : null,
+  }
+
+  // no modo vendedor bloqueado, esses itens ficam escondidos mesmo que estejam "ligados" na personalização
+  const kpisSensiveis = new Set(['contas_receber', 'contas_pagar'])
+  const resumoSensiveis = new Set(['vendas_totais'])
+  const secoesSensiveis = new Set(['relatorio_mensal', 'top_clientes', 'forma_pagamento', 'evolucao_faturamento'])
+
+  const kpisMap = new Map(kpis.map(k => [k.key, k]))
+  const resumoMap = new Map(resumo.map(r => [r.key, r]))
+
+  const kpisVisiveis = personalizacao.kpis.filter(i => i.visivel && kpisMap.has(i.key) && (!ocultar || !kpisSensiveis.has(i.key)))
+  const resumoVisiveis = personalizacao.resumo.filter(i => i.visivel && resumoMap.has(i.key) && (!ocultar || !resumoSensiveis.has(i.key)))
+  const secoesVisiveis = personalizacao.secoes.filter(i => i.visivel && secoesMap[i.key] && (!ocultar || !secoesSensiveis.has(i.key)))
+
+  const colsKpi: Record<number, string> = { 0: 'hidden', 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5' }
+  const colsResumo: Record<number, string> = { 0: 'hidden', 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F0F2F5]">
@@ -210,222 +395,58 @@ export default async function DashboardPage() {
 
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
-        {/* 5 KPIs coloridos */}
-        <div className={`grid gap-4 ${ocultar ? 'grid-cols-3' : 'grid-cols-5'}`}>
-          {kpis.filter(k => !ocultar || !['Contas a Receber', 'Contas a Pagar'].includes(k.label)).map(k => (
-            <Link key={k.label} href={k.href}
-              className="rounded-2xl p-4 text-white relative overflow-hidden transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              style={{ background: k.bg, boxShadow: `0 4px 20px ${k.color}40` }}>
-              <div className="absolute -right-4 -top-4 opacity-20">
-                <k.icon className="size-20" strokeWidth={1} />
-              </div>
-              <div className="relative z-10">
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center mb-3">
-                  <k.icon className="size-5" strokeWidth={1.5} />
-                </div>
-                <p className="text-2xl font-black leading-none" style={{ fontFamily: 'Fraunces, serif' }}>{k.value}</p>
-                <p className="text-[11px] font-semibold text-white/80 uppercase tracking-wide mt-1.5" style={{ fontFamily: 'Barlow, sans-serif' }}>{k.label}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-
-        {/* 4 cards de visão geral */}
-        <div className={`grid gap-4 ${ocultar ? 'grid-cols-3' : 'grid-cols-4'}`}>
-          {[
-            { label: 'Vendas Totais', value: fmt(vendasTotais), sub: 'Total de faturamento', icon: DollarSign, color: '#0DB57A', bg: '#E6F9F3' },
-            { label: 'Total de Clientes', value: String(totalClientes), sub: 'Clientes cadastrados', icon: Users, color: '#1A56FF', bg: '#EEF2FF' },
-            { label: 'Agendamentos', value: String(totalAgendamentos), sub: 'Total de agendamentos', icon: Calendar, color: '#F59E0B', bg: '#FEF3C7' },
-            { label: 'Clientes Novos', value: String(clientesNovosHoje), sub: 'Novos hoje', icon: UserPlus, color: '#8B5CF6', bg: '#F5F3FF' },
-          ].filter(m => !ocultar || m.label !== 'Vendas Totais').map(m => (
-            <GlowCard key={m.label}>
-              <div className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1.5" style={{ fontFamily: 'Barlow, sans-serif' }}>{m.label}</p>
-                  <p className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>{m.value}</p>
-                  <p className="text-[10px] text-[#C8C5BB] mt-0.5">{m.sub}</p>
-                </div>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: m.bg }}>
-                  <m.icon className="size-5" style={{ color: m.color }} strokeWidth={1.5} />
-                </div>
-              </div>
-            </GlowCard>
-          ))}
-        </div>
-
-        {/* Relatório Mensal com seletor de mês */}
-        {!ocultar && <RelatorioMensal
-          transactions={txList as never}
-          appointments={(appointments ?? []) as never}
-        />}
-
-        {/* Top Clientes */}
-        {!ocultar && <GlowCard>
-          <div className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Award className="size-4 text-[#F59E0B]" strokeWidth={1.5} />
-              <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Top Clientes</h2>
-            </div>
-            {topClientes.length === 0 ? (
-              <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhuma compra registrada ainda</p>
-            ) : (
-              <div className="space-y-2">
-                {topClientes.map((c, i) => {
-                  const ct = c.contact as { name: string | null; phone: string } | undefined
-                  return (
-                    <div key={c.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F7F6F3] transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                          style={{ background: i === 0 ? 'linear-gradient(135deg,#F59E0B,#D97706)' : 'linear-gradient(135deg,#93AAFF,#1A56FF)' }}>
-                          {(ct?.name ?? ct?.phone ?? '?')[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-[#1C1B18]">{ct?.name ?? ct?.phone}</p>
-                          <p className="text-xs text-[#C8C5BB]">#{i + 1} maior cliente</p>
-                        </div>
-                      </div>
-                      <span className="text-sm font-black text-[#0DB57A]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(c.gasto)}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </GlowCard>}
-
-        {/* Receita por forma de pagamento (mês atual) */}
-        {!ocultar && porForma.length > 0 && (
-          <GlowCard>
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
-                  <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Receita por Forma de Pagamento</h2>
-                </div>
-                <span className="text-xs text-[#8C8880]">Este mês · {fmt(faturamento)}</span>
-              </div>
-              {/* Barra proporcional */}
-              <div className="flex h-3 rounded-full overflow-hidden mb-3">
-                {porForma.map(f => (
-                  <div key={f.forma} style={{ width: `${(f.valor / faturamento) * 100}%`, background: f.cor }} title={f.label} />
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {porForma.map(f => (
-                  <div key={f.forma} className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: f.cor }} />
-                    <div>
-                      <p className="text-xs text-[#8C8880]">{f.label}</p>
-                      <p className="text-sm font-bold text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(f.valor)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </GlowCard>
-        )}
-
-        {/* Linha de gráficos (Evolução + Estoque) — só na visão de dono */}
-        {!ocultar && (
-          <div className="grid grid-cols-3 gap-4">
-            <GlowCard className="col-span-2">
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="size-4 text-[#1A56FF]" strokeWidth={1.5} />
-                    <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Evolução de Faturamento</h2>
-                  </div>
-                  <span className="text-xs text-[#8C8880]">Últimos 6 meses</span>
-                </div>
-                <EvolucaoVendasChart data={evolucao} />
-              </div>
-            </GlowCard>
-            {secondaryCard}
+        {!modo.funcionario && (
+          <div className="flex justify-end">
+            <DashboardPersonalizarButton isGeral={isGeral} kpis={personalizacao.kpis} resumo={personalizacao.resumo} secoes={personalizacao.secoes} />
           </div>
         )}
 
-        {/* Segunda linha — no modo vendedor inclui o card secundário para equilibrar */}
-        <div className="grid grid-cols-3 gap-4">
-          {ocultar && secondaryCard}
-          {/* Funil de produção / projetos */}
-          <GlowCard className={ocultar ? '' : 'col-span-2'}>
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  {isGeral ? <Briefcase className="size-4 text-[#1A56FF]" strokeWidth={1.5} /> : <FileText className="size-4 text-[#1A56FF]" strokeWidth={1.5} />}
-                  <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{isGeral ? 'Projetos por Status' : 'Ordens de Serviço por Status'}</h2>
+        {/* KPIs coloridos */}
+        <div className={`grid gap-4 ${colsKpi[Math.min(kpisVisiveis.length, 5)]}`}>
+          {kpisVisiveis.map(i => {
+            const k = kpisMap.get(i.key)!
+            return (
+              <Link key={k.key} href={k.href}
+                className="rounded-2xl p-4 text-white relative overflow-hidden transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: k.bg, boxShadow: `0 4px 20px ${k.color}40` }}>
+                <div className="absolute -right-4 -top-4 opacity-20">
+                  <k.icon className="size-20" strokeWidth={1} />
                 </div>
-                <Link href={isGeral ? '/dashboard/projetos' : '/dashboard/ordens-servico'} className="text-xs text-[#1A56FF] font-semibold hover:underline flex items-center gap-1">
-                  {isGeral ? 'Ver Projetos' : 'Monitor de Produção'} <ChevronRight className="size-3" />
-                </Link>
-              </div>
-              <OSFunnelChart data={isGeral ? projetosData : osData} />
-            </div>
-          </GlowCard>
-
-          {/* Aniversariantes do mês */}
-          <GlowCard>
-            <div className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Cake className="size-4 text-[#F59E0B]" strokeWidth={1.5} />
-                <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Aniversariantes do Mês</h2>
-              </div>
-              {aniversariantes.length === 0 ? (
-                <p className="text-sm text-[#C8C5BB] text-center py-8">Nenhum aniversariante este mês</p>
-              ) : (
-                <div className="space-y-2 max-h-44 overflow-y-auto">
-                  {aniversariantes.slice(0, 6).map(c => {
-                    const dia = new Date(c.data_nascimento! + 'T12:00:00').getDate()
-                    return (
-                      <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-[#FEF3C7]/40">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-[#FEF3C7] flex items-center justify-center text-xs font-bold text-[#F59E0B]">
-                            {(c.name ?? c.phone)[0].toUpperCase()}
-                          </div>
-                          <span className="text-sm font-medium text-[#1C1B18]">{c.name ?? c.phone}</span>
-                        </div>
-                        <span className="text-xs font-bold text-[#F59E0B]">Dia {dia}</span>
-                      </div>
-                    )
-                  })}
+                <div className="relative z-10">
+                  <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center mb-3">
+                    <k.icon className="size-5" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-2xl font-black leading-none" style={{ fontFamily: 'Fraunces, serif' }}>{k.value}</p>
+                  <p className="text-[11px] font-semibold text-white/80 uppercase tracking-wide mt-1.5" style={{ fontFamily: 'Barlow, sans-serif' }}>{k.label}</p>
                 </div>
-              )}
-            </div>
-          </GlowCard>
+              </Link>
+            )
+          })}
         </div>
 
-        {/* Ticket Médio por Cliente (nicho Geral) */}
-        {isGeral && (
-          <GlowCard>
-            <div className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart2 className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
-                <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Ticket Médio por Cliente</h2>
-              </div>
-              {ticketMedioPorCliente.length === 0 ? (
-                <p className="text-sm text-[#C8C5BB] text-center py-6">Nenhuma compra registrada ainda</p>
-              ) : (
-                <div className="space-y-2">
-                  {ticketMedioPorCliente.map((c, i) => {
-                    const ct = c.contact as { name: string | null; phone: string } | undefined
-                    return (
-                      <div key={c.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F7F6F3] transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                            style={{ background: i === 0 ? 'linear-gradient(135deg,#8B5CF6,#7C3AED)' : 'linear-gradient(135deg,#C4B5FD,#8B5CF6)' }}>
-                            {(ct?.name ?? ct?.phone ?? '?')[0].toUpperCase()}
-                          </div>
-                          <p className="text-sm font-semibold text-[#1C1B18]">{ct?.name ?? ct?.phone}</p>
-                        </div>
-                        <span className="text-sm font-black text-[#8B5CF6]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(c.ticket)}</span>
-                      </div>
-                    )
-                  })}
+        {/* Cards de resumo */}
+        <div className={`grid gap-4 ${colsResumo[Math.min(resumoVisiveis.length, 4)]}`}>
+          {resumoVisiveis.map(i => {
+            const m = resumoMap.get(i.key)!
+            return (
+              <GlowCard key={m.key}>
+                <div className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-[#8C8880] uppercase tracking-wider mb-1.5" style={{ fontFamily: 'Barlow, sans-serif' }}>{m.label}</p>
+                    <p className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>{m.value}</p>
+                    <p className="text-[10px] text-[#C8C5BB] mt-0.5">{m.sub}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: m.bg }}>
+                    <m.icon className="size-5" style={{ color: m.color }} strokeWidth={1.5} />
+                  </div>
                 </div>
-              )}
-            </div>
-          </GlowCard>
-        )}
+              </GlowCard>
+            )
+          })}
+        </div>
+
+        {/* Seções, na ordem escolhida em Personalizar */}
+        {secoesVisiveis.map(i => <div key={i.key}>{secoesMap[i.key]}</div>)}
       </div>
     </div>
   )

@@ -146,13 +146,13 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
       <div className="relative z-10 px-4 pt-4 pb-3 border-b border-white/5">
         <div
           onClick={() => canEditLogo && !uploadingLogo && logoInputRef.current?.click()}
-          className={`group relative rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center h-20 ${canEditLogo ? 'cursor-pointer hover:border-[#1A56FF]/60' : ''} transition-colors`}>
+          className={`group relative mx-auto rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center w-20 h-20 ${canEditLogo ? 'cursor-pointer hover:border-[#1A56FF]/60' : ''} transition-colors`}>
           {logo ? (
             <img src={logo} alt={companyName ?? 'Logo'} className="w-full h-full object-contain p-2" />
           ) : canEditLogo ? (
             <div className="flex flex-col items-center gap-1 text-white/40">
               {uploadingLogo ? <Loader2 className="size-5 animate-spin" />
-                : <><Camera className="size-5" strokeWidth={1.5} /><span className="text-[10px]">Adicionar logo</span></>}
+                : <><Camera className="size-5" strokeWidth={1.5} /><span className="text-[10px] text-center leading-tight">Adicionar<br />logo</span></>}
             </div>
           ) : (
             <Building2 className="size-6 text-white/25" strokeWidth={1.5} />
@@ -165,6 +165,11 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
           )}
           <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
         </div>
+        {canEditLogo && !logoError && (
+          <p className="text-center text-[10px] text-white/30 mt-1.5 leading-snug">
+            Imagem quadrada, fundo transparente (PNG) fica melhor · até 16MB
+          </p>
+        )}
         {logoError && <p className="text-center text-[10px] font-medium text-red-400 mt-1.5 leading-snug">{logoError}</p>}
         {empresas.length > 1 ? (
           <div className="relative mt-2">

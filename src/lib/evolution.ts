@@ -123,3 +123,13 @@ export async function enviarAudio(instance: string, number: string, audio: strin
     body: JSON.stringify({ number, audio }),
   })
 }
+
+/** Busca a URL da foto de perfil do WhatsApp de um número. Retorna null se não tiver foto ou o número não existir. */
+export async function buscarFotoPerfil(instance: string, number: string) {
+  const r = await call(`/chat/fetchProfilePictureUrl/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ number }),
+  })
+  const d = r.data as { profilePictureUrl?: string; picture?: string } | null
+  return r.ok ? (d?.profilePictureUrl ?? d?.picture ?? null) : null
+}

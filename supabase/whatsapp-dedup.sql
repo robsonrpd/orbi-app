@@ -1,10 +1,10 @@
 -- ============================================================
 -- Orbi — Deduplicação de mensagens do webhook do WhatsApp
 -- ============================================================
--- Evita reprocessar (e reenviar resposta da IA) a MESMA mensagem
+-- Evita reprocessar (e duplicar na conversa/CRM) a MESMA mensagem
 -- recebida duas vezes — acontece quando a Evolution API reenvia o
 -- webhook por timeout/erro de rede e o Orbi não tinha como saber
--- que já tinha respondido aquela mensagem específica.
+-- que já tinha processado aquela mensagem específica.
 -- ============================================================
 
 create table if not exists public.whatsapp_mensagens_processadas (

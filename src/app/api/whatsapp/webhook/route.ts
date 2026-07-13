@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getMediaBase64 } from '@/lib/evolution'
+import { getMediaBase64, buscarFotoPerfil } from '@/lib/evolution'
 import { sendEmail } from '@/lib/email'
 
 // dá tempo pro download de mídia terminar antes do timeout padrão da Vercel
@@ -78,11 +78,14 @@ export async function POST(req: NextRequest) {
   if (eventos.length === 0) return NextResponse.json({ ok: true })
 
   // contatos da empresa (id por últimos 8 dígitos do telefone) — captura sem duplicar
-  const { data: contatos } = await service.from('contacts').select('id, phone').eq('company_id', company.id)
+  const { data: contatos } = await service.from('contacts').select('id, phone, foto_url').eq('company_id', company.id)
   const idPorChave = new Map<string, string>()
+  const semFotoPorChave = new Map<string, string>()
   for (const c of contatos ?? []) {
     const k = (c.phone ?? '').replace(/\D/g, '').slice(-8)
-    if (k) idPorChave.set(k, c.id)
+    if (!k) continue
+    idPorChave.set(k, c.id)
+    if (!c.foto_url) semFotoPorChave.set(k, c.id)
   }
 
   for (const ev of eventos) {
@@ -150,7 +153,16 @@ export async function POST(req: NextRequest) {
       } as never).select('id').single()
       if (capErr) console.error('[wh capErr]', capErr.message)
       contactId = (novo as { id?: string })?.id
-      if (contactId && chave) idPorChave.set(chave, contactId)
+      if (contactId && chave) { idPorChave.set(chave, contactId); semFotoPorChave.set(chave, contactId) }
+    }
+
+    // busca a foto de perfil só na 1ª vez (contato novo ou que ainda não tem foto salva) — não trava o fluxo se falhar
+    if (chave && semFotoPorChave.has(chave)) {
+      semFotoPorChave.delete(chave)
+      try {
+        const foto = await buscarFotoPerfil(instance, numero)
+        if (foto) await service.from('contacts').update({ foto_url: foto } as never).eq('id', contactId ?? idPorChave.get(chave))
+      } catch (err) { console.error('[wh fotoPerfil]', err) }
     }
 
     // salva/atualiza a conversa (histórico) — sem resposta automática, alguém da equipe responde pelo Conversas/CRM

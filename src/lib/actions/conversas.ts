@@ -13,6 +13,7 @@ export type ConversaResumo = {
   numero: string
   contactId: string | null
   contactName: string | null
+  contactFoto: string | null
   lastMessageAt: string | null
   handledByAi: boolean
   ultimaMensagem: string
@@ -32,18 +33,20 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
 
   const contactIds = [...new Set((convs ?? []).map(c => c.contact_id).filter(Boolean))] as string[]
   const { data: contacts } = contactIds.length
-    ? await service.from('contacts').select('id, name').in('id', contactIds)
+    ? await service.from('contacts').select('id, name, foto_url').in('id', contactIds)
     : { data: [] }
-  const nomePorId = new Map((contacts ?? []).map(c => [c.id, c.name]))
+  const contatoPorId = new Map((contacts ?? []).map(c => [c.id, c]))
 
   return (convs ?? []).map(c => {
     const msgs = (c.messages as Msg[] | null) ?? []
     const ultima = msgs[msgs.length - 1]
+    const contato = c.contact_id ? contatoPorId.get(c.contact_id) : null
     return {
       id: c.id,
       numero: c.numero,
       contactId: c.contact_id,
-      contactName: c.contact_id ? nomePorId.get(c.contact_id) ?? null : null,
+      contactName: contato?.name ?? null,
+      contactFoto: contato?.foto_url ?? null,
       lastMessageAt: c.last_message_at,
       handledByAi: !!c.handled_by_ai,
       ultimaMensagem: ultima ? (ultima.midia ? `📎 ${ultima.midia.tipo}` : ultima.content) : '',
