@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio, statusInstancia } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 type Midia = { tipo: string; url: string; nome?: string }
@@ -52,6 +52,32 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
       ultimaMensagem: ultima ? (ultima.midia ? `📎 ${ultima.midia.tipo}` : ultima.content) : '',
     }
   })
+}
+
+/** Foto de perfil de um número (usado na tela de "nova conversa", antes de existir uma conversation). Busca no cadastro; se não tiver, tenta buscar ao vivo na Evolution API e salva pra próxima vez. */
+export async function obterFotoContato(telefone: string): Promise<string | null> {
+  const companyId = await getCompanyId()
+  if (!companyId) return null
+
+  const d = (telefone || '').replace(/\D/g, '')
+  const chave = d.slice(-8)
+  if (!chave) return null
+
+  const service = createServiceClient()
+  const { data: contatos } = await service.from('contacts').select('id, phone, foto_url').eq('company_id', companyId)
+  const contato = (contatos ?? []).find(c => (c.phone ?? '').replace(/\D/g, '').slice(-8) === chave)
+  if (contato?.foto_url) return contato.foto_url
+
+  const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+  if (!instance) return null
+
+  const numeroFmt = d.startsWith('55') ? d : `55${d}`
+  try {
+    const foto = await buscarFotoPerfil(instance, numeroFmt)
+    if (foto && contato) await service.from('contacts').update({ foto_url: foto } as never).eq('id', contato.id)
+    return foto
+  } catch { return null }
 }
 
 /** Mensagens completas de uma conversa. */

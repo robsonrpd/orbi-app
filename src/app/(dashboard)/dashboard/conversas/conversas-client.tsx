@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
-  listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa,
+  listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
@@ -70,6 +70,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     () => telParam ? achaConversaPorTel(telParam, conversasIniciais) : (conversasIniciais[0]?.id ?? null)
   )
   const [naoEncontrada, setNaoEncontrada] = useState(!!telParam && !achaConversaPorTel(telParam, conversasIniciais))
+  const [fotoNaoEncontrada, setFotoNaoEncontrada] = useState<string | null>(null)
   const [mensagens, setMensagens] = useState<Msg[]>([])
   const [busca, setBusca] = useState('')
   const [texto, setTexto] = useState('')
@@ -95,6 +96,11 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     setCarregandoMsgs(true)
     obterMensagens(selecionada).then(m => { setMensagens(m); setCarregandoMsgs(false) })
   }, [selecionada])
+
+  useEffect(() => {
+    if (!naoEncontrada || !telParam) { setFotoNaoEncontrada(null); return }
+    obterFotoContato(telParam).then(setFotoNaoEncontrada)
+  }, [naoEncontrada, telParam])
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -261,9 +267,13 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
         {!ativa && naoEncontrada && telParam ? (
           <>
             <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
-                {iniciais(nomeParam ?? telParam)}
-              </div>
+              {fotoNaoEncontrada ? (
+                <img src={fotoNaoEncontrada} alt="" className="w-9 h-9 rounded-full object-cover" />
+              ) : (
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: '#1A56FF' }}>
+                  {iniciais(nomeParam ?? telParam)}
+                </div>
+              )}
               <div>
                 <p className="text-sm font-bold text-[#1C1B18]">{nomeParam ?? 'Nova conversa'}</p>
                 <p className="text-xs text-[#8C8880]">{telParam}</p>
