@@ -8,16 +8,28 @@ export function evolutionConfigurado() {
   return !!BASE() && !!KEY()
 }
 
+// timeout duro em toda chamada à Evolution API — sem isso, uma instância lenta/fora do ar pode
+// travar a function inteira (ex: o webhook do WhatsApp) até o limite de maxDuration da Vercel,
+// derrubando o processamento de mensagens em vez de só falhar rápido essa chamada específica.
 async function call(path: string, init?: RequestInit) {
-  const res = await fetch(`${BASE()}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', apikey: KEY(), ...(init?.headers ?? {}) },
-    cache: 'no-store',
-  })
-  const text = await res.text()
-  let data: unknown = null
-  try { data = text ? JSON.parse(text) : null } catch { data = text }
-  return { ok: res.ok, status: res.status, data }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+  try {
+    const res = await fetch(`${BASE()}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', apikey: KEY(), ...(init?.headers ?? {}) },
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+    const text = await res.text()
+    let data: unknown = null
+    try { data = text ? JSON.parse(text) : null } catch { data = text }
+    return { ok: res.ok, status: res.status, data }
+  } catch (err) {
+    return { ok: false, status: 0, data: { error: err instanceof Error ? err.message : 'timeout' } }
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 /** Cria a instância (se não existir) e já configura o webhook. Retorna o QR code (base64). */

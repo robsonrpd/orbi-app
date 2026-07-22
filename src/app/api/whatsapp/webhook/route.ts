@@ -156,7 +156,12 @@ export async function POST(req: NextRequest) {
       if (contactId && chave) { idPorChave.set(chave, contactId); semFotoPorChave.set(chave, contactId) }
     }
 
-    // busca a foto de perfil só na 1ª vez (contato novo ou que ainda não tem foto salva) — não trava o fluxo se falhar
+    // salva/atualiza a conversa (histórico) PRIMEIRO — isso é o que importa de verdade.
+    // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia)
+
+    // busca a foto de perfil só na 1ª vez (contato novo ou que ainda não tem foto salva) — best-effort,
+    // roda DEPOIS de salvar a mensagem e tem timeout curto (evolution.ts), nunca pode travar o recebimento
     if (chave && semFotoPorChave.has(chave)) {
       semFotoPorChave.delete(chave)
       try {
@@ -164,9 +169,6 @@ export async function POST(req: NextRequest) {
         if (foto) await service.from('contacts').update({ foto_url: foto } as never).eq('id', contactId ?? idPorChave.get(chave))
       } catch (err) { console.error('[wh fotoPerfil]', err) }
     }
-
-    // salva/atualiza a conversa (histórico) — sem resposta automática, alguém da equipe responde pelo Conversas/CRM
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia)
   }
 
   return NextResponse.json({ ok: true })
