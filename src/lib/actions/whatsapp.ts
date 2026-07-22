@@ -61,10 +61,14 @@ export async function obterQR() {
   const c = await getCompany()
   if (!c) return { qr: null, state: 'close' as const }
 
+  const s = (c.settings ?? {}) as { wa_qr?: string; wa_last_event?: string; wa_state?: string }
+  // o evento de conexão (webhook) costuma chegar antes/mais confiável que o endpoint de status
+  // ao vivo da Evolution — sem isso, a tela pode ficar presa em "gerando QR" mesmo já conectado
+  if (s.wa_state === 'open') return { qr: null, state: 'open' as const }
+
   const st = await statusInstancia(instanciaDe(c))
   if (st.state === 'open') return { qr: null, state: 'open' as const }
 
-  const s = (c.settings ?? {}) as { wa_qr?: string; wa_last_event?: string }
   const qr = s.wa_qr ?? null
   return { qr, state: st.state as 'connecting' | 'close', debug: qr ? undefined : s.wa_last_event }
 }
@@ -80,6 +84,7 @@ export async function statusWhatsApp() {
   if (!evolutionConfigurado()) return { state: 'nao_configurado' as const }
   const c = await getCompany()
   if (!c) return { state: 'close' as const }
+  if ((c.settings as { wa_state?: string })?.wa_state === 'open') return { state: 'open' as const }
   const st = await statusInstancia(instanciaDe(c))
   return { state: st.state as 'open' | 'connecting' | 'close' }
 }
