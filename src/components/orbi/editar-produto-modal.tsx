@@ -3,28 +3,18 @@
 import { useState } from 'react'
 import { updateProduct } from '@/lib/actions/products'
 import { FotoUpload } from '@/components/orbi/foto-upload'
+import { configProduto, TAMANHOS_SUGERIDOS } from '@/lib/produtos-nicho'
 import { X, Package, Loader2, Check, DollarSign, Tag, ScanLine } from 'lucide-react'
 
 type Product = {
   id: string; name: string; price: number; cost_price: number
   tipo_produto: string | null; grife: string | null
   controla_estoque: boolean | null; categoria: string | null; image_url: string | null
-  codigo_barras: string | null
+  codigo_barras: string | null; tamanho: string | null; cor: string | null
 }
 
-const TIPOS = [
-  { label: 'Lentes de cristal', ncm: '90014000' }, { label: 'Lentes CR39/Poli/Trivex', ncm: '90015000' },
-  { label: 'Armação de acetato', ncm: '90031100' }, { label: 'Armação de metal', ncm: '90031910' },
-  { label: 'Armação outros materiais', ncm: '90031990' }, { label: 'Óculos de sol', ncm: '90041000' },
-  { label: 'Óculos de correção', ncm: '90049010' }, { label: 'Óculos de segurança', ncm: '90049020' },
-  { label: 'Limpa-lentes', ncm: '34012090' }, { label: 'Relógio', ncm: '90011100' }, { label: 'Serviços/Outros', ncm: '00000000' },
-]
-const TIPOS_DIVERSOS = [
-  { label: 'Bebida', ncm: '' }, { label: 'Alimento / Snack', ncm: '' }, { label: 'Café / Quente', ncm: '' },
-  { label: 'Acessório', ncm: '' }, { label: 'Higiene / Limpeza', ncm: '' }, { label: 'Outro', ncm: '' },
-]
-
-export function EditarProdutoModal({ product, onClose }: { product: Product; onClose: () => void }) {
+export function EditarProdutoModal({ product, onClose, businessType }: { product: Product; onClose: () => void; businessType?: string | null }) {
+  const cfg = configProduto(businessType)
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [costPrice, setCostPrice] = useState(String(product.cost_price))
@@ -33,10 +23,13 @@ export function EditarProdutoModal({ product, onClose }: { product: Product; onC
   const [controla, setControla] = useState(product.controla_estoque !== false)
   const [imageUrl, setImageUrl] = useState<string | null>(product.image_url)
   const [codigoBarras, setCodigoBarras] = useState(product.codigo_barras ?? '')
+  const [tamanho, setTamanho] = useState(product.tamanho ?? '')
+  const [cor, setCor] = useState(product.cor ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const tiposList = product.categoria === 'diversos' ? TIPOS_DIVERSOS : TIPOS
+  // usa os tipos da categoria do produto; se ele veio de outro ramo, cai na primeira do ramo atual
+  const tiposList = cfg.categorias.find(c => c.key === product.categoria)?.tipos ?? cfg.categorias[0].tipos
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -46,7 +39,7 @@ export function EditarProdutoModal({ product, onClose }: { product: Product; onC
     const result = await updateProduct(product.id, {
       name, price: parseFloat(price.replace(',', '.')) || 0,
       costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
-      tipoProduto: tipo, ncm, grife, controlaEstoque: controla, imageUrl, codigoBarras,
+      tipoProduto: tipo, ncm, grife, controlaEstoque: controla, imageUrl, codigoBarras, tamanho, cor,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
@@ -88,16 +81,33 @@ export function EditarProdutoModal({ product, onClose }: { product: Product; onC
                   className={inputCls.replace('px-4', 'pl-9 pr-3')} />
               </div>
             </div>
-            <div className={product.categoria === 'diversos' ? 'col-span-2' : ''}>
-              <label className={labelCls}>{product.categoria === 'otica' ? 'Tipo / NCM' : 'Categoria'}</label>
+            <div>
+              <label className={labelCls}>{cfg.usaNcm && product.categoria === 'otica' ? 'Tipo / NCM' : 'Tipo'}</label>
               <select value={tipo} onChange={e => setTipo(e.target.value)} className={inputCls}>
                 <option value="">Selecione...</option>
-                {tiposList.map(t => <option key={t.label} value={t.label}>{t.label}{t.ncm ? ` — ${t.ncm}` : ''}</option>)}
+                {tiposList.map(t => <option key={t.label} value={t.label}>{t.emoji} {t.label}{t.ncm ? ` — ${t.ncm}` : ''}</option>)}
               </select>
             </div>
-            {product.categoria === 'otica' && (
-              <div><label className={labelCls}>Grife / Marca</label>
-                <input value={grife} onChange={e => setGrife(e.target.value)} placeholder="Ray-Ban..." className={inputCls} /></div>
+            <div>
+              <label className={labelCls}>{cfg.labelMarca}</label>
+              <input value={grife} onChange={e => setGrife(e.target.value)}
+                placeholder={cfg.usaNcm ? 'Ray-Ban...' : 'BOSS, Clubmen...'} className={inputCls} />
+            </div>
+            {cfg.usaTamanhoCor && (
+              <>
+                <div>
+                  <label className={labelCls}>Tamanho</label>
+                  <input value={tamanho} onChange={e => setTamanho(e.target.value)} list="orbi-tamanhos-edit"
+                    placeholder="P, M, G, 42..." className={inputCls} />
+                  <datalist id="orbi-tamanhos-edit">
+                    {TAMANHOS_SUGERIDOS.map(t => <option key={t} value={t} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className={labelCls}>Cor</label>
+                  <input value={cor} onChange={e => setCor(e.target.value)} placeholder="Bege, Verde militar..." className={inputCls} />
+                </div>
+              </>
             )}
             <div>
               <label className={labelCls}>Preço de venda (R$) *</label>

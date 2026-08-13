@@ -7,7 +7,7 @@ import {
   Banknote, Smartphone, CreditCard, User, X, AlertTriangle, Wallet, Calendar, ScanLine
 } from 'lucide-react'
 
-type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null; codigo_barras: string | null }
+type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null; codigo_barras: string | null; tamanho: string | null; cor: string | null }
 type Contact = { id: string; name: string | null; phone: string }
 type CartItem = { product_id: string; nome: string; valor: number; qtd: number; maxStock: number | null }
 
@@ -47,8 +47,16 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
 
   const termo = search.trim().toLowerCase()
   const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(termo) || (p.codigo_barras ?? '').toLowerCase().includes(termo)
+    p.name.toLowerCase().includes(termo)
+    || (p.codigo_barras ?? '').toLowerCase().includes(termo)
+    || (p.tamanho ?? '').toLowerCase() === termo
+    || (p.cor ?? '').toLowerCase().includes(termo)
   )
+
+  /** "Polo Tricô · M · Verde militar" — sem isso o vendedor não distingue as variações. */
+  function nomeCompleto(p: Product) {
+    return [p.name, p.tamanho, p.cor].filter(Boolean).join(' · ')
+  }
 
   function avisarBip(ok: boolean, msg: string) {
     setBip({ ok, msg })
@@ -83,7 +91,7 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
     }
 
     addToCart(alvo)
-    avisarBip(true, `${alvo.name} — ${fmt(alvo.price)}`)
+    avisarBip(true, `${nomeCompleto(alvo)} — ${fmt(alvo.price)}`)
     setSearch('')
   }
   const filteredContacts = contacts.filter(c =>
@@ -98,7 +106,7 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
         if (p.controla_estoque !== false && ex.qtd >= p.stock) return prev
         return prev.map(i => i.product_id === p.id ? { ...i, qtd: i.qtd + 1 } : i)
       }
-      return [...prev, { product_id: p.id, nome: p.name, valor: p.price, qtd: 1, maxStock: p.controla_estoque === false ? null : p.stock }]
+      return [...prev, { product_id: p.id, nome: nomeCompleto(p), valor: p.price, qtd: 1, maxStock: p.controla_estoque === false ? null : p.stock }]
     })
   }
   function changeQty(id: string, delta: number) {
@@ -170,6 +178,12 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
                     className="rounded-xl border border-[#EAE8E1] p-3 text-left hover:border-[#1A56FF] hover:bg-[#EEF2FF]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                     <div className="w-full h-16 rounded-lg flex items-center justify-center text-3xl mb-2" style={{ background: 'linear-gradient(135deg,#EEF2FF,#F0F4FF)' }}>{emojiFor(p)}</div>
                     <p className="text-xs font-bold text-[#1C1B18] truncate">{p.name}</p>
+                    {(p.tamanho || p.cor) && (
+                      <p className="flex items-center gap-1 mt-0.5">
+                        {p.tamanho && <span className="text-[9px] font-black px-1 py-0.5 rounded bg-[#EEF2FF] text-[#1A56FF]">{p.tamanho}</span>}
+                        {p.cor && <span className="text-[10px] text-[#8C8880] truncate">{p.cor}</span>}
+                      </p>
+                    )}
                     <div className="flex items-center justify-between mt-1">
                       <span className="text-sm font-black text-[#1A56FF]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(p.price)}</span>
                       {p.controla_estoque !== false && <span className="text-[10px] text-[#8C8880]">{p.stock} un</span>}

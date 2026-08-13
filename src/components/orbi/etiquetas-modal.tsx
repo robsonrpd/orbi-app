@@ -9,6 +9,12 @@ import { X, Printer, Loader2, Check, AlertTriangle, ScanLine, Tag } from 'lucide
 type Product = {
   id: string; name: string; price: number; stock: number
   grife: string | null; controla_estoque: boolean | null; codigo_barras: string | null
+  tamanho: string | null; cor: string | null
+}
+
+/** Detalhe que diferencia a variação — numa etiqueta de roupa, o tamanho é o que mais importa. */
+function detalhe(p: Product) {
+  return [p.tamanho, p.cor, p.grife].filter(Boolean).join(' · ')
 }
 
 function fmt(v: number) {
@@ -69,7 +75,7 @@ function FolhaImpressao({ etiquetas }: { etiquetas: Product[] }) {
             <p style={{ fontSize: '7pt', fontWeight: 700, lineHeight: 1.1, maxHeight: '2.4em', overflow: 'hidden' }}>
               {p.name}
             </p>
-            {p.grife && <p style={{ fontSize: '6pt', color: '#555' }}>{p.grife}</p>}
+            {detalhe(p) && <p style={{ fontSize: '7pt', fontWeight: 700, color: '#333' }}>{detalhe(p)}</p>}
             {p.codigo_barras && <CodigoBarras codigo={p.codigo_barras} />}
             <p style={{ fontSize: '11pt', fontWeight: 800, marginTop: '0.5mm' }}>{fmt(p.price)}</p>
           </div>
@@ -166,7 +172,9 @@ export function EtiquetasModal({ products, onClose }: { products: Product[]; onC
                   {comCodigo.map(p => (
                     <div key={p.id} className="flex items-center gap-3 rounded-lg border border-[#EAE8E1] px-3 py-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[#1C1B18] truncate">{p.name}</p>
+                        <p className="text-sm font-semibold text-[#1C1B18] truncate">
+                          {p.name}{detalhe(p) && <span className="text-[#8C8880] font-normal"> · {detalhe(p)}</span>}
+                        </p>
                         <p className="text-[11px] text-[#8C8880] font-mono">{p.codigo_barras} · {fmt(p.price)}</p>
                       </div>
                       <input type="number" min="0" max="300" value={qtds[p.id] ?? 0}

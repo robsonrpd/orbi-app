@@ -7,6 +7,7 @@ import { PDV } from '@/components/orbi/pdv'
 import { FotoUpload } from '@/components/orbi/foto-upload'
 import { EditarProdutoModal } from '@/components/orbi/editar-produto-modal'
 import { EtiquetasModal } from '@/components/orbi/etiquetas-modal'
+import { configProduto, emojiDoTipo, TAMANHOS_SUGERIDOS } from '@/lib/produtos-nicho'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, AlertTriangle,
@@ -18,40 +19,11 @@ type Product = {
   stock: number; active: boolean; created_at: string
   tipo_produto: string | null; ncm: string | null; grife: string | null
   controla_estoque: boolean | null; categoria: string | null; image_url: string | null
-  codigo_barras: string | null
+  codigo_barras: string | null; tamanho: string | null; cor: string | null
 }
 
 function fmt(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
-}
-
-// Tipos de produto de ótica com NCM fiscal
-const TIPOS = [
-  { label: 'Lentes de cristal', ncm: '90014000', emoji: '🔍' },
-  { label: 'Lentes CR39/Poli/Trivex', ncm: '90015000', emoji: '🔍' },
-  { label: 'Armação de acetato', ncm: '90031100', emoji: '👓' },
-  { label: 'Armação de metal', ncm: '90031910', emoji: '👓' },
-  { label: 'Armação outros materiais', ncm: '90031990', emoji: '👓' },
-  { label: 'Óculos de sol', ncm: '90041000', emoji: '🕶️' },
-  { label: 'Óculos de correção', ncm: '90049010', emoji: '👓' },
-  { label: 'Óculos de segurança', ncm: '90049020', emoji: '🥽' },
-  { label: 'Limpa-lentes', ncm: '34012090', emoji: '🧴' },
-  { label: 'Relógio', ncm: '90011100', emoji: '⌚' },
-  { label: 'Serviços/Outros', ncm: '00000000', emoji: '📦' },
-]
-
-// Tipos de produtos diversos / conveniência
-const TIPOS_DIVERSOS = [
-  { label: 'Bebida', ncm: '', emoji: '🥤' },
-  { label: 'Alimento / Snack', ncm: '', emoji: '🍫' },
-  { label: 'Café / Quente', ncm: '', emoji: '☕' },
-  { label: 'Acessório', ncm: '', emoji: '🎒' },
-  { label: 'Higiene / Limpeza', ncm: '', emoji: '🧴' },
-  { label: 'Outro', ncm: '', emoji: '🛒' },
-]
-
-function emojiFor(tipo: string | null) {
-  return [...TIPOS, ...TIPOS_DIVERSOS].find(t => t.label === tipo)?.emoji ?? '📦'
 }
 
 type Contact = { id: string; name: string | null; phone: string }
@@ -62,9 +34,10 @@ type Venda = {
   contacts: { name: string | null; phone: string } | null
 }
 
-type Props = { products: Product[]; contacts: Contact[]; vendas: Venda[]; caixaAberto: boolean }
+type Props = { products: Product[]; contacts: Contact[]; vendas: Venda[]; caixaAberto: boolean; businessType?: string | null }
 
-export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Props) {
+export function ProdutosClient({ products, contacts, vendas, caixaAberto, businessType }: Props) {
+  const cfg = configProduto(businessType)
   const [tab, setTab] = useState<'estoque' | 'vender' | 'vendas' | 'cadastrar'>('estoque')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -83,22 +56,26 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
   const [tipo, setTipo] = useState('')
   const [grife, setGrife] = useState('')
   const [controla, setControla] = useState(true)
-  const [categoria, setCategoria] = useState<'otica' | 'diversos'>('otica')
+  const [categoria, setCategoria] = useState<string>(cfg.categorias[0].key)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [codigoBarras, setCodigoBarras] = useState('')
-  const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'otica' | 'diversos'>('todos')
+  const [tamanho, setTamanho] = useState('')
+  const [cor, setCor] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
 
   const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
-      || (p.grife ?? '').toLowerCase().includes(search.toLowerCase())
+    const termo = search.toLowerCase()
+    const matchSearch = p.name.toLowerCase().includes(termo)
+      || (p.grife ?? '').toLowerCase().includes(termo)
+      || (p.cor ?? '').toLowerCase().includes(termo)
+      || (p.tamanho ?? '').toLowerCase().includes(termo)
       || (p.codigo_barras ?? '').includes(search.trim())
-    const cat = p.categoria ?? 'otica'
-    const matchCat = filtroCategoria === 'todos' || cat === filtroCategoria
+    const matchCat = filtroCategoria === 'todos' || (p.categoria ?? '') === filtroCategoria
     return matchSearch && matchCat
   })
   const lowStock = products.filter(p => p.controla_estoque !== false && p.stock > 0 && p.stock <= 5)
 
-  const tiposList = categoria === 'otica' ? TIPOS : TIPOS_DIVERSOS
+  const tiposList = cfg.categorias.find(c => c.key === categoria)?.tipos ?? cfg.categorias[0].tipos
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -109,14 +86,14 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
       name, price: parseFloat(price.replace(',', '.')) || 0,
       costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
       stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria, imageUrl,
-      codigoBarras,
+      codigoBarras, tamanho, cor,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
     setSaved(true)
     setTimeout(() => { setSaved(false); setTab('estoque') }, 1200)
     setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true); setImageUrl(null)
-    setCodigoBarras('')
+    setCodigoBarras(''); setTamanho(''); setCor('')
   }
 
   async function handleDelete(id: string) {
@@ -190,11 +167,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
             </div>
             {/* Filtro de categoria */}
             <div className="flex items-center bg-white border border-[#EAE8E1] rounded-xl p-1">
-              {([
-                { key: 'todos', label: 'Todos' },
-                { key: 'otica', label: '👓 Ótica' },
-                { key: 'diversos', label: '🛒 Diversos' },
-              ] as const).map(f => (
+              {[{ key: 'todos', label: 'Todos' }, ...cfg.categorias.map(c => ({ key: c.key, label: `${c.emoji} ${c.label}` }))].map(f => (
                 <button key={f.key} onClick={() => setFiltroCategoria(f.key)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filtroCategoria === f.key ? 'bg-[#1A56FF] text-white' : 'text-[#8C8880]'}`}
                   style={{ fontFamily: 'Barlow, sans-serif' }}>
@@ -233,7 +206,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                         style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
                         {p.image_url
                           ? <img src={p.image_url} alt={p.name} className="w-full h-full object-contain" />
-                          : emojiFor(p.tipo_produto)}
+                          : emojiDoTipo(p.tipo_produto)}
                         {(isLow || isOut) && (
                           <span className="absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white"
                             style={{ fontFamily: 'Barlow, sans-serif', background: isOut ? '#EF4444' : '#F59E0B' }}>
@@ -242,6 +215,12 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                         )}
                       </div>
                       <p className="text-sm font-bold text-[#1C1B18] truncate">{p.name}</p>
+                      {(p.tamanho || p.cor) && (
+                        <p className="flex items-center gap-1 mb-0.5">
+                          {p.tamanho && <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-[#EEF2FF] text-[#1A56FF]">{p.tamanho}</span>}
+                          {p.cor && <span className="text-[11px] text-[#8C8880] truncate">{p.cor}</span>}
+                        </p>
+                      )}
                       {p.grife && <p className="text-xs text-[#8C8880] mb-1">{p.grife}</p>}
                       {p.codigo_barras
                         ? <p className="text-[10px] text-[#8C8880] flex items-center gap-1 truncate"><ScanLine className="size-2.5 shrink-0 text-[#0DB57A]" />{p.codigo_barras}</p>
@@ -351,26 +330,23 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
             <form onSubmit={handleSave} className="p-6 space-y-5">
               {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
-              {/* Categoria do produto */}
+              {/* Categoria do produto — muda conforme o ramo do negócio */}
               <div>
                 <label className={labelCls}>Categoria do produto</label>
                 <div className="grid grid-cols-2 gap-3">
-                  <button type="button" onClick={() => { setCategoria('otica'); setTipo('') }}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${categoria === 'otica' ? 'border-[#1A56FF] bg-[#EEF2FF]' : 'border-[#EAE8E1] bg-white'}`}>
-                    <span className="text-xl">👓</span>
-                    <div className="text-left">
-                      <p className={`text-sm font-bold ${categoria === 'otica' ? 'text-[#1A56FF]' : 'text-[#1C1B18]'}`}>Produto de Ótica</p>
-                      <p className="text-[10px] text-[#8C8880]">Armações, lentes, óculos</p>
-                    </div>
-                  </button>
-                  <button type="button" onClick={() => { setCategoria('diversos'); setTipo('') }}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${categoria === 'diversos' ? 'border-[#1A56FF] bg-[#EEF2FF]' : 'border-[#EAE8E1] bg-white'}`}>
-                    <span className="text-xl">🛒</span>
-                    <div className="text-left">
-                      <p className={`text-sm font-bold ${categoria === 'diversos' ? 'text-[#1A56FF]' : 'text-[#1C1B18]'}`}>Conveniência / Diversos</p>
-                      <p className="text-[10px] text-[#8C8880]">Água, café, snacks...</p>
-                    </div>
-                  </button>
+                  {cfg.categorias.map(c => {
+                    const ativa = categoria === c.key
+                    return (
+                      <button key={c.key} type="button" onClick={() => { setCategoria(c.key); setTipo('') }}
+                        className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${ativa ? 'border-[#1A56FF] bg-[#EEF2FF]' : 'border-[#EAE8E1] bg-white'}`}>
+                        <span className="text-xl">{c.emoji}</span>
+                        <div className="text-left">
+                          <p className={`text-sm font-bold ${ativa ? 'text-[#1A56FF]' : 'text-[#1C1B18]'}`}>{c.label}</p>
+                          <p className="text-[10px] text-[#8C8880]">{c.desc}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -382,7 +358,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                 <div className="col-span-2">
                   <label className={labelCls}>Nome do produto <span className="text-red-400">*</span></label>
                   <input value={name} onChange={e => setName(e.target.value)} required
-                    placeholder={categoria === 'otica' ? 'Ex: Ray-Ban Aviador, Lente Transitions...' : 'Ex: Água 500ml, Café, Chocolate...'} className={inputCls} />
+                    placeholder={cfg.placeholderNome} className={inputCls} />
                 </div>
 
                 <div className="col-span-2">
@@ -400,8 +376,8 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                   </p>
                 </div>
 
-                <div className={categoria === 'diversos' ? 'col-span-2' : ''}>
-                  <label className={labelCls}>{categoria === 'otica' ? 'Tipo / NCM' : 'Categoria'}</label>
+                <div>
+                  <label className={labelCls}>{cfg.usaNcm && categoria === 'otica' ? 'Tipo / NCM' : 'Tipo'}</label>
                   <select value={tipo} onChange={e => setTipo(e.target.value)} className={inputCls}>
                     <option value="">Selecione...</option>
                     {tiposList.map(t => (
@@ -411,11 +387,34 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                     ))}
                   </select>
                 </div>
-                {categoria === 'otica' && (
-                  <div>
-                    <label className={labelCls}>Grife / Marca</label>
-                    <input value={grife} onChange={e => setGrife(e.target.value)} placeholder="Ray-Ban, Oakley..." className={inputCls} />
-                  </div>
+                <div>
+                  <label className={labelCls}>{cfg.labelMarca}</label>
+                  <input value={grife} onChange={e => setGrife(e.target.value)}
+                    placeholder={cfg.usaNcm ? 'Ray-Ban, Oakley...' : 'BOSS, Clubmen...'} className={inputCls} />
+                </div>
+
+                {cfg.usaTamanhoCor && (
+                  <>
+                    <div>
+                      <label className={labelCls}>Tamanho</label>
+                      <input value={tamanho} onChange={e => setTamanho(e.target.value)} list="orbi-tamanhos"
+                        placeholder="P, M, G, 42..." className={inputCls} />
+                      <datalist id="orbi-tamanhos">
+                        {TAMANHOS_SUGERIDOS.map(t => <option key={t} value={t} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Cor</label>
+                      <input value={cor} onChange={e => setCor(e.target.value)}
+                        placeholder="Bege, Verde militar..." className={inputCls} />
+                    </div>
+                    <div className="col-span-2 -mt-1">
+                      <p className="text-[11px] text-[#C8C5BB]">
+                        Cada tamanho/cor tem estoque próprio. Cadastre a Polo M e a Polo P separadamente —
+                        assim o sistema sabe qual acabou.
+                      </p>
+                    </div>
+                  </>
                 )}
 
                 <div>
@@ -471,7 +470,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
 
       {/* Modal de movimentação */}
       {movProduct && <MovimentacaoModal product={movProduct} onClose={() => setMovProduct(null)} />}
-      {editProduct && <EditarProdutoModal product={editProduct} onClose={() => setEditProduct(null)} />}
+      {editProduct && <EditarProdutoModal product={editProduct} businessType={businessType} onClose={() => setEditProduct(null)} />}
       {etiquetasOpen && <EtiquetasModal products={products} onClose={() => setEtiquetasOpen(false)} />}
     </div>
   )

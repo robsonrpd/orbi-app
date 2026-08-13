@@ -33,9 +33,11 @@ export async function createProduct(payload: {
   ncm: string
   grife: string
   controlaEstoque: boolean
-  categoria?: 'otica' | 'diversos'
+  categoria?: string
   imageUrl?: string | null
   codigoBarras?: string | null
+  tamanho?: string | null
+  cor?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
@@ -61,6 +63,8 @@ export async function createProduct(payload: {
     categoria: payload.categoria ?? 'otica',
     image_url: payload.imageUrl ?? null,
     codigo_barras: codigo,
+    tamanho: payload.tamanho?.trim() || null,
+    cor: payload.cor?.trim() || null,
     active: true,
   }).select().single()
 
@@ -94,6 +98,8 @@ export async function updateProduct(id: string, payload: {
   controlaEstoque: boolean
   imageUrl?: string | null
   codigoBarras?: string | null
+  tamanho?: string | null
+  cor?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
@@ -117,6 +123,8 @@ export async function updateProduct(id: string, payload: {
     controla_estoque: payload.controlaEstoque,
     image_url: payload.imageUrl ?? null,
     codigo_barras: payload.codigoBarras?.trim() || null,
+    tamanho: payload.tamanho?.trim() || null,
+    cor: payload.cor?.trim() || null,
   }).eq('id', id).eq('company_id', companyId)
 
   if (error) {

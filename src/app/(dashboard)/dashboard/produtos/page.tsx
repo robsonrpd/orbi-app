@@ -9,11 +9,12 @@ export default async function ProdutosPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
-  const [{ data: products }, { data: contacts }, { data: vendas }, { data: caixa }] = await Promise.all([
+  const [{ data: products }, { data: contacts }, { data: vendas }, { data: caixa }, { data: company }] = await Promise.all([
     service.from('products' as never).select('*').eq('company_id', companyId).eq('active', true).order('created_at'),
     service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
     service.from('vendas').select('*, contacts(name, phone)').eq('company_id', companyId).order('numero', { ascending: false }).limit(50),
     service.from('caixas').select('id').eq('company_id', companyId).eq('status', 'aberto').limit(1).single(),
+    service.from('companies').select('business_type').eq('id', companyId).single(),
   ])
 
   return (
@@ -25,6 +26,7 @@ export default async function ProdutosPage() {
           contacts={contacts ?? []}
           vendas={(vendas ?? []) as never}
           caixaAberto={!!caixa}
+          businessType={company?.business_type ?? null}
         />
       </div>
     </div>
