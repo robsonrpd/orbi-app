@@ -3,7 +3,26 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { getModo } from '@/lib/auth/modo'
+import { montarEan13Interno, sequencialDoEan13Interno } from '@/lib/codigo-barras'
 import { revalidatePath } from 'next/cache'
+
+/**
+ * Próximo código interno livre da empresa. Continua a numeração a partir do maior
+ * código interno já usado — códigos de fábrica (que não começam com 2) são ignorados
+ * na contagem, então a numeração da loja não é afetada por eles.
+ */
+async function proximoCodigoInterno(
+  service: ReturnType<typeof createServiceClient>, companyId: string, jaUsados: string[] = [],
+) {
+  const { data } = await service.from('products')
+    .select('codigo_barras').eq('company_id', companyId).not('codigo_barras', 'is', null)
+  let maior = 0
+  for (const codigo of [...(data ?? []).map(p => p.codigo_barras as string), ...jaUsados]) {
+    const seq = sequencialDoEan13Interno((codigo ?? '').trim())
+    if (seq !== null && seq > maior) maior = seq
+  }
+  return montarEan13Interno(maior + 1)
+}
 
 export async function createProduct(payload: {
   name: string
@@ -25,6 +44,10 @@ export async function createProduct(payload: {
   if (isNaN(payload.price) || payload.price < 0) return { error: 'Preço inválido.' }
 
   const service = createServiceClient()
+  // sem código informado, a loja não tem etiqueta de fábrica pra essa peça:
+  // o Orbi cria um código interno para ela poder ser impressa e bipada
+  const codigo = payload.codigoBarras?.trim() || await proximoCodigoInterno(service, companyId)
+
   const { data: product, error } = await service.from('products').insert({
     company_id: companyId,
     name: payload.name.trim(),
@@ -37,7 +60,7 @@ export async function createProduct(payload: {
     controla_estoque: payload.controlaEstoque,
     categoria: payload.categoria ?? 'otica',
     image_url: payload.imageUrl ?? null,
-    codigo_barras: payload.codigoBarras?.trim() || null,
+    codigo_barras: codigo,
     active: true,
   }).select().single()
 
@@ -112,6 +135,34 @@ export async function deleteProduct(id: string) {
   if (error) return { error: 'Erro ao remover.' }
   revalidatePath('/dashboard/produtos')
   return { success: true }
+}
+
+/**
+ * Cria código de barras interno para todas as peças ativas que ainda não têm um.
+ * Usado quando a loja não trabalha com etiqueta de fábrica e precisa imprimir as próprias.
+ */
+export async function gerarCodigosBarras() {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
+  const { data: produtos } = await service.from('products')
+    .select('id, codigo_barras').eq('company_id', companyId).eq('active', true).order('created_at')
+
+  const semCodigo = (produtos ?? []).filter(p => !(p.codigo_barras as string | null)?.trim())
+  if (semCodigo.length === 0) return { success: true as const, gerados: 0 }
+
+  const novos: string[] = []
+  for (const p of semCodigo) {
+    const codigo = await proximoCodigoInterno(service, companyId, novos)
+    const { error } = await service.from('products')
+      .update({ codigo_barras: codigo }).eq('id', p.id).eq('company_id', companyId)
+    if (error) return { error: 'Erro ao gerar os códigos. Tente de novo.' }
+    novos.push(codigo)
+  }
+
+  revalidatePath('/dashboard/produtos')
+  return { success: true as const, gerados: novos.length }
 }
 
 export async function movimentarEstoque(payload: {

@@ -6,10 +6,11 @@ import { createProduct, deleteProduct, movimentarEstoque } from '@/lib/actions/p
 import { PDV } from '@/components/orbi/pdv'
 import { FotoUpload } from '@/components/orbi/foto-upload'
 import { EditarProdutoModal } from '@/components/orbi/editar-produto-modal'
+import { EtiquetasModal } from '@/components/orbi/etiquetas-modal'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, AlertTriangle,
-  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, ScanLine
+  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, ScanLine, Printer
 } from 'lucide-react'
 
 type Product = {
@@ -72,6 +73,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [movProduct, setMovProduct] = useState<Product | null>(null)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
+  const [etiquetasOpen, setEtiquetasOpen] = useState(false)
 
   // Form fields
   const [name, setName] = useState('')
@@ -151,11 +153,18 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
           })}
         </div>
         {tab === 'estoque' && (
-          <button onClick={() => setTab('cadastrar')}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
-            style={{ background: '#1A56FF', boxShadow: '0 4px 12px rgba(26,86,255,0.3)', fontFamily: 'Barlow, sans-serif' }}>
-            <Plus className="size-4" /> Novo Produto
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setEtiquetasOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#1A56FF] hover:border-[#1A56FF] transition-colors"
+              style={{ fontFamily: 'Barlow, sans-serif' }}>
+              <Printer className="size-4" /> Etiquetas
+            </button>
+            <button onClick={() => setTab('cadastrar')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
+              style={{ background: '#1A56FF', boxShadow: '0 4px 12px rgba(26,86,255,0.3)', fontFamily: 'Barlow, sans-serif' }}>
+              <Plus className="size-4" /> Novo Produto
+            </button>
+          </div>
         )}
       </div>
 
@@ -463,6 +472,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
       {/* Modal de movimentação */}
       {movProduct && <MovimentacaoModal product={movProduct} onClose={() => setMovProduct(null)} />}
       {editProduct && <EditarProdutoModal product={editProduct} onClose={() => setEditProduct(null)} />}
+      {etiquetasOpen && <EtiquetasModal products={products} onClose={() => setEtiquetasOpen(false)} />}
     </div>
   )
 }
