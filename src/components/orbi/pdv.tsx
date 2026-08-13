@@ -2,22 +2,17 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { registrarVenda } from '@/lib/actions/vendas'
+import { emojiDoTipo } from '@/lib/produtos-nicho'
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, Loader2, Check,
   Banknote, Smartphone, CreditCard, User, X, AlertTriangle, Wallet, Calendar, ScanLine
 } from 'lucide-react'
 
-type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null; codigo_barras: string | null; tamanho: string | null; cor: string | null }
+type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null; codigo_barras: string | null; tamanho: string | null; cor: string | null; image_url: string | null }
 type Contact = { id: string; name: string | null; phone: string }
-type CartItem = { product_id: string; nome: string; valor: number; qtd: number; maxStock: number | null }
+type CartItem = { product_id: string; nome: string; valor: number; qtd: number; maxStock: number | null; imagem: string | null }
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
-
-const EMOJIS: Record<string, string> = { Bebida: '🥤', 'Alimento / Snack': '🍫', 'Café / Quente': '☕', Acessório: '🎒' }
-function emojiFor(p: Product) {
-  if (p.tipo_produto && EMOJIS[p.tipo_produto]) return EMOJIS[p.tipo_produto]
-  return p.categoria === 'diversos' ? '🛒' : '👓'
-}
 
 const FORMAS = [
   { key: 'dinheiro', label: 'Dinheiro', icon: Banknote },
@@ -106,7 +101,7 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
         if (p.controla_estoque !== false && ex.qtd >= p.stock) return prev
         return prev.map(i => i.product_id === p.id ? { ...i, qtd: i.qtd + 1 } : i)
       }
-      return [...prev, { product_id: p.id, nome: nomeCompleto(p), valor: p.price, qtd: 1, maxStock: p.controla_estoque === false ? null : p.stock }]
+      return [...prev, { product_id: p.id, nome: nomeCompleto(p), valor: p.price, qtd: 1, maxStock: p.controla_estoque === false ? null : p.stock, imagem: p.image_url }]
     })
   }
   function changeQty(id: string, delta: number) {
@@ -176,7 +171,11 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
                 return (
                   <button key={p.id} onClick={() => addToCart(p)} disabled={semEstoque}
                     className="rounded-xl border border-[#EAE8E1] p-3 text-left hover:border-[#1A56FF] hover:bg-[#EEF2FF]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                    <div className="w-full h-16 rounded-lg flex items-center justify-center text-3xl mb-2" style={{ background: 'linear-gradient(135deg,#EEF2FF,#F0F4FF)' }}>{emojiFor(p)}</div>
+                    <div className="w-full h-16 rounded-lg flex items-center justify-center text-3xl mb-2 overflow-hidden" style={{ background: 'linear-gradient(135deg,#EEF2FF,#F0F4FF)' }}>
+                      {p.image_url
+                        ? <img src={p.image_url} alt="" className="w-full h-full object-contain" />
+                        : emojiDoTipo(p.tipo_produto)}
+                    </div>
                     <p className="text-xs font-bold text-[#1C1B18] truncate">{p.name}</p>
                     {(p.tamanho || p.cor) && (
                       <p className="flex items-center gap-1 mt-0.5">
@@ -222,6 +221,9 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
             </div>
           ) : cart.map(i => (
             <div key={i.product_id} className="flex items-center gap-2 rounded-xl border border-[#EAE8E1] p-2">
+              {i.imagem && (
+                <img src={i.imagem} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0 bg-[#F7F6F3]" />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-[#1C1B18] truncate">{i.nome}</p>
                 <p className="text-xs text-[#1A56FF] font-bold">{fmt(i.valor * i.qtd)}</p>

@@ -29,7 +29,7 @@ function fmt(v: number) {
 type Contact = { id: string; name: string | null; phone: string }
 type Venda = {
   id: string; numero: number; cliente_nome: string | null; vendedor: string | null
-  itens: { nome: string; valor: number; qtd: number }[]; total: number
+  itens: { nome: string; valor: number; qtd: number; product_id?: string }[]; total: number
   forma_pagamento: string | null; created_at: string
   contacts: { name: string | null; phone: string } | null
 }
@@ -76,6 +76,7 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
   const lowStock = products.filter(p => p.controla_estoque !== false && p.stock > 0 && p.stock <= 5)
 
   const tiposList = cfg.categorias.find(c => c.key === categoria)?.tipos ?? cfg.categorias[0].tipos
+  const fotoPorProduto = new Map(products.filter(p => p.image_url).map(p => [p.id, p.image_url as string]))
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -291,6 +292,16 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
                     <div className="w-12 text-center px-2 py-1.5 rounded-xl bg-[#0A0F1E]">
                       <p className="text-[9px] text-white/40 uppercase" style={{ fontFamily: 'Barlow, sans-serif' }}>Venda</p>
                       <p className="text-sm font-black text-white" style={{ fontFamily: 'Fraunces, serif' }}>#{v.numero}</p>
+                    </div>
+                    {/* miniaturas das peças vendidas — a venda guarda só o product_id,
+                        então a foto vem do cadastro atual do produto */}
+                    <div className="flex -space-x-2 shrink-0">
+                      {v.itens.slice(0, 3).map((i, idx) => {
+                        const foto = fotoPorProduto.get(i.product_id ?? '')
+                        return foto ? (
+                          <img key={idx} src={foto} alt="" className="w-9 h-9 rounded-lg object-cover border-2 border-white bg-[#F7F6F3]" />
+                        ) : null
+                      })}
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-[#1C1B18]">
