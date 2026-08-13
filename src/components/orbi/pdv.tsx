@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { registrarVenda } from '@/lib/actions/vendas'
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, Loader2, Check,
-  Banknote, Smartphone, CreditCard, User, X, AlertTriangle, Wallet, Calendar
+  Banknote, Smartphone, CreditCard, User, X, AlertTriangle, Wallet, Calendar, ScanLine
 } from 'lucide-react'
 
-type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null }
+type Product = { id: string; name: string; price: number; stock: number; controla_estoque: boolean | null; tipo_produto: string | null; categoria: string | null; codigo_barras: string | null }
 type Contact = { id: string; name: string | null; phone: string }
 type CartItem = { product_id: string; nome: string; valor: number; qtd: number; maxStock: number | null }
 
@@ -38,8 +38,54 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sucesso, setSucesso] = useState<string | null>(null)
+  const [bip, setBip] = useState<{ ok: boolean; msg: string } | null>(null)
+  const buscaRef = useRef<HTMLInputElement>(null)
 
-  const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+  // o leitor de código de barras funciona como teclado: digita o código e dá Enter.
+  // manter o foco na busca é o que permite bipar uma peça atrás da outra sem usar o mouse.
+  useEffect(() => { buscaRef.current?.focus() }, [])
+
+  const termo = search.trim().toLowerCase()
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(termo) || (p.codigo_barras ?? '').toLowerCase().includes(termo)
+  )
+
+  function avisarBip(ok: boolean, msg: string) {
+    setBip({ ok, msg })
+    setTimeout(() => setBip(null), ok ? 2500 : 4000)
+  }
+
+  /** Enter na busca = peça bipada (ou digitada). Acha pelo código de barras e joga no carrinho. */
+  function handleBuscaKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const codigo = search.trim()
+    if (!codigo) return
+
+    // prioridade pro código de barras exato; se não achar, aceita quando a busca deixou só 1 produto
+    const porCodigo = products.find(p => (p.codigo_barras ?? '').trim() === codigo)
+    const alvo = porCodigo ?? (filtered.length === 1 ? filtered[0] : null)
+
+    if (!alvo) {
+      avisarBip(false, `Código "${codigo}" não encontrado. Cadastre a peça ou confira a etiqueta.`)
+      return
+    }
+    if (alvo.controla_estoque !== false && alvo.stock <= 0) {
+      avisarBip(false, `"${alvo.name}" está sem estoque.`)
+      setSearch('')
+      return
+    }
+    const noCarrinho = cart.find(i => i.product_id === alvo.id)?.qtd ?? 0
+    if (alvo.controla_estoque !== false && noCarrinho >= alvo.stock) {
+      avisarBip(false, `Só há ${alvo.stock} un. de "${alvo.name}" em estoque.`)
+      setSearch('')
+      return
+    }
+
+    addToCart(alvo)
+    avisarBip(true, `${alvo.name} — ${fmt(alvo.price)}`)
+    setSearch('')
+  }
   const filteredContacts = contacts.filter(c =>
     contactSearch.length > 0 && !selectedContact &&
     (c.name?.toLowerCase().includes(contactSearch.toLowerCase()) || c.phone.includes(contactSearch))
@@ -85,6 +131,7 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
     if (result?.error) { setError(result.error); return }
     setSucesso(`Venda #${result.numero} registrada! ${fmt(result.total ?? 0)}${result.noCaixa ? ' — lançada no caixa.' : ''}`)
     setCart([]); setForma(null); setSelectedContact(null); setContactSearch(''); setVendedor('')
+    buscaRef.current?.focus() // já pronto pra bipar a próxima venda
     setTimeout(() => setSucesso(null), 4000)
   }
 
@@ -92,12 +139,24 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
     <div className="grid grid-cols-5 gap-4" style={{ minHeight: '500px' }}>
       {/* Catálogo */}
       <div className="col-span-3 rounded-2xl border border-[#EAE8E1] bg-white flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-[#EAE8E1]">
+        <div className="p-4 border-b border-[#EAE8E1] space-y-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar produto..."
-              className="w-full h-10 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
+            <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#1A56FF]" />
+            <input ref={buscaRef} value={search} onChange={e => setSearch(e.target.value)}
+              onKeyDown={handleBuscaKeyDown}
+              placeholder="Bipe a peça ou busque pelo nome..."
+              className="w-full h-11 pl-10 pr-4 rounded-xl border-2 border-[#EAE8E1] bg-white text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
           </div>
+          {bip ? (
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${bip.ok ? 'bg-[#E6F9F3] text-[#0DB57A]' : 'bg-red-50 text-red-600'}`}>
+              {bip.ok ? <Check className="size-3.5 shrink-0" /> : <AlertTriangle className="size-3.5 shrink-0" />}
+              {bip.ok ? `Adicionado: ${bip.msg}` : bip.msg}
+            </div>
+          ) : (
+            <p className="text-[11px] text-[#C8C5BB] flex items-center gap-1.5">
+              <ScanLine className="size-3" /> Passe o leitor na etiqueta — a peça entra no carrinho sozinha.
+            </p>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {filtered.length === 0 ? (

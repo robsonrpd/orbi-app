@@ -9,7 +9,7 @@ import { EditarProdutoModal } from '@/components/orbi/editar-produto-modal'
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, AlertTriangle,
-  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, Glasses
+  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, ScanLine
 } from 'lucide-react'
 
 type Product = {
@@ -17,6 +17,7 @@ type Product = {
   stock: number; active: boolean; created_at: string
   tipo_produto: string | null; ncm: string | null; grife: string | null
   controla_estoque: boolean | null; categoria: string | null; image_url: string | null
+  codigo_barras: string | null
 }
 
 function fmt(v: number) {
@@ -82,10 +83,13 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
   const [controla, setControla] = useState(true)
   const [categoria, setCategoria] = useState<'otica' | 'diversos'>('otica')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [codigoBarras, setCodigoBarras] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'otica' | 'diversos'>('todos')
 
   const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.grife ?? '').toLowerCase().includes(search.toLowerCase())
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
+      || (p.grife ?? '').toLowerCase().includes(search.toLowerCase())
+      || (p.codigo_barras ?? '').includes(search.trim())
     const cat = p.categoria ?? 'otica'
     const matchCat = filtroCategoria === 'todos' || cat === filtroCategoria
     return matchSearch && matchCat
@@ -103,12 +107,14 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
       name, price: parseFloat(price.replace(',', '.')) || 0,
       costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
       stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria, imageUrl,
+      codigoBarras,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
     setSaved(true)
     setTimeout(() => { setSaved(false); setTab('estoque') }, 1200)
     setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true); setImageUrl(null)
+    setCodigoBarras('')
   }
 
   async function handleDelete(id: string) {
@@ -228,6 +234,9 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                       </div>
                       <p className="text-sm font-bold text-[#1C1B18] truncate">{p.name}</p>
                       {p.grife && <p className="text-xs text-[#8C8880] mb-1">{p.grife}</p>}
+                      {p.codigo_barras
+                        ? <p className="text-[10px] text-[#8C8880] flex items-center gap-1 truncate"><ScanLine className="size-2.5 shrink-0 text-[#0DB57A]" />{p.codigo_barras}</p>
+                        : <p className="text-[10px] text-[#C8C5BB] flex items-center gap-1"><ScanLine className="size-2.5 shrink-0" />sem código</p>}
                       <div className="flex items-center justify-between mb-3 mt-1">
                         <span className="text-sm font-black text-[#1A56FF]" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(p.price)}</span>
                         {p.controla_estoque !== false
@@ -365,6 +374,21 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto }: Prop
                   <label className={labelCls}>Nome do produto <span className="text-red-400">*</span></label>
                   <input value={name} onChange={e => setName(e.target.value)} required
                     placeholder={categoria === 'otica' ? 'Ex: Ray-Ban Aviador, Lente Transitions...' : 'Ex: Água 500ml, Café, Chocolate...'} className={inputCls} />
+                </div>
+
+                <div className="col-span-2">
+                  <label className={labelCls}>Código de barras</label>
+                  <div className="relative">
+                    <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#1A56FF]" />
+                    <input value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)}
+                      // o leitor envia Enter no fim da leitura — sem isso, o formulário seria enviado antes da hora
+                      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+                      placeholder="Bipe a etiqueta aqui ou digite o código"
+                      className={inputCls.replace('px-4', 'pl-9 pr-3')} />
+                  </div>
+                  <p className="text-[11px] text-[#C8C5BB] mt-1">
+                    Com o código preenchido, basta bipar a peça no PDV que ela entra na venda sozinha.
+                  </p>
                 </div>
 
                 <div className={categoria === 'diversos' ? 'col-span-2' : ''}>

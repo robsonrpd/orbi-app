@@ -16,6 +16,7 @@ export async function createProduct(payload: {
   controlaEstoque: boolean
   categoria?: 'otica' | 'diversos'
   imageUrl?: string | null
+  codigoBarras?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
@@ -36,11 +37,14 @@ export async function createProduct(payload: {
     controla_estoque: payload.controlaEstoque,
     categoria: payload.categoria ?? 'otica',
     image_url: payload.imageUrl ?? null,
+    codigo_barras: payload.codigoBarras?.trim() || null,
     active: true,
   }).select().single()
 
   if (error) {
     console.error('createProduct:', error)
+    // 23505 = código de barras já usado por outro produto ativo da mesma empresa
+    if (error.code === '23505') return { error: 'Já existe um produto ativo com esse código de barras.' }
     return { error: 'Erro ao cadastrar produto.' }
   }
 
@@ -66,6 +70,7 @@ export async function updateProduct(id: string, payload: {
   grife: string
   controlaEstoque: boolean
   imageUrl?: string | null
+  codigoBarras?: string | null
 }) {
   const companyId = await getCompanyId()
   if (!companyId) return { error: 'Não autenticado.' }
@@ -88,9 +93,13 @@ export async function updateProduct(id: string, payload: {
     grife: payload.grife?.trim() || null,
     controla_estoque: payload.controlaEstoque,
     image_url: payload.imageUrl ?? null,
+    codigo_barras: payload.codigoBarras?.trim() || null,
   }).eq('id', id).eq('company_id', companyId)
 
-  if (error) return { error: 'Erro ao atualizar produto.' }
+  if (error) {
+    if (error.code === '23505') return { error: 'Já existe um produto ativo com esse código de barras.' }
+    return { error: 'Erro ao atualizar produto.' }
+  }
   revalidatePath('/dashboard/produtos')
   return { success: true }
 }

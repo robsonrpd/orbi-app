@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import { updateProduct } from '@/lib/actions/products'
 import { FotoUpload } from '@/components/orbi/foto-upload'
-import { X, Package, Loader2, Check, DollarSign, Tag } from 'lucide-react'
+import { X, Package, Loader2, Check, DollarSign, Tag, ScanLine } from 'lucide-react'
 
 type Product = {
   id: string; name: string; price: number; cost_price: number
   tipo_produto: string | null; grife: string | null
   controla_estoque: boolean | null; categoria: string | null; image_url: string | null
+  codigo_barras: string | null
 }
 
 const TIPOS = [
@@ -31,6 +32,7 @@ export function EditarProdutoModal({ product, onClose }: { product: Product; onC
   const [grife, setGrife] = useState(product.grife ?? '')
   const [controla, setControla] = useState(product.controla_estoque !== false)
   const [imageUrl, setImageUrl] = useState<string | null>(product.image_url)
+  const [codigoBarras, setCodigoBarras] = useState(product.codigo_barras ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -44,7 +46,7 @@ export function EditarProdutoModal({ product, onClose }: { product: Product; onC
     const result = await updateProduct(product.id, {
       name, price: parseFloat(price.replace(',', '.')) || 0,
       costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
-      tipoProduto: tipo, ncm, grife, controlaEstoque: controla, imageUrl,
+      tipoProduto: tipo, ncm, grife, controlaEstoque: controla, imageUrl, codigoBarras,
     })
     setLoading(false)
     if (result?.error) { setError(result.error); return }
@@ -75,6 +77,16 @@ export function EditarProdutoModal({ product, onClose }: { product: Product; onC
             <div className="col-span-2">
               <label className={labelCls}>Nome do produto *</label>
               <input value={name} onChange={e => setName(e.target.value)} required className={inputCls} />
+            </div>
+            <div className="col-span-2">
+              <label className={labelCls}>Código de barras</label>
+              <div className="relative">
+                <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#1A56FF]" />
+                <input value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+                  placeholder="Bipe a etiqueta aqui ou digite o código"
+                  className={inputCls.replace('px-4', 'pl-9 pr-3')} />
+              </div>
             </div>
             <div className={product.categoria === 'diversos' ? 'col-span-2' : ''}>
               <label className={labelCls}>{product.categoria === 'otica' ? 'Tipo / NCM' : 'Categoria'}</label>
