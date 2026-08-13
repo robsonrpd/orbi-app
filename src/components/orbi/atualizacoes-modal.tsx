@@ -1,8 +1,47 @@
 'use client'
 
-import { X, Sparkles, Calendar, Link2, Palette } from 'lucide-react'
+import {
+  X, Sparkles, Calendar, Link2, Palette, ScanLine, LayoutGrid,
+  Send, Building2, MessageCircle,
+} from 'lucide-react'
 
 const updates = [
+  {
+    icon: ScanLine,
+    data: 'Agosto 2026',
+    titulo: 'Código de barras e etiquetas',
+    desc: 'Bipe a peça no PDV e ela entra na venda sozinha — baixando do estoque e caindo no caixa. Para produtos sem etiqueta de fábrica, o Orbi cria o código e imprime as etiquetas em folha comum.',
+  },
+  {
+    icon: LayoutGrid,
+    data: 'Agosto 2026',
+    titulo: 'Dashboard personalizável',
+    desc: 'Escolha quais indicadores e seções aparecem na tela inicial e em que ordem. Use o botão Personalizar no topo do Dashboard.',
+  },
+  {
+    icon: Building2,
+    data: 'Julho 2026',
+    titulo: 'Mais de uma empresa no mesmo login',
+    desc: 'Tem mais de um negócio? Cadastre todos na mesma conta e alterne entre eles pelo menu lateral. Cada empresa fica com os dados totalmente separados.',
+  },
+  {
+    icon: Send,
+    data: 'Julho 2026',
+    titulo: 'Envio em massa no WhatsApp',
+    desc: 'Dispare uma mensagem para vários clientes com intervalo entre os envios e limite diário, para reduzir o risco de bloqueio do número.',
+  },
+  {
+    icon: Palette,
+    data: 'Julho 2026',
+    titulo: 'Colunas do funil personalizáveis',
+    desc: 'Renomeie, reordene, mude as cores e crie novas colunas no CRM, deixando o funil com a cara do seu processo de vendas.',
+  },
+  {
+    icon: MessageCircle,
+    data: 'Julho 2026',
+    titulo: 'WhatsApp mais simples e estável',
+    desc: 'A resposta automática por IA foi descontinuada. Agora todas as conversas chegam no painel para você e sua equipe responderem, e cada cliente vira um lead no CRM automaticamente.',
+  },
   {
     icon: Link2,
     data: 'Junho 2026',
