@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createProduct, createProdutosGrade, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
 import { PDV } from '@/components/orbi/pdv'
@@ -11,7 +11,7 @@ import { configProduto, emojiDoTipo, TAMANHOS_SUGERIDOS } from '@/lib/produtos-n
 import {
   Package, Search, Plus, Edit2, Trash2, ShoppingCart,
   BarChart2, X, Loader2, Check, AlertTriangle,
-  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, ScanLine, Printer
+  DollarSign, Tag, Archive, ArrowUp, ArrowDown, RefreshCw, ScanLine, Printer, LayoutGrid, List
 } from 'lucide-react'
 
 type Product = {
@@ -65,6 +65,17 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
   const [grade, setGrade] = useState<{ tamanho: string; estoque: string }[]>([])
   const [tamanhoNovo, setTamanhoNovo] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
+  const [visao, setVisao] = useState<'grade' | 'lista'>('grade')
+
+  // preferência de visualização fica salva pra não ter que reescolher a cada acesso
+  useEffect(() => {
+    const salva = localStorage.getItem('orbi_produtos_visao')
+    if (salva === 'lista' || salva === 'grade') setVisao(salva)
+  }, [])
+  function trocarVisao(v: 'grade' | 'lista') {
+    setVisao(v)
+    localStorage.setItem('orbi_produtos_visao', v)
+  }
 
   const filtered = products.filter(p => {
     const termo = search.toLowerCase()
@@ -198,14 +209,27 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
                 className="w-full h-10 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-white text-sm outline-none focus:border-[#1A56FF] transition-all placeholder:text-[#C8C5BB]" />
             </div>
             {/* Filtro de categoria */}
-            <div className="flex items-center bg-white border border-[#EAE8E1] rounded-xl p-1">
-              {[{ key: 'todos', label: 'Todos' }, ...cfg.categorias.map(c => ({ key: c.key, label: `${c.emoji} ${c.label}` }))].map(f => (
-                <button key={f.key} onClick={() => setFiltroCategoria(f.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filtroCategoria === f.key ? 'bg-[#1A56FF] text-white' : 'text-[#8C8880]'}`}
-                  style={{ fontFamily: 'Barlow, sans-serif' }}>
-                  {f.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-white border border-[#EAE8E1] rounded-xl p-1">
+                {[{ key: 'todos', label: 'Todos' }, ...cfg.categorias.map(c => ({ key: c.key, label: `${c.emoji} ${c.label}` }))].map(f => (
+                  <button key={f.key} onClick={() => setFiltroCategoria(f.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filtroCategoria === f.key ? 'bg-[#1A56FF] text-white' : 'text-[#8C8880]'}`}
+                    style={{ fontFamily: 'Barlow, sans-serif' }}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center bg-white border border-[#EAE8E1] rounded-xl p-1">
+                {([
+                  { key: 'grade', icon: LayoutGrid, titulo: 'Ver em grade' },
+                  { key: 'lista', icon: List, titulo: 'Ver em lista' },
+                ] as const).map(v => (
+                  <button key={v.key} onClick={() => trocarVisao(v.key)} title={v.titulo} aria-label={v.titulo}
+                    className={`w-8 h-7 flex items-center justify-center rounded-lg transition-all ${visao === v.key ? 'bg-[#1A56FF] text-white' : 'text-[#8C8880] hover:text-[#1A56FF]'}`}>
+                    <v.icon className="size-4" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -224,6 +248,65 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
                   style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
                   <Plus className="size-4" /> Cadastrar produto
                 </button>
+              </div>
+            </GlowCard>
+          ) : visao === 'lista' ? (
+            <GlowCard>
+              <div className="divide-y divide-[#F7F6F3]">
+                {filtered.map(p => {
+                  const isLow = p.controla_estoque !== false && p.stock > 0 && p.stock <= 5
+                  const isOut = p.controla_estoque !== false && p.stock === 0
+                  return (
+                    <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#F7F6F3] transition-colors">
+                      <div className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center text-xl overflow-hidden"
+                        style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
+                        {p.image_url
+                          ? <img src={p.image_url} alt="" className="w-full h-full object-cover" />
+                          : emojiDoTipo(p.tipo_produto)}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-[#1C1B18] truncate">{p.name}</p>
+                          {p.tamanho && <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-[#EEF2FF] text-[#1A56FF] shrink-0">{p.tamanho}</span>}
+                        </div>
+                        <p className="text-[11px] text-[#8C8880] truncate">
+                          {[p.cor, p.grife].filter(Boolean).join(' · ') || '—'}
+                        </p>
+                      </div>
+
+                      <p className="hidden lg:flex items-center gap-1 text-[11px] w-40 shrink-0 truncate">
+                        <ScanLine className={`size-3 shrink-0 ${p.codigo_barras ? 'text-[#0DB57A]' : 'text-[#C8C5BB]'}`} />
+                        <span className={p.codigo_barras ? 'text-[#8C8880]' : 'text-[#C8C5BB]'}>{p.codigo_barras ?? 'sem código'}</span>
+                      </p>
+
+                      <span className="text-sm font-black text-[#1A56FF] w-24 text-right shrink-0" style={{ fontFamily: 'Fraunces, serif' }}>{fmt(p.price)}</span>
+
+                      <span className="w-24 text-right shrink-0 text-xs">
+                        {p.controla_estoque === false
+                          ? <span className="text-[#C8C5BB]">sem controle</span>
+                          : isOut
+                            ? <span className="font-bold text-red-500">sem estoque</span>
+                            : <span className={isLow ? 'font-bold text-amber-600' : 'text-[#8C8880]'}>{p.stock} un.</span>}
+                      </span>
+
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => setMovProduct(p)} title="Movimentar estoque" aria-label="Movimentar estoque"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#1A56FF] border border-[#EAE8E1] hover:bg-[#EEF2FF] transition-colors">
+                          <RefreshCw className="size-3.5" />
+                        </button>
+                        <button onClick={() => setEditProduct(p)} title="Editar" aria-label="Editar"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8C8880] border border-[#EAE8E1] hover:bg-[#F7F6F3] transition-colors">
+                          <Edit2 className="size-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(p.id)} disabled={deletingId === p.id} title="Excluir" aria-label="Excluir"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 border border-[#EAE8E1] hover:bg-red-50 transition-colors">
+                          {deletingId === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </GlowCard>
           ) : (
