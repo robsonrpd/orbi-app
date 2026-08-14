@@ -171,9 +171,11 @@ export function PDV({ products, contacts, caixaAberto }: { products: Product[]; 
                 return (
                   <button key={p.id} onClick={() => addToCart(p)} disabled={semEstoque}
                     className="rounded-xl border border-[#EAE8E1] p-3 text-left hover:border-[#1A56FF] hover:bg-[#EEF2FF]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                    <div className="w-full h-16 rounded-lg flex items-center justify-center text-3xl mb-2 overflow-hidden" style={{ background: 'linear-gradient(135deg,#EEF2FF,#F0F4FF)' }}>
+                    {/* quadrado: foto de produto é quase sempre quadrada ou vertical —
+                        num container largo e baixo ela ficava espremida no meio */}
+                    <div className="w-full aspect-square rounded-lg flex items-center justify-center text-3xl mb-2 overflow-hidden" style={{ background: 'linear-gradient(135deg,#EEF2FF,#F0F4FF)' }}>
                       {p.image_url
-                        ? <img src={p.image_url} alt="" className="w-full h-full object-contain" />
+                        ? <img src={p.image_url} alt="" className="w-full h-full object-cover" />
                         : emojiDoTipo(p.tipo_produto)}
                     </div>
                     <p className="text-xs font-bold text-[#1C1B18] truncate">{p.name}</p>

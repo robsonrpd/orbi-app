@@ -203,10 +203,10 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
                 return (
                   <GlowCard key={p.id}>
                     <div className="p-4">
-                      <div className="relative w-full h-40 rounded-xl mb-3 flex items-center justify-center text-5xl overflow-hidden"
+                      <div className="relative w-full aspect-square rounded-xl mb-3 flex items-center justify-center text-5xl overflow-hidden"
                         style={{ background: 'linear-gradient(135deg, #EEF2FF, #F0F4FF)' }}>
                         {p.image_url
-                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-contain" />
+                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
                           : emojiDoTipo(p.tipo_produto)}
                         {(isLow || isOut) && (
                           <span className="absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white"
