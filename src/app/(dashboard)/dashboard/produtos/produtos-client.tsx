@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { createProduct, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
+import { createProduct, createProdutosGrade, deleteProduct, movimentarEstoque } from '@/lib/actions/products'
 import { PDV } from '@/components/orbi/pdv'
 import { FotoUpload } from '@/components/orbi/foto-upload'
 import { EditarProdutoModal } from '@/components/orbi/editar-produto-modal'
@@ -61,6 +61,9 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
   const [codigoBarras, setCodigoBarras] = useState('')
   const [tamanho, setTamanho] = useState('')
   const [cor, setCor] = useState('')
+  // grade: um tamanho por linha, cada um vira uma peça com estoque e código próprios
+  const [grade, setGrade] = useState<{ tamanho: string; estoque: string }[]>([])
+  const [tamanhoNovo, setTamanhoNovo] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
 
   const filtered = products.filter(p => {
@@ -78,23 +81,51 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
   const tiposList = cfg.categorias.find(c => c.key === categoria)?.tipos ?? cfg.categorias[0].tipos
   const fotoPorProduto = new Map(products.filter(p => p.image_url).map(p => [p.id, p.image_url as string]))
 
+  function alternarTamanho(t: string) {
+    setGrade(prev => prev.some(g => g.tamanho === t)
+      ? prev.filter(g => g.tamanho !== t)
+      : [...prev, { tamanho: t, estoque: '0' }])
+  }
+
+  function adicionarTamanhoNovo() {
+    const t = tamanhoNovo.trim().toUpperCase()
+    if (!t || grade.some(g => g.tamanho === t)) { setTamanhoNovo(''); return }
+    setGrade(prev => [...prev, { tamanho: t, estoque: '0' }])
+    setTamanhoNovo('')
+  }
+
+  const usaGrade = cfg.usaTamanhoCor && grade.length > 0
+  const totalGrade = grade.reduce((s, g) => s + (parseInt(g.estoque) || 0), 0)
+
+  function limparForm() {
+    setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true)
+    setImageUrl(null); setCodigoBarras(''); setTamanho(''); setCor(''); setGrade([]); setTamanhoNovo('')
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) { setError('Nome obrigatório.'); return }
     setLoading(true); setError(null)
     const ncm = tiposList.find(t => t.label === tipo)?.ncm ?? ''
-    const result = await createProduct({
-      name, price: parseFloat(price.replace(',', '.')) || 0,
-      costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
-      stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria, imageUrl,
-      codigoBarras, tamanho, cor,
-    })
+    const precoNum = parseFloat(price.replace(',', '.')) || 0
+    const custoNum = parseFloat(costPrice.replace(',', '.')) || 0
+
+    const result = usaGrade
+      ? await createProdutosGrade({
+          name, price: precoNum, costPrice: custoNum, tipoProduto: tipo, ncm, grife, categoria, imageUrl, cor,
+          variacoes: grade.map(g => ({ tamanho: g.tamanho, stock: parseInt(g.estoque) || 0 })),
+        })
+      : await createProduct({
+          name, price: precoNum, costPrice: custoNum,
+          stock: parseInt(stock) || 0, tipoProduto: tipo, ncm, grife, controlaEstoque: controla, categoria, imageUrl,
+          codigoBarras, tamanho, cor,
+        })
+
     setLoading(false)
     if (result?.error) { setError(result.error); return }
     setSaved(true)
     setTimeout(() => { setSaved(false); setTab('estoque') }, 1200)
-    setName(''); setPrice(''); setCostPrice(''); setStock('0'); setTipo(''); setGrife(''); setControla(true); setImageUrl(null)
-    setCodigoBarras(''); setTamanho(''); setCor('')
+    limparForm()
   }
 
   async function handleDelete(id: string) {
@@ -372,20 +403,23 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
                     placeholder={cfg.placeholderNome} className={inputCls} />
                 </div>
 
-                <div className="col-span-2">
-                  <label className={labelCls}>Código de barras</label>
-                  <div className="relative">
-                    <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#1A56FF]" />
-                    <input value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)}
-                      // o leitor envia Enter no fim da leitura — sem isso, o formulário seria enviado antes da hora
-                      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
-                      placeholder="Bipe a etiqueta aqui ou digite o código"
-                      className={inputCls.replace('px-4', 'pl-9 pr-3')} />
+                {/* na grade cada tamanho ganha o seu código automaticamente */}
+                {!usaGrade && (
+                  <div className="col-span-2">
+                    <label className={labelCls}>Código de barras</label>
+                    <div className="relative">
+                      <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#1A56FF]" />
+                      <input value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)}
+                        // o leitor envia Enter no fim da leitura — sem isso, o formulário seria enviado antes da hora
+                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+                        placeholder="Bipe a etiqueta aqui ou digite o código"
+                        className={inputCls.replace('px-4', 'pl-9 pr-3')} />
+                    </div>
+                    <p className="text-[11px] text-[#C8C5BB] mt-1">
+                      Deixe vazio que o Orbi cria um código pra você imprimir a etiqueta.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-[#C8C5BB] mt-1">
-                    Com o código preenchido, basta bipar a peça no PDV que ela entra na venda sozinha.
-                  </p>
-                </div>
+                )}
 
                 <div>
                   <label className={labelCls}>{cfg.usaNcm && categoria === 'otica' ? 'Tipo / NCM' : 'Tipo'}</label>
@@ -406,24 +440,59 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
 
                 {cfg.usaTamanhoCor && (
                   <>
-                    <div>
-                      <label className={labelCls}>Tamanho</label>
-                      <input value={tamanho} onChange={e => setTamanho(e.target.value)} list="orbi-tamanhos"
-                        placeholder="P, M, G, 42..." className={inputCls} />
-                      <datalist id="orbi-tamanhos">
-                        {TAMANHOS_SUGERIDOS.map(t => <option key={t} value={t} />)}
-                      </datalist>
-                    </div>
-                    <div>
+                    <div className="col-span-2">
                       <label className={labelCls}>Cor</label>
                       <input value={cor} onChange={e => setCor(e.target.value)}
                         placeholder="Bege, Verde militar..." className={inputCls} />
-                    </div>
-                    <div className="col-span-2 -mt-1">
-                      <p className="text-[11px] text-[#C8C5BB]">
-                        Cada tamanho/cor tem estoque próprio. Cadastre a Polo M e a Polo P separadamente —
-                        assim o sistema sabe qual acabou.
+                      <p className="text-[11px] text-[#C8C5BB] mt-1">
+                        Uma cor por cadastro. Se a mesma peça tem outra cor, cadastre de novo trocando só a cor.
                       </p>
+                    </div>
+
+                    {/* Grade de tamanhos: marca os que existem e informa o estoque de cada */}
+                    <div className="col-span-2 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] p-4">
+                      <label className={labelCls}>Tamanhos desta peça</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {TAMANHOS_SUGERIDOS.map(t => {
+                          const ativo = grade.some(g => g.tamanho === t)
+                          return (
+                            <button key={t} type="button" onClick={() => alternarTamanho(t)}
+                              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all border-2 ${ativo ? 'border-[#1A56FF] bg-[#EEF2FF] text-[#1A56FF]' : 'border-[#EAE8E1] bg-white text-[#8C8880] hover:border-[#C8C5BB]'}`}>
+                              {ativo && <Check className="size-3 inline mr-1" strokeWidth={3} />}{t}
+                            </button>
+                          )
+                        })}
+                        <input value={tamanhoNovo} onChange={e => setTamanhoNovo(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarTamanhoNovo() } }}
+                          onBlur={adicionarTamanhoNovo}
+                          placeholder="+ outro" maxLength={10}
+                          className="w-24 h-9 px-3 rounded-lg border-2 border-dashed border-[#EAE8E1] bg-white text-sm text-center outline-none focus:border-[#1A56FF] placeholder:text-[#C8C5BB]" />
+                      </div>
+
+                      {grade.length > 0 && (
+                        <div className="mt-4 space-y-1.5">
+                          <p className="text-[11px] font-bold text-[#8C8880] uppercase tracking-wider">Estoque por tamanho</p>
+                          {grade.map((g, i) => (
+                            <div key={g.tamanho} className="flex items-center gap-3">
+                              <span className="w-12 text-center py-1 rounded-lg bg-[#EEF2FF] text-[#1A56FF] text-sm font-black">{g.tamanho}</span>
+                              <input type="number" min="0" value={g.estoque}
+                                onChange={e => setGrade(prev => prev.map((x, idx) => idx === i ? { ...x, estoque: e.target.value } : x))}
+                                className="w-24 h-9 px-3 rounded-lg border border-[#EAE8E1] bg-white text-sm text-center outline-none focus:border-[#1A56FF]" />
+                              <span className="text-xs text-[#8C8880]">un.</span>
+                              <button type="button" onClick={() => alternarTamanho(g.tamanho)}
+                                className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50">
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-[#E6F9F3]">
+                            <ScanLine className="size-4 text-[#0DB57A] shrink-0" />
+                            <p className="text-xs font-semibold text-[#0DB57A]">
+                              Serão criadas {grade.length} peça(s), cada uma com código de barras próprio · {totalGrade} un. no total
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -445,20 +514,25 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
                   </div>
                 </div>
 
-                <div>
-                  <label className={labelCls}>Estoque inicial</label>
-                  <input value={stock} onChange={e => setStock(e.target.value)} type="number" min="0"
-                    disabled={!controla} className={inputCls + (controla ? '' : ' opacity-50')} />
-                </div>
-                <div className="flex flex-col justify-end">
-                  <button type="button" onClick={() => setControla(!controla)}
-                    className="flex items-center justify-between px-3 h-11 rounded-xl bg-[#F7F6F3] border border-[#EAE8E1]">
-                    <span className="text-sm font-medium text-[#2E2D29]">Controla estoque</span>
-                    <span className={`relative w-10 h-5 rounded-full transition-colors ${controla ? 'bg-[#0DB57A]' : 'bg-[#EAE8E1]'}`}>
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${controla ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                    </span>
-                  </button>
-                </div>
+                {/* com grade, o estoque vem por tamanho — esses campos sairiam sobrando */}
+                {!usaGrade && (
+                  <>
+                    <div>
+                      <label className={labelCls}>Estoque inicial</label>
+                      <input value={stock} onChange={e => setStock(e.target.value)} type="number" min="0"
+                        disabled={!controla} className={inputCls + (controla ? '' : ' opacity-50')} />
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <button type="button" onClick={() => setControla(!controla)}
+                        className="flex items-center justify-between px-3 h-11 rounded-xl bg-[#F7F6F3] border border-[#EAE8E1]">
+                        <span className="text-sm font-medium text-[#2E2D29]">Controla estoque</span>
+                        <span className={`relative w-10 h-5 rounded-full transition-colors ${controla ? 'bg-[#0DB57A]' : 'bg-[#EAE8E1]'}`}>
+                          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${controla ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </span>
+                      </button>
+                    </div>
+                  </>
+                )}
 
                 {margem !== null && (
                   <div className="col-span-2">
@@ -472,7 +546,9 @@ export function ProdutosClient({ products, contacts, vendas, caixaAberto, busine
               <button type="submit" disabled={loading}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60"
                 style={{ fontFamily: 'Barlow, sans-serif', background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
-                {loading ? <Loader2 className="size-4 animate-spin" /> : saved ? <><Check className="size-4" /> Produto salvo!</> : <><Package className="size-4" /> Salvar Produto</>}
+                {loading ? <Loader2 className="size-4 animate-spin" />
+                  : saved ? <><Check className="size-4" /> {usaGrade ? 'Peças salvas!' : 'Produto salvo!'}</>
+                  : <><Package className="size-4" /> {usaGrade ? `Salvar ${grade.length} peça(s)` : 'Salvar Produto'}</>}
               </button>
             </form>
           </GlowCard>

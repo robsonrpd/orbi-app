@@ -88,6 +88,77 @@ export async function createProduct(payload: {
   return { success: true }
 }
 
+/**
+ * Cadastra a mesma peça em vários tamanhos de uma vez (grade).
+ * Cada tamanho vira um produto próprio, com estoque e código de barras separados —
+ * que é como roupa realmente vende: acaba o M e ainda sobra P.
+ */
+export async function createProdutosGrade(payload: {
+  name: string
+  price: number
+  costPrice: number
+  tipoProduto: string
+  ncm: string
+  grife: string
+  categoria?: string
+  imageUrl?: string | null
+  cor?: string | null
+  variacoes: { tamanho: string; stock: number }[]
+}) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!payload.name?.trim()) return { error: 'Nome obrigatório.' }
+  if (isNaN(payload.price) || payload.price < 0) return { error: 'Preço inválido.' }
+
+  const variacoes = (payload.variacoes ?? []).filter(v => v.tamanho?.trim())
+  if (variacoes.length === 0) return { error: 'Marque pelo menos um tamanho.' }
+  const tams = variacoes.map(v => v.tamanho.trim().toUpperCase())
+  if (new Set(tams).size !== tams.length) return { error: 'Há tamanhos repetidos.' }
+
+  const service = createServiceClient()
+  const criados: string[] = []
+
+  for (const v of variacoes) {
+    const codigo = await proximoCodigoInterno(service, companyId, criados)
+    const { data: novo, error } = await service.from('products').insert({
+      company_id: companyId,
+      name: payload.name.trim(),
+      price: payload.price,
+      cost_price: payload.costPrice || 0,
+      stock: Math.max(0, v.stock || 0),
+      tipo_produto: payload.tipoProduto || null,
+      ncm: payload.ncm || null,
+      grife: payload.grife?.trim() || null,
+      controla_estoque: true,
+      categoria: payload.categoria ?? 'roupa',
+      image_url: payload.imageUrl ?? null,
+      codigo_barras: codigo,
+      tamanho: v.tamanho.trim(),
+      cor: payload.cor?.trim() || null,
+      active: true,
+    }).select('id').single()
+
+    if (error) {
+      console.error('createProdutosGrade:', error)
+      const parcial = criados.length > 0 ? ` (${criados.length} tamanho(s) já foram criados)` : ''
+      if (error.code === '23505') return { error: `Código de barras duplicado${parcial}.` }
+      return { error: `Erro ao cadastrar o tamanho ${v.tamanho}${parcial}.` }
+    }
+    criados.push(codigo)
+
+    if (v.stock > 0 && novo) {
+      await service.from('movimentacoes_estoque').insert({
+        company_id: companyId, product_id: novo.id, tipo: 'entrada',
+        quantidade: v.stock, motivo: 'Estoque inicial',
+      })
+    }
+  }
+
+  revalidatePath('/dashboard/produtos')
+  revalidatePath('/dashboard')
+  return { success: true as const, criados: criados.length }
+}
+
 export async function updateProduct(id: string, payload: {
   name: string
   price: number
