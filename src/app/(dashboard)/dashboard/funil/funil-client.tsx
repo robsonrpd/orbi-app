@@ -10,7 +10,7 @@ import { deleteContact } from '@/lib/actions/contacts'
 import { LeadDetalhe, type Lead } from '@/components/orbi/lead-detalhe'
 import { ImportarContatosModal } from '@/components/orbi/importar-contatos-modal'
 import { PersonalizarColunasModal } from '@/components/orbi/personalizar-colunas-modal'
-import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User, Upload, Download, Palette } from 'lucide-react'
+import { Plus, X, Loader2, Check, Trash2, Zap, Star, ShoppingBag, CheckSquare, User, Upload, Download, Palette, StickyNote } from 'lucide-react'
 
 function fmt(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) }
 function diasDesde(iso: string) { return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) }
@@ -239,6 +239,20 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
                           <CheckSquare className="size-3" /> Criar tarefa
                         </button>
                       </div>
+
+                      {/* última anotação: mostra no card o que já foi conversado,
+                          pra não precisar abrir o lead só pra lembrar */}
+                      {lead.anotacoes?.[0] && (
+                        <div className="mt-2 flex items-start gap-1.5 rounded px-1.5 py-1 bg-[#FFFBEB] border border-[#F59E0B]/20">
+                          <StickyNote className="size-3 mt-0.5 shrink-0 text-[#F59E0B]" />
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-[#8C6A1A] leading-snug line-clamp-2">{lead.anotacoes[0].texto}</p>
+                            {lead.anotacoes.length > 1 && (
+                              <p className="text-[9px] text-[#C8A44A] mt-0.5">+{lead.anotacoes.length - 1} anotação(ões)</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* último contato */}
                       {lead.lastMessageAt && (

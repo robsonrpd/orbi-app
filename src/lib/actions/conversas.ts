@@ -2,11 +2,16 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
+
+/** Extrai o id que o WhatsApp devolve ao enviar — é o que permite apagar a mensagem depois. */
+function idDoEnvio(data: unknown): string | undefined {
+  return (data as { key?: { id?: string } } | null)?.key?.id
+}
 
 export type ConversaResumo = {
   id: string
@@ -115,6 +120,61 @@ async function registrarSaida(service: ReturnType<typeof createServiceClient>, c
   revalidatePath('/dashboard/conversas')
 }
 
+/**
+ * Apaga uma mensagem da conversa.
+ * - paraTodos: apaga também no celular do cliente (só vale pra mensagens enviadas pela loja,
+ *   dentro do prazo do WhatsApp, e que tenham o identificador guardado).
+ * - senão: some apenas do painel do Orbi, sem mexer no WhatsApp de ninguém.
+ *
+ * A mensagem é localizada pelo horário (ts), não pela posição: o histórico é cortado nas
+ * últimas 40/60 mensagens, então a posição pode mudar entre carregar a tela e clicar em apagar.
+ */
+export async function apagarMensagem(conversaId: string, p: { ts?: string; indice: number; paraTodos: boolean }) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const service = createServiceClient()
+  const { data: conv } = await service.from('conversations')
+    .select('id, numero, messages').eq('id', conversaId).eq('company_id', companyId).single()
+  if (!conv) return { error: 'Conversa não encontrada.' }
+
+  const msgs = (conv.messages as Msg[] | null) ?? []
+  let i = p.ts ? msgs.findIndex(m => m.ts === p.ts) : -1
+  if (i < 0 && p.indice >= 0 && p.indice < msgs.length) i = p.indice
+  if (i < 0) return { error: 'Mensagem não encontrada. Atualize a tela e tente de novo.' }
+
+  const alvo = msgs[i]
+
+  if (p.paraTodos) {
+    if (!alvo.waFromMe) return { error: 'Só dá pra apagar para todos as mensagens enviadas pela loja.' }
+    if (!alvo.waId) return { error: 'Essa mensagem é anterior a esse recurso, então só dá pra apagar aqui do painel.' }
+
+    const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+    const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+    if (!instance) return { error: 'WhatsApp não conectado.' }
+
+    const r = await apagarMensagemWhatsApp(instance, {
+      id: alvo.waId,
+      remoteJid: `${conv.numero.replace(/\D/g, '')}@s.whatsapp.net`,
+      fromMe: true,
+    })
+    if (!r.ok) {
+      const detalhe = typeof r.data === 'string' ? r.data : JSON.stringify(r.data ?? '')
+      return { error: `O WhatsApp recusou apagar (talvez tenha passado do prazo). ${detalhe}`.trim() }
+    }
+
+    // igual ao app: a mensagem continua no histórico, marcada como apagada
+    const novas = [...msgs]
+    novas[i] = { ...alvo, apagada: true, content: 'Mensagem apagada', midia: undefined }
+    await service.from('conversations').update({ messages: novas }).eq('id', conv.id)
+  } else {
+    await service.from('conversations').update({ messages: msgs.filter((_, idx) => idx !== i) }).eq('id', conv.id)
+  }
+
+  revalidatePath('/dashboard/conversas')
+  return { success: true as const }
+}
+
 /** Envia uma resposta manual de texto pelo WhatsApp e registra na conversa. */
 export async function responderConversa(conversaId: string, texto: string, opts?: { confirmarPrimeiroContato?: boolean }) {
   const limpo = texto.trim()
@@ -132,7 +192,7 @@ export async function responderConversa(conversaId: string, texto: string, opts?
   const env = await enviarTexto(r.instance, r.conv.numero, limpo)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
-  await registrarSaida(r.service, r.conv, { role: 'human', content: limpo })
+  await registrarSaida(r.service, r.conv, { role: 'human', content: limpo, waId: idDoEnvio(env.data), waFromMe: true })
   return { success: true as const }
 }
 
@@ -204,7 +264,7 @@ export async function enviarMidiaConversa(conversaId: string, p: { url: string; 
   const env = await enviarMedia(r.instance, r.conv.numero, { mediatype: p.mediatype, media: p.url, fileName: p.fileName })
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
-  await registrarSaida(r.service, r.conv, { role: 'human', content: p.fileName || 'Arquivo', midia: { tipo: p.mediatype, url: p.url, nome: p.fileName } })
+  await registrarSaida(r.service, r.conv, { role: 'human', content: p.fileName || 'Arquivo', midia: { tipo: p.mediatype, url: p.url, nome: p.fileName }, waId: idDoEnvio(env.data), waFromMe: true })
   return { success: true as const }
 }
 
@@ -216,6 +276,6 @@ export async function enviarAudioConversa(conversaId: string, url: string) {
   const env = await enviarAudio(r.instance, r.conv.numero, url)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
-  await registrarSaida(r.service, r.conv, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url } })
+  await registrarSaida(r.service, r.conv, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url }, waId: idDoEnvio(env.data), waFromMe: true })
   return { success: true as const }
 }

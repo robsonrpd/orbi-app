@@ -4,15 +4,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
+  apagarMensagem,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
-  AlertTriangle, X,
+  AlertTriangle, X, Trash2, Ban,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
 
 const EMOJIS = ['😀', '😂', '😍', '👍', '🙏', '🎉', '❤️', '😊', '😢', '😮', '🔥', '✅', '👏', '🙌', '😅', '🤔', '😎', '💪', '📅', '⏰']
 
@@ -71,6 +72,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   )
   const [naoEncontrada, setNaoEncontrada] = useState(!!telParam && !achaConversaPorTel(telParam, conversasIniciais))
   const [fotoNaoEncontrada, setFotoNaoEncontrada] = useState<string | null>(null)
+  const [menuApagar, setMenuApagar] = useState<number | null>(null)
+  const [apagando, setApagando] = useState(false)
   const [mensagens, setMensagens] = useState<Msg[]>([])
   const [busca, setBusca] = useState('')
   const [texto, setTexto] = useState('')
@@ -90,6 +93,15 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const carregarMensagens = useCallback((id: string) => {
     obterMensagens(id).then(setMensagens)
   }, [])
+
+  async function handleApagar(indice: number, ts: string | undefined, paraTodos: boolean) {
+    if (!selecionada) return
+    setApagando(true); setErro(null)
+    const r = await apagarMensagem(selecionada, { indice, ts, paraTodos })
+    setApagando(false); setMenuApagar(null)
+    if (r?.error) { setErro(r.error); return }
+    carregarMensagens(selecionada)
+  }
 
   useEffect(() => {
     if (!selecionada) return
@@ -333,28 +345,49 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               )}
               {!carregandoMsgs && mensagens.map((m, i) => {
                 const minha = m.role === 'assistant' || m.role === 'human'
+                const podeApagarParaTodos = !!m.waFromMe && !!m.waId && !m.apagada
                 return (
-                  <div key={i} className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
+                  <div key={i} className={`group flex items-center gap-1 ${minha ? 'justify-end' : 'justify-start'}`}>
+                    {minha && !m.apagada && (
+                      <BotaoApagar aberto={menuApagar === i} apagando={apagando}
+                        onAbrir={() => setMenuApagar(menuApagar === i ? null : i)}
+                        podeParaTodos={podeApagarParaTodos}
+                        onApagar={paraTodos => handleApagar(i, m.ts, paraTodos)} />
+                    )}
                     <div className="max-w-[75%] rounded-xl px-3.5 py-2 text-sm shadow-sm"
-                      style={{ background: minha ? (m.role === 'assistant' ? '#D9FDD3' : '#DCF8C6') : '#FFFFFF' }}>
-                      {m.role === 'assistant' && (
+                      style={{ background: m.apagada ? '#F0F0F0' : minha ? (m.role === 'assistant' ? '#D9FDD3' : '#DCF8C6') : '#FFFFFF' }}>
+                      {m.role === 'assistant' && !m.apagada && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-[#0DB57A] mb-0.5">
                           <Bot className="size-3" /> IA
                         </span>
                       )}
-                      {m.midia && m.midia.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full mb-1" />}
-                      {m.midia && m.midia.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full mb-1" />}
-                      {m.midia && m.midia.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
-                      {m.midia && m.midia.tipo === 'document' && (
-                        <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>
+                      {m.apagada ? (
+                        <p className="flex items-center gap-1.5 text-[#8C8880] italic">
+                          <Ban className="size-3.5 shrink-0" /> Mensagem apagada
+                        </p>
+                      ) : (
+                        <>
+                          {m.midia && m.midia.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full mb-1" />}
+                          {m.midia && m.midia.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full mb-1" />}
+                          {m.midia && m.midia.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
+                          {m.midia && m.midia.tipo === 'document' && (
+                            <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>
+                          )}
+                          <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
+                        </>
                       )}
-                      <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
                       {m.ts && (
-                        <span className={`block text-[10px] mt-1 text-right ${minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
+                        <span className={`block text-[10px] mt-1 text-right ${m.apagada ? 'text-[#C8C5BB]' : minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
                           {fmtHora(m.ts)}
                         </span>
                       )}
                     </div>
+                    {!minha && !m.apagada && (
+                      <BotaoApagar aberto={menuApagar === i} apagando={apagando}
+                        onAbrir={() => setMenuApagar(menuApagar === i ? null : i)}
+                        podeParaTodos={false}
+                        onApagar={paraTodos => handleApagar(i, m.ts, paraTodos)} />
+                    )}
                   </div>
                 )
               })}
@@ -448,6 +481,37 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Botão de apagar que aparece ao passar o mouse na mensagem, com as duas opções do WhatsApp. */
+function BotaoApagar({ aberto, apagando, podeParaTodos, onAbrir, onApagar }: {
+  aberto: boolean; apagando: boolean; podeParaTodos: boolean
+  onAbrir: () => void; onApagar: (paraTodos: boolean) => void
+}) {
+  return (
+    <div className="relative shrink-0">
+      <button onClick={onAbrir} title="Apagar mensagem" aria-label="Apagar mensagem"
+        className={`w-7 h-7 flex items-center justify-center rounded-full text-[#8C8880] hover:bg-black/5 hover:text-red-500 transition-all ${aberto ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+        {apagando && aberto ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+      </button>
+      {aberto && (
+        <div className="absolute z-20 top-full right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-[#EAE8E1] overflow-hidden">
+          {podeParaTodos && (
+            <button onClick={() => onApagar(true)} disabled={apagando}
+              className="w-full text-left px-3 py-2.5 hover:bg-[#F7F6F3] border-b border-[#EAE8E1] disabled:opacity-50">
+              <p className="text-xs font-bold text-red-500">Apagar para todos</p>
+              <p className="text-[10px] text-[#8C8880] leading-snug">Some também do celular do cliente</p>
+            </button>
+          )}
+          <button onClick={() => onApagar(false)} disabled={apagando}
+            className="w-full text-left px-3 py-2.5 hover:bg-[#F7F6F3] disabled:opacity-50">
+            <p className="text-xs font-bold text-[#2E2D29]">Apagar só aqui</p>
+            <p className="text-[10px] text-[#8C8880] leading-snug">Limpa o painel, não mexe no WhatsApp do cliente</p>
+          </button>
         </div>
       )}
     </div>

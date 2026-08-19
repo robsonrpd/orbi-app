@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     // mensagem enviada PELA LOJA (pelo celular ou pelo Orbi) → registra como saída sem duplicar o eco do Orbi
     if (e.key?.fromMe) {
-      await registrarSaida(service, company.id, numero, conteudo, midia)
+      await registrarSaida(service, company.id, numero, conteudo, midia, e.key.id)
       continue
     }
 
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
 
     // salva/atualiza a conversa (histórico) PRIMEIRO — isso é o que importa de verdade.
     // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia)
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia, e.key?.id)
 
     // busca a foto de perfil só na 1ª vez (contato novo ou que ainda não tem foto salva) — best-effort,
     // roda DEPOIS de salvar a mensagem e tem timeout curto (evolution.ts), nunca pode travar o recebimento
@@ -210,7 +210,9 @@ async function avisarDesconexao(
 }
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string }
+// waId/waFromMe: identificam a mensagem dentro do WhatsApp. Sem eles não dá pra
+// apagar no celular do cliente — o WhatsApp precisa saber exatamente qual mensagem é.
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
 
 const EXT: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
 
@@ -240,15 +242,23 @@ async function baixarMidia(
 // Registra uma mensagem de saída (enviada pela loja) sem duplicar o eco do que o Orbi já enviou.
 async function registrarSaida(
   service: ReturnType<typeof createServiceClient>,
-  companyId: string, numero: string, conteudo: string, midia?: Midia,
+  companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string,
 ) {
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
-  // dedup: se a última mensagem registrada já é esse conteúdo (eco do envio pelo Orbi), ignora
+  // dedup: se a última mensagem registrada já é esse conteúdo (eco do envio pelo Orbi), ignora.
+  // aproveita pra completar o identificador do WhatsApp, que o envio pelo Orbi nem sempre tem.
   const ultima = anteriores[anteriores.length - 1]
-  if (ultima && (ultima.role === 'human' || ultima.role === 'assistant') && ultima.content === conteudo) return
-  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo, ts: new Date().toISOString(), ...(midia ? { midia } : {}) }].slice(-40)
+  if (ultima && (ultima.role === 'human' || ultima.role === 'assistant') && ultima.content === conteudo) {
+    if (waId && !ultima.waId && conv) {
+      const atualizadas = [...anteriores]
+      atualizadas[atualizadas.length - 1] = { ...ultima, waId, waFromMe: true }
+      await service.from('conversations').update({ messages: atualizadas }).eq('id', (conv as { id: string }).id)
+    }
+    return
+  }
+  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo, ts: new Date().toISOString(), ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}) }].slice(-40)
   const patch = { messages: novas, last_message_at: new Date().toISOString() }
   if (conv) await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
   else await service.from('conversations').insert({ company_id: companyId, contact_id: null, numero, ...patch } as never)
@@ -257,14 +267,14 @@ async function registrarSaida(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, midia?: Midia,
+  userMsg: string, midia?: Midia, waId?: string,
 ) {
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
 
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
   const agora = new Date().toISOString()
-  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ts: agora, ...(midia ? { midia } : {}) }]
+  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}) }]
 
   const patch: Record<string, unknown> = {
     messages: novas.slice(-40),

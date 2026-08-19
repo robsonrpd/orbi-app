@@ -136,6 +136,17 @@ export async function enviarAudio(instance: string, number: string, audio: strin
   })
 }
 
+/**
+ * Apaga a mensagem no WhatsApp de todo mundo (o "Apagar para todos" do app).
+ * Só funciona em mensagens enviadas pela própria loja e dentro do prazo do WhatsApp.
+ */
+export async function apagarMensagemWhatsApp(instance: string, p: { id: string; remoteJid: string; fromMe: boolean; participant?: string }) {
+  return call(`/chat/deleteMessageForEveryone/${instance}`, {
+    method: 'DELETE',
+    body: JSON.stringify(p),
+  })
+}
+
 /** Busca a URL da foto de perfil do WhatsApp de um número. Retorna null se não tiver foto ou o número não existir. */
 export async function buscarFotoPerfil(instance: string, number: string) {
   const r = await call(`/chat/fetchProfilePictureUrl/${instance}`, {
