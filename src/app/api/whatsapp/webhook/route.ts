@@ -355,23 +355,35 @@ async function salvarConversa(
   const agora = new Date().toISOString()
   const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}) }]
 
+  // NUNCA misturar campos opcionais aqui: se um deles não existir no banco, a gravação
+  // inteira falha e a mensagem do cliente se perde — sem erro visível pra ninguém.
+  // Salvar a mensagem é o que não pode falhar; o resto vai depois, separado.
   const patch: Record<string, unknown> = {
     messages: novas.slice(-40),
     last_message_at: new Date().toISOString(),
     handled_by_ai: false,
-    // o cliente respondeu: o silêncio acabou, então a contagem de cobranças recomeça
-    // e o alerta de lead parado pode disparar de novo se ninguém atender
-    followup_etapa: 0,
-    followup_ultimo_em: null,
-    sla_alertado_em: null,
-    sla_transferido_em: null,
   }
 
+  let convId = (conv as { id: string } | null)?.id ?? null
   if (conv) {
-    const { error } = await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
+    const { error } = await service.from('conversations').update(patch).eq('id', convId!)
     if (error) console.error('[wh convUpd]', error.message)
   } else {
-    const { error } = await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, ...patch } as never)
+    const { data: nova, error } = await service.from('conversations')
+      .insert({ company_id: companyId, contact_id: contactId, numero, ...patch } as never)
+      .select('id').single()
     if (error) console.error('[wh convIns]', error.message)
+    convId = (nova as { id?: string } | null)?.id ?? null
+  }
+
+  // Cliente respondeu: zera a contagem de cobranças e o alerta de lead parado.
+  // Gravação separada e best-effort de propósito — se essas colunas ainda não existirem,
+  // o follow-up só não zera; a mensagem já está salva de qualquer forma.
+  if (convId) {
+    const { error } = await service.from('conversations').update({
+      followup_etapa: 0, followup_ultimo_em: null,
+      sla_alertado_em: null, sla_transferido_em: null,
+    }).eq('id', convId)
+    if (error) console.error('[wh resetAuto]', error.message)
   }
 }
