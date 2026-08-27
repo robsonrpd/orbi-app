@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { enviarTexto } from '@/lib/evolution'
-import { lerSla, proximoDoRodizio } from '@/lib/atendimento'
+import { lerSla, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 
 export const maxDuration = 55
 
@@ -61,14 +61,7 @@ export async function POST(req: NextRequest) {
           .select('id, nome, telefone').eq('company_id', empresa.id).eq('active', true)
 
         if (vendedores?.length) {
-          const { data: abertos } = await service.from('contacts')
-            .select('responsavel_id').eq('company_id', empresa.id).not('responsavel_id', 'is', null)
-          const carga = new Map<string, number>()
-          for (const c of abertos ?? []) {
-            const id = (c as { responsavel_id: string }).responsavel_id
-            carga.set(id, (carga.get(id) ?? 0) + 1)
-          }
-
+          const carga = await cargaDosVendedores(service, empresa.id)
           const atual = (contato as { responsavel_id?: string }).responsavel_id ?? null
           const novo = proximoDoRodizio(vendedores as { id: string; nome: string }[], carga, atual)
           if (novo) {

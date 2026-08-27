@@ -72,6 +72,30 @@ export function lerSla(settings: unknown): SlaAtendimento {
 }
 
 /**
+ * Etapas que tiram o lead da fila de trabalho do vendedor.
+ * Sem excluir essas, um vendedor veterano acumularia centenas de vendas fechadas
+ * no contador e pararia de receber leads novos para sempre.
+ */
+export const ETAPAS_ENCERRADAS = ['convertido', 'perdido']
+
+/** Quantos leads EM ABERTO cada vendedor tem hoje — a base do rodízio. */
+export async function cargaDosVendedores(
+  service: { from: (t: string) => any }, companyId: string,
+): Promise<Map<string, number>> {
+  const { data } = await service.from('contacts')
+    .select('responsavel_id')
+    .eq('company_id', companyId)
+    .not('responsavel_id', 'is', null)
+    .not('funil_etapa', 'in', `(${ETAPAS_ENCERRADAS.join(',')})`)
+
+  const carga = new Map<string, number>()
+  for (const c of (data ?? []) as { responsavel_id: string }[]) {
+    carga.set(c.responsavel_id, (carga.get(c.responsavel_id) ?? 0) + 1)
+  }
+  return carga
+}
+
+/**
  * Próximo vendedor do rodízio: o que está com menos leads em aberto.
  * Distribuir pelo menor volume é mais justo que uma fila circular, porque
  * leva em conta quem já está sobrecarregado.

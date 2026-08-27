@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getMediaBase64, buscarFotoPerfil, enviarTexto } from '@/lib/evolution'
-import { lerFluxo, proximoDoRodizio } from '@/lib/atendimento'
+import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 import { sendEmail } from '@/lib/email'
 
 // dá tempo pro download de mídia terminar antes do timeout padrão da Vercel
@@ -311,14 +311,7 @@ async function atribuirPorRodizio(
     .select('id, nome').eq('company_id', companyId).eq('active', true)
   if (!vendedores?.length) return
 
-  const { data: abertos } = await service.from('contacts')
-    .select('responsavel_id').eq('company_id', companyId).not('responsavel_id', 'is', null)
-  const carga = new Map<string, number>()
-  for (const c of abertos ?? []) {
-    const id = (c as { responsavel_id: string }).responsavel_id
-    carga.set(id, (carga.get(id) ?? 0) + 1)
-  }
-
+  const carga = await cargaDosVendedores(service, companyId)
   const escolhido = proximoDoRodizio(vendedores as { id: string; nome: string }[], carga)
   if (escolhido) {
     await service.from('contacts').update({ responsavel_id: escolhido.id } as never)
