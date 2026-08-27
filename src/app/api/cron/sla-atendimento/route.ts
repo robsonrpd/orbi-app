@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { enviarTexto } from '@/lib/evolution'
-import { lerSla, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
+import {
+  lerSla, lerFollowup, proximoDoRodizio, cargaDosVendedores,
+  dentroDoHorario, MAX_FOLLOWUPS_POR_RODADA,
+} from '@/lib/atendimento'
 
 export const maxDuration = 55
 
@@ -22,15 +25,22 @@ export async function POST(req: NextRequest) {
 
   const service = createServiceClient()
   const agora = Date.now()
-  const resumo = { alertados: 0, transferidos: 0 }
+  const resumo = { alertados: 0, transferidos: 0, followups: 0 }
 
   const { data: empresas } = await service.from('companies').select('id, settings')
 
   for (const empresa of empresas ?? []) {
+    const instanceEmpresa = (empresa.settings as { wa_instance?: string } | null)?.wa_instance
+
+    // follow-up roda antes e é independente do SLA: um cobra o cliente, o outro o vendedor
+    try {
+      resumo.followups += await processarFollowups(service, empresa, instanceEmpresa, agora)
+    } catch (err) { console.error('[cron followup]', err) }
+
     const sla = lerSla(empresa.settings)
     if (!sla.ativo) continue
 
-    const instance = (empresa.settings as { wa_instance?: string } | null)?.wa_instance
+    const instance = instanceEmpresa
     const limiteAlerta = new Date(agora - sla.minutosAlerta * 60_000).toISOString()
 
     const { data: convs } = await service.from('conversations')
@@ -105,6 +115,75 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, ...resumo })
+}
+
+/**
+ * Cobra o lead que ficou em silêncio depois que a loja falou por último.
+ *
+ * É o espelho do SLA: lá o cliente esperava a loja, aqui a loja espera o cliente.
+ * Como aqui QUEM INICIA é a loja, os freios importam mais — horário comercial,
+ * teto por rodada, contador que só avança e parada imediata quando o lead responde.
+ */
+async function processarFollowups(
+  service: ReturnType<typeof createServiceClient>,
+  empresa: { id: string; settings: unknown },
+  instance: string | undefined,
+  agora: number,
+): Promise<number> {
+  const cfg = lerFollowup(empresa.settings)
+  if (!cfg.ativo || cfg.etapas.length === 0 || !instance) return 0
+  if (!dentroDoHorario(cfg)) return 0 // fora do horário: espera a próxima passagem
+
+  const menorHoras = Math.min(...cfg.etapas.map(e => e.horas))
+  const limite = new Date(agora - menorHoras * 3_600_000).toISOString()
+
+  const { data: convs } = await service.from('conversations')
+    .select('id, numero, contact_id, messages, last_message_at, followup_etapa, followup_ultimo_em')
+    .eq('company_id', empresa.id)
+    .lt('last_message_at', limite)
+    .order('last_message_at', { ascending: false })
+    .limit(300)
+
+  let enviados = 0
+  for (const conv of convs ?? []) {
+    if (enviados >= MAX_FOLLOWUPS_POR_RODADA) break
+
+    const msgs = (conv.messages as Msg[] | null) ?? []
+    const ultima = msgs[msgs.length - 1]
+    // só cobra quem deixou a LOJA falando por último; se o cliente falou, é caso de SLA
+    if (!ultima || ultima.role === 'user') continue
+
+    const etapaAtual = (conv.followup_etapa as number | null) ?? 0
+    if (etapaAtual >= cfg.etapas.length) continue // já esgotou as cobranças
+
+    // lead fechado ou perdido não recebe cobrança
+    if (conv.contact_id) {
+      const { data: c } = await service.from('contacts')
+        .select('funil_etapa').eq('id', conv.contact_id).single()
+      const etapa = (c as { funil_etapa?: string } | null)?.funil_etapa
+      if (etapa === 'convertido' || etapa === 'perdido') continue
+    }
+
+    const proxima = cfg.etapas[etapaAtual]
+    const referencia = new Date((conv.followup_ultimo_em as string | null) ?? (conv.last_message_at as string)).getTime()
+    if ((agora - referencia) / 3_600_000 < proxima.horas) continue
+
+    const env = await enviarTexto(instance, (conv.numero as string).replace(/\D/g, ''), proxima.texto)
+    if (!env.ok) continue // não avança o contador: tenta de novo na próxima passagem
+
+    const registro: Msg = { role: 'human', content: proxima.texto, ts: new Date().toISOString() }
+    await service.from('conversations').update({
+      messages: [...msgs, registro].slice(-60),
+      followup_etapa: etapaAtual + 1,
+      followup_ultimo_em: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+    }).eq('id', conv.id)
+
+    enviados++
+    await new Promise(r => setTimeout(r, 1500)) // espaça os envios
+  }
+
+  return enviados
 }
 
 /** Aviso interno para a equipe. Falha aqui não pode derrubar a rotina inteira. */

@@ -30,6 +30,61 @@ export type SlaAtendimento = {
   avisarWhatsapp: boolean
 }
 
+export type EtapaFollowup = {
+  id: string
+  /** Horas de silêncio antes de disparar, contadas da última mensagem enviada. */
+  horas: number
+  texto: string
+}
+
+export type Followup = {
+  ativo: boolean
+  etapas: EtapaFollowup[]
+  /** Cobrança automática de madrugada gera reclamação — e reclamação derruba número. */
+  soHorarioComercial: boolean
+  inicioHora: number
+  fimHora: number
+}
+
+export const FOLLOWUP_PADRAO: Followup = {
+  ativo: false,
+  soHorarioComercial: true,
+  inicioHora: 9,
+  fimHora: 19,
+  etapas: [
+    { id: 'f1', horas: 24, texto: 'Oi! Vi que você não respondeu ainda 😊\n\nPosso te ajudar com mais alguma informação?' },
+    { id: 'f2', horas: 72, texto: 'Passando pra saber se você ainda tem interesse. Se preferir, me chama quando puder que eu te atendo!' },
+  ],
+}
+
+/** Teto de follow-ups por empresa em cada passagem da rotina, pra nunca virar rajada. */
+export const MAX_FOLLOWUPS_POR_RODADA = 25
+
+export function lerFollowup(settings: unknown): Followup {
+  const f = (settings as { followup?: Partial<Followup> } | null)?.followup
+  if (!f || !Array.isArray(f.etapas)) return FOLLOWUP_PADRAO
+  return {
+    ativo: !!f.ativo,
+    etapas: f.etapas.slice(0, 3),
+    soHorarioComercial: f.soHorarioComercial !== false,
+    inicioHora: Math.min(Math.max(f.inicioHora ?? 9, 0), 23),
+    fimHora: Math.min(Math.max(f.fimHora ?? 19, 1), 23),
+  }
+}
+
+/** Hora atual no fuso do Brasil — o servidor roda em UTC, então não dá pra usar a hora local dele. */
+export function horaBrasil(): number {
+  return Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23',
+  }).format(new Date()))
+}
+
+export function dentroDoHorario(f: Followup): boolean {
+  if (!f.soHorarioComercial) return true
+  const h = horaBrasil()
+  return h >= f.inicioHora && h < f.fimHora
+}
+
 export const FLUXO_PADRAO: FluxoAtendimento = {
   ativo: false,
   maxSeguidas: 4,

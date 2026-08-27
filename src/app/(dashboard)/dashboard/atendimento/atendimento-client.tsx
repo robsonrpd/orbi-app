@@ -2,22 +2,27 @@
 
 import { useState } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
-import { salvarFluxo, salvarSla, reiniciarFluxoConversa } from '@/lib/actions/atendimento'
-import type { FluxoAtendimento, SlaAtendimento, EtapaFluxo } from '@/lib/atendimento'
+import { salvarFluxo, salvarSla, salvarFollowup, reiniciarFluxoConversa } from '@/lib/actions/atendimento'
+import type { FluxoAtendimento, SlaAtendimento, Followup, EtapaFluxo } from '@/lib/atendimento'
 import {
   MessageCircle, Clock, Plus, Trash2, ChevronUp, ChevronDown, Check, Loader2,
-  AlertTriangle, HelpCircle, Send, RotateCcw, Users,
+  AlertTriangle, HelpCircle, Send, RotateCcw, Users, BellRing, Moon,
 } from 'lucide-react'
 
 function novaId() { return Math.random().toString(36).slice(2, 9) }
 
-export function AtendimentoClient({ fluxoInicial, slaInicial }: { fluxoInicial: FluxoAtendimento; slaInicial: SlaAtendimento }) {
+export function AtendimentoClient({ fluxoInicial, slaInicial, followupInicial }: {
+  fluxoInicial: FluxoAtendimento; slaInicial: SlaAtendimento; followupInicial: Followup
+}) {
   const [fluxo, setFluxo] = useState(fluxoInicial)
   const [sla, setSla] = useState(slaInicial)
+  const [fup, setFup] = useState(followupInicial)
   const [salvandoF, setSalvandoF] = useState(false)
   const [salvandoS, setSalvandoS] = useState(false)
+  const [salvandoU, setSalvandoU] = useState(false)
   const [okF, setOkF] = useState(false)
   const [okS, setOkS] = useState(false)
+  const [okU, setOkU] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [telTeste, setTelTeste] = useState('')
   const [reiniciando, setReiniciando] = useState(false)
@@ -56,6 +61,14 @@ export function AtendimentoClient({ fluxoInicial, slaInicial }: { fluxoInicial: 
     setSalvandoS(false)
     if (r?.error) { setErro(r.error); return }
     setOkS(true); setTimeout(() => setOkS(false), 2000)
+  }
+
+  async function guardarFollowup() {
+    setSalvandoU(true); setErro(null)
+    const r = await salvarFollowup(fup)
+    setSalvandoU(false)
+    if (r?.error) { setErro(r.error); return }
+    setOkU(true); setTimeout(() => setOkU(false), 2000)
   }
 
   async function reiniciar() {
@@ -175,6 +188,95 @@ export function AtendimentoClient({ fluxoInicial, slaInicial }: { fluxoInicial: 
             </button>
           </div>
           {avisoTeste && <p className="text-xs font-semibold text-[#0DB57A] mt-2 flex items-center gap-1"><Check className="size-3.5" /> {avisoTeste}</p>}
+        </div>
+      </GlowCard>
+
+      {/* ── Follow-up ── */}
+      <GlowCard>
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <BellRing className="size-4 text-[#8B5CF6]" strokeWidth={1.5} />
+              <div>
+                <h2 className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Follow-up de lead em silêncio</h2>
+                <p className="text-xs text-[#8C8880]">Se o lead parar de responder, o Orbi cobra sozinho</p>
+              </div>
+            </div>
+            <button onClick={() => setFup(f => ({ ...f, ativo: !f.ativo }))}
+              className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${fup.ativo ? 'bg-[#0DB57A]' : 'bg-[#EAE8E1]'}`}>
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${fup.ativo ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          <div className="rounded-xl bg-[#FEF3C7]/50 border border-[#F59E0B]/30 p-3 mb-4 flex items-start gap-2">
+            <AlertTriangle className="size-4 text-[#F59E0B] mt-0.5 shrink-0" />
+            <p className="text-xs text-[#8C6A1A] leading-relaxed">
+              Aqui é o <strong>Orbi que fala primeiro</strong>. Só cobra quem já conversou com você e parou de
+              responder, e para na hora que o cliente responder. Use poucas cobranças e bem espaçadas —
+              insistência demais gera denúncia, e denúncia derruba o número.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {fup.etapas.map((e, i) => (
+              <div key={e.id} className="rounded-xl border border-[#EAE8E1] bg-white p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded-lg bg-[#8B5CF6] text-white text-[10px] font-black flex items-center justify-center shrink-0">{i + 1}ª</span>
+                  <span className="text-xs text-[#8C8880]">Enviar depois de</span>
+                  <input type="number" min="1" value={e.horas}
+                    onChange={ev => setFup(f => ({ ...f, etapas: f.etapas.map((x, idx) => idx === i ? { ...x, horas: Number(ev.target.value) || 1 } : x) }))}
+                    className="w-20 h-8 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-center outline-none focus:border-[#1A56FF]" />
+                  <span className="text-xs text-[#8C8880]">horas de silêncio</span>
+                  <button onClick={() => setFup(f => ({ ...f, etapas: f.etapas.filter((_, idx) => idx !== i) }))}
+                    className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
+                </div>
+                <textarea value={e.texto} rows={2} maxLength={900}
+                  onChange={ev => setFup(f => ({ ...f, etapas: f.etapas.map((x, idx) => idx === i ? { ...x, texto: ev.target.value } : x) }))}
+                  placeholder="Ex: Oi! Ainda posso te ajudar com alguma informação?"
+                  className="w-full px-3 py-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] resize-y placeholder:text-[#C8C5BB]" />
+              </div>
+            ))}
+          </div>
+
+          {fup.etapas.length < 3 && (
+            <button onClick={() => setFup(f => ({ ...f, etapas: [...f.etapas, { id: novaId(), horas: 24, texto: '' }] }))}
+              className="flex items-center gap-1.5 px-3 h-9 rounded-xl border-2 border-dashed border-[#EAE8E1] text-xs font-bold text-[#8C8880] hover:border-[#8B5CF6] hover:text-[#8B5CF6] mt-3">
+              <Plus className="size-3.5" /> Adicionar cobrança
+            </button>
+          )}
+          {fup.etapas.length >= 3 && (
+            <p className="text-[11px] text-[#C8C5BB] mt-3">Máximo de 3 cobranças — mais que isso vira perseguição.</p>
+          )}
+
+          <button onClick={() => setFup(f => ({ ...f, soHorarioComercial: !f.soHorarioComercial }))}
+            className="flex items-center justify-between w-full px-3 h-11 rounded-xl bg-[#F7F6F3] border border-[#EAE8E1] mt-4">
+            <span className="flex items-center gap-2 text-sm font-medium text-[#2E2D29]">
+              <Moon className="size-4 text-[#8C8880]" /> Só enviar em horário comercial
+            </span>
+            <span className={`relative w-10 h-5 rounded-full transition-colors ${fup.soHorarioComercial ? 'bg-[#0DB57A]' : 'bg-[#EAE8E1]'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${fup.soHorarioComercial ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+
+          {fup.soHorarioComercial && (
+            <div className="flex items-center gap-3 mt-3">
+              <span className="text-xs text-[#8C8880]">Entre</span>
+              <input type="number" min="0" max="23" value={fup.inicioHora}
+                onChange={e => setFup(f => ({ ...f, inicioHora: Number(e.target.value) || 0 }))}
+                className="w-20 h-10 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-center outline-none focus:border-[#1A56FF]" />
+              <span className="text-xs text-[#8C8880]">e</span>
+              <input type="number" min="1" max="23" value={fup.fimHora}
+                onChange={e => setFup(f => ({ ...f, fimHora: Number(e.target.value) || 1 }))}
+                className="w-20 h-10 px-2 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-center outline-none focus:border-[#1A56FF]" />
+              <span className="text-xs text-[#8C8880]">horas (fuso do Brasil)</span>
+            </div>
+          )}
+
+          <button onClick={guardarFollowup} disabled={salvandoU}
+            className="mt-4 h-11 px-6 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white"
+            style={{ background: '#1A56FF', boxShadow: '0 4px 16px rgba(26,86,255,0.35)' }}>
+            {salvandoU ? <Loader2 className="size-4 animate-spin" /> : okU ? <><Check className="size-4" /> Salvo!</> : 'Salvar follow-up'}
+          </button>
         </div>
       </GlowCard>
 

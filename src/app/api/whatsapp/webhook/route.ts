@@ -359,6 +359,12 @@ async function salvarConversa(
     messages: novas.slice(-40),
     last_message_at: new Date().toISOString(),
     handled_by_ai: false,
+    // o cliente respondeu: o silêncio acabou, então a contagem de cobranças recomeça
+    // e o alerta de lead parado pode disparar de novo se ninguém atender
+    followup_etapa: 0,
+    followup_ultimo_em: null,
+    sla_alertado_em: null,
+    sla_transferido_em: null,
   }
 
   if (conv) {

@@ -2,15 +2,48 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { lerFluxo, lerSla, type FluxoAtendimento, type SlaAtendimento } from '@/lib/atendimento'
+import { lerFluxo, lerSla, lerFollowup, type FluxoAtendimento, type SlaAtendimento, type Followup } from '@/lib/atendimento'
 import { revalidatePath } from 'next/cache'
 
-export async function obterAtendimento(): Promise<{ fluxo: FluxoAtendimento; sla: SlaAtendimento }> {
+export async function obterAtendimento(): Promise<{ fluxo: FluxoAtendimento; sla: SlaAtendimento; followup: Followup }> {
   const companyId = await getCompanyId()
-  if (!companyId) return { fluxo: lerFluxo(null), sla: lerSla(null) }
+  if (!companyId) return { fluxo: lerFluxo(null), sla: lerSla(null), followup: lerFollowup(null) }
   const service = createServiceClient()
   const { data } = await service.from('companies').select('settings').eq('id', companyId).single()
-  return { fluxo: lerFluxo(data?.settings), sla: lerSla(data?.settings) }
+  return { fluxo: lerFluxo(data?.settings), sla: lerSla(data?.settings), followup: lerFollowup(data?.settings) }
+}
+
+export async function salvarFollowup(f: Followup) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+
+  const etapas = (f.etapas ?? []).filter(e => e.texto?.trim()).slice(0, 3)
+  if (f.ativo && etapas.length === 0) return { error: 'Adicione pelo menos uma cobrança antes de ativar.' }
+  for (const e of etapas) {
+    if (e.texto.length > 900) return { error: 'Cada mensagem pode ter no máximo 900 caracteres.' }
+    if (!e.horas || e.horas < 1) return { error: 'O tempo de espera precisa ser de pelo menos 1 hora.' }
+  }
+  if (f.soHorarioComercial && f.fimHora <= f.inicioHora) {
+    return { error: 'O horário final precisa ser maior que o inicial.' }
+  }
+
+  const service = createServiceClient()
+  const { data: atual } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const settings = {
+    ...(atual?.settings as Record<string, unknown> ?? {}),
+    followup: {
+      ativo: !!f.ativo,
+      soHorarioComercial: !!f.soHorarioComercial,
+      inicioHora: f.inicioHora,
+      fimHora: f.fimHora,
+      etapas: etapas.map(e => ({ id: e.id, horas: Math.max(1, Math.round(e.horas)), texto: e.texto.trim() })),
+    },
+  }
+  const { error } = await service.from('companies').update({ settings }).eq('id', companyId)
+  if (error) return { error: 'Erro ao salvar o follow-up.' }
+
+  revalidatePath('/dashboard/atendimento')
+  return { success: true as const }
 }
 
 export async function salvarFluxo(fluxo: FluxoAtendimento) {
@@ -83,7 +116,9 @@ export async function reiniciarFluxoConversa(numero: string) {
   const alvo = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === d.slice(-8))
   if (!alvo) return { error: 'Nenhuma conversa encontrada com esse número.' }
 
-  await service.from('conversations')
-    .update({ fluxo_etapa: null, sla_alertado_em: null, sla_transferido_em: null }).eq('id', alvo.id)
+  await service.from('conversations').update({
+    fluxo_etapa: null, sla_alertado_em: null, sla_transferido_em: null,
+    followup_etapa: 0, followup_ultimo_em: null,
+  }).eq('id', alvo.id)
   return { success: true as const }
 }
