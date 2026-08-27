@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getMediaBase64, buscarFotoPerfil } from '@/lib/evolution'
+import { getMediaBase64, buscarFotoPerfil, enviarTexto } from '@/lib/evolution'
+import { lerFluxo, proximoDoRodizio } from '@/lib/atendimento'
 import { sendEmail } from '@/lib/email'
 
 // dá tempo pro download de mídia terminar antes do timeout padrão da Vercel
@@ -160,6 +161,11 @@ export async function POST(req: NextRequest) {
     // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
     await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia, e.key?.id)
 
+    // roteiro de boas-vindas: só responde quem escreveu primeiro, e nunca reenvia etapa
+    try {
+      await processarFluxo(service, company, instance, numero, conteudo, contactId ?? null)
+    } catch (err) { console.error('[wh fluxo]', err) }
+
     // busca a foto de perfil só na 1ª vez (contato novo ou que ainda não tem foto salva) — best-effort,
     // roda DEPOIS de salvar a mensagem e tem timeout curto (evolution.ts), nunca pode travar o recebimento
     if (chave && semFotoPorChave.has(chave)) {
@@ -240,6 +246,86 @@ async function baixarMidia(
 }
 
 // Registra uma mensagem de saída (enviada pela loja) sem duplicar o eco do que o Orbi já enviou.
+/**
+ * Roteiro automático de primeiro atendimento.
+ *
+ * O ponteiro fluxo_etapa aponta pra PRÓXIMA etapa a enviar. Se a etapa anterior era uma
+ * pergunta, a mensagem que acabou de chegar é a resposta dela — e vira anotação no lead.
+ * Como o ponteiro só avança, uma etapa nunca é enviada duas vezes.
+ */
+async function processarFluxo(
+  service: ReturnType<typeof createServiceClient>,
+  company: { id: string; settings: Record<string, unknown> },
+  instance: string, numero: string, textoRecebido: string, contactId: string | null,
+) {
+  const fluxo = lerFluxo(company.settings)
+  if (!fluxo.ativo || fluxo.etapas.length === 0) return
+
+  const { data: conv } = await service.from('conversations')
+    .select('id, fluxo_etapa').eq('company_id', company.id).eq('numero', numero).maybeSingle()
+  if (!conv) return
+
+  const total = fluxo.etapas.length
+  const atual = (conv as { fluxo_etapa: number | null }).fluxo_etapa ?? 0
+  if (atual >= total) return // roteiro já concluído com esse lead
+
+  // se a etapa anterior era pergunta, esta mensagem é a resposta
+  const anterior = atual > 0 ? fluxo.etapas[atual - 1] : null
+  if (anterior?.tipo === 'pergunta' && contactId && textoRecebido.trim()) {
+    await service.from('lead_anotacoes').insert({
+      company_id: company.id, contact_id: contactId,
+      texto: `${anterior.rotulo || 'Resposta'}: ${textoRecebido.trim().slice(0, 400)}`,
+    } as never)
+  }
+
+  let i = atual
+  let enviadas = 0
+  while (i < total && enviadas < fluxo.maxSeguidas) {
+    const etapa = fluxo.etapas[i]
+    const env = await enviarTexto(instance, numero, etapa.texto)
+    if (!env.ok) break // não avança o ponteiro se falhou: tenta de novo no próximo contato
+    enviadas++
+    i++
+    if (etapa.tipo === 'pergunta') break // espera a resposta do lead
+    if (i < total) await new Promise(r => setTimeout(r, 1200)) // ritmo humano entre mensagens
+  }
+
+  if (i === atual) return // nada enviado
+  await service.from('conversations').update({ fluxo_etapa: i }).eq('id', (conv as { id: string }).id)
+
+  // roteiro concluído: entrega o lead pro vendedor com menos leads em aberto
+  if (i >= total && fluxo.atribuirVendedor && contactId) {
+    await atribuirPorRodizio(service, company.id, contactId)
+  }
+}
+
+/** Entrega o lead ao vendedor ativo com menos leads em aberto. */
+async function atribuirPorRodizio(
+  service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string,
+) {
+  const { data: contato } = await service.from('contacts')
+    .select('responsavel_id').eq('id', contactId).eq('company_id', companyId).single()
+  if ((contato as { responsavel_id?: string } | null)?.responsavel_id) return // já tem dono
+
+  const { data: vendedores } = await service.from('vendedores')
+    .select('id, nome').eq('company_id', companyId).eq('active', true)
+  if (!vendedores?.length) return
+
+  const { data: abertos } = await service.from('contacts')
+    .select('responsavel_id').eq('company_id', companyId).not('responsavel_id', 'is', null)
+  const carga = new Map<string, number>()
+  for (const c of abertos ?? []) {
+    const id = (c as { responsavel_id: string }).responsavel_id
+    carga.set(id, (carga.get(id) ?? 0) + 1)
+  }
+
+  const escolhido = proximoDoRodizio(vendedores as { id: string; nome: string }[], carga)
+  if (escolhido) {
+    await service.from('contacts').update({ responsavel_id: escolhido.id } as never)
+      .eq('id', contactId).eq('company_id', companyId)
+  }
+}
+
 async function registrarSaida(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string,
