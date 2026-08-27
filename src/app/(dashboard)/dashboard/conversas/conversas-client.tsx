@@ -10,7 +10,7 @@ import {
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
-  AlertTriangle, X, Trash2, Ban,
+  AlertTriangle, X, Trash2, Ban, UsersRound,
 } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
@@ -257,8 +257,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                   <img src={c.contactFoto} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
                 ) : (
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                    style={{ background: '#1A56FF' }}>
-                    {iniciais(nome)}
+                    style={{ background: c.grupo ? '#8B5CF6' : '#1A56FF' }}>
+                    {c.grupo ? <UsersRound className="size-5" strokeWidth={1.5} /> : iniciais(nome)}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -329,13 +329,16 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                 <img src={ativa.contactFoto} alt="" className="w-9 h-9 rounded-full object-cover" />
               ) : (
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                  style={{ background: '#1A56FF' }}>
-                  {iniciais(ativa.contactName ?? ativa.numero)}
+                  style={{ background: ativa.grupo ? '#8B5CF6' : '#1A56FF' }}>
+                  {ativa.grupo ? <UsersRound className="size-4.5" strokeWidth={1.5} /> : iniciais(ativa.contactName ?? ativa.numero)}
                 </div>
               )}
               <div>
-                <p className="text-sm font-bold text-[#1C1B18]">{ativa.contactName ?? ativa.numero}</p>
-                <p className="text-xs text-[#8C8880]">{ativa.numero}</p>
+                <p className="text-sm font-bold text-[#1C1B18] flex items-center gap-1.5">
+                  {ativa.contactName ?? ativa.numero}
+                  {ativa.grupo && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F5F3FF] text-[#8B5CF6]">GRUPO</span>}
+                </p>
+                <p className="text-xs text-[#8C8880]">{ativa.grupo ? 'Conversa de grupo' : ativa.numero}</p>
               </div>
             </div>
 

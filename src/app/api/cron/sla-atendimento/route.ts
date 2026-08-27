@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { enviarTexto } from '@/lib/evolution'
+import { enviarTexto, ehGrupo } from '@/lib/evolution'
 import {
   lerSla, lerFollowup, proximoDoRodizio, cargaDosVendedores,
   dentroDoHorario, MAX_FOLLOWUPS_POR_RODADA,
@@ -147,6 +147,9 @@ async function processarFollowups(
   let enviados = 0
   for (const conv of convs ?? []) {
     if (enviados >= MAX_FOLLOWUPS_POR_RODADA) break
+
+    // grupo não é lead: nunca recebe cobrança automática
+    if (ehGrupo(conv.numero as string)) continue
 
     const msgs = (conv.messages as Msg[] | null) ?? []
     const ultima = msgs[msgs.length - 1]

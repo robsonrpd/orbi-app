@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getMediaBase64, buscarFotoPerfil, enviarTexto } from '@/lib/evolution'
+import { getMediaBase64, buscarFotoPerfil, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 import { sendEmail } from '@/lib/email'
 
@@ -92,10 +92,13 @@ export async function POST(req: NextRequest) {
   for (const ev of eventos) {
     const e = ev as { key?: { remoteJid?: string; fromMe?: boolean; id?: string }; message?: Record<string, unknown>; pushName?: string }
     const jid = e.key?.remoteJid ?? ''
-    if (jid.endsWith('@g.us')) continue      // ignora grupos
-    const numero = jid.split('@')[0]
+    if (!jid) continue
+    // grupo entra como UMA conversa: guarda o JID inteiro e não vira lead.
+    // Cada participante virando contato entupiria o CRM de gente que não é cliente.
+    const grupo = jid.endsWith('@g.us')
+    const numero = grupo ? jid : jid.split('@')[0]
     if (!numero) continue
-    const chave = numero.replace(/\D/g, '').slice(-8)
+    const chave = grupo ? '' : numero.replace(/\D/g, '').slice(-8)
 
     // dedup: a Evolution pode reenviar o mesmo webhook (timeout/retry) — sem isso, a mesma
     // mensagem seria salva/processada 2x na conversa, o que é um forte sinal de bot pro WhatsApp.
@@ -159,12 +162,22 @@ export async function POST(req: NextRequest) {
 
     // salva/atualiza a conversa (histórico) PRIMEIRO — isso é o que importa de verdade.
     // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudo, midia, e.key?.id)
+    // em grupo, o texto vai prefixado com quem falou: sem isso a conversa fica ilegível
+    const conteudoFinal = grupo && e.pushName?.trim() ? `${e.pushName.trim()}: ${conteudo}` : conteudo
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo)
 
-    // roteiro de boas-vindas: só responde quem escreveu primeiro, e nunca reenvia etapa
-    try {
-      await processarFluxo(service, company, instance, numero, conteudo, contactId ?? null)
-    } catch (err) { console.error('[wh fluxo]', err) }
+    // roteiro de boas-vindas: NUNCA em grupo — o bot respondendo num grupo seria um desastre
+    if (!grupo) {
+      try {
+        await processarFluxo(service, company, instance, numero, conteudo, contactId ?? null)
+      } catch (err) { console.error('[wh fluxo]', err) }
+    }
+
+    // nome do grupo: buscado uma vez só, quando o grupo aparece pela primeira vez
+    if (grupo) {
+      try { await garantirNomeGrupo(service, company.id, instance, numero) }
+      catch (err) { console.error('[wh nomeGrupo]', err) }
+    }
 
     // busca a foto de perfil só na 1ª vez (contato novo ou que ainda não tem foto salva) — best-effort,
     // roda DEPOIS de salvar a mensagem e tem timeout curto (evolution.ts), nunca pode travar o recebimento
@@ -299,6 +312,25 @@ async function processarFluxo(
   }
 }
 
+/**
+ * Guarda o nome do grupo na primeira vez que ele aparece.
+ * Best-effort: se a coluna ainda não existir ou a busca falhar, a conversa
+ * continua funcionando — só aparece com o código do grupo em vez do nome.
+ */
+async function garantirNomeGrupo(
+  service: ReturnType<typeof createServiceClient>,
+  companyId: string, instance: string, jid: string,
+) {
+  const { data: conv, error } = await service.from('conversations')
+    .select('id, grupo_nome').eq('company_id', companyId).eq('numero', jid).maybeSingle()
+  if (error || !conv) return
+  if ((conv as { grupo_nome?: string | null }).grupo_nome) return // já tem nome
+
+  const nome = await buscarNomeGrupo(instance, jid)
+  if (!nome) return
+  await service.from('conversations').update({ grupo_nome: nome }).eq('id', (conv as { id: string }).id)
+}
+
 /** Entrega o lead ao vendedor ativo com menos leads em aberto. */
 async function atribuirPorRodizio(
   service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string,
@@ -346,7 +378,7 @@ async function registrarSaida(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, midia?: Midia, waId?: string,
+  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean,
 ) {
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
@@ -379,7 +411,7 @@ async function salvarConversa(
   // Cliente respondeu: zera a contagem de cobranças e o alerta de lead parado.
   // Gravação separada e best-effort de propósito — se essas colunas ainda não existirem,
   // o follow-up só não zera; a mensagem já está salva de qualquer forma.
-  if (convId) {
+  if (convId && !grupo) {
     const { error } = await service.from('conversations').update({
       followup_etapa: 0, followup_ultimo_em: null,
       sla_alertado_em: null, sla_transferido_em: null,

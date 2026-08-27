@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 
 type Midia = { tipo: string; url: string; nome?: string }
@@ -22,6 +22,8 @@ export type ConversaResumo = {
   lastMessageAt: string | null
   handledByAi: boolean
   ultimaMensagem: string
+  grupo: boolean
+  grupoNome: string | null
 }
 
 /** Lista todas as conversas da empresa, mais recentes primeiro. */
@@ -30,31 +32,50 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
   if (!companyId) return []
 
   const service = createServiceClient()
-  const { data: convs } = await service
+  // grupo_nome é opcional: se a coluna ainda não existir, a lista carrega sem ela
+  let convs: Record<string, unknown>[] | null = null
+  const comGrupo = await service
     .from('conversations')
-    .select('id, numero, contact_id, messages, last_message_at, handled_by_ai')
+    .select('id, numero, contact_id, messages, last_message_at, handled_by_ai, grupo_nome')
     .eq('company_id', companyId)
     .order('last_message_at', { ascending: false, nullsFirst: false })
+  if (comGrupo.error) {
+    const semGrupo = await service
+      .from('conversations')
+      .select('id, numero, contact_id, messages, last_message_at, handled_by_ai')
+      .eq('company_id', companyId)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+    convs = semGrupo.data as never
+  } else {
+    convs = comGrupo.data as never
+  }
 
-  const contactIds = [...new Set((convs ?? []).map(c => c.contact_id).filter(Boolean))] as string[]
+  const lista: Record<string, unknown>[] = convs ?? []
+  const contactIds = [...new Set(lista.map(c => c.contact_id).filter(Boolean))] as string[]
   const { data: contacts } = contactIds.length
     ? await service.from('contacts').select('id, name, foto_url').in('id', contactIds)
     : { data: [] }
   const contatoPorId = new Map((contacts ?? []).map(c => [c.id, c]))
 
-  return (convs ?? []).map(c => {
+  return lista.map(c => {
     const msgs = (c.messages as Msg[] | null) ?? []
     const ultima = msgs[msgs.length - 1]
-    const contato = c.contact_id ? contatoPorId.get(c.contact_id) : null
+    const contato = c.contact_id ? contatoPorId.get(c.contact_id as string) : null
+    const numero = c.numero as string
+    const grupo = ehGrupo(numero)
+    const grupoNome = (c.grupo_nome as string | null) ?? null
     return {
-      id: c.id,
-      numero: c.numero,
-      contactId: c.contact_id,
-      contactName: contato?.name ?? null,
-      contactFoto: contato?.foto_url ?? null,
-      lastMessageAt: c.last_message_at,
+      id: c.id as string,
+      numero,
+      contactId: (c.contact_id as string | null) ?? null,
+      // grupo não tem contato: o nome vem do assunto do grupo
+      contactName: grupo ? (grupoNome ?? 'Grupo') : (contato?.name ?? null),
+      contactFoto: grupo ? null : (contato?.foto_url ?? null),
+      lastMessageAt: (c.last_message_at as string | null) ?? null,
       handledByAi: !!c.handled_by_ai,
       ultimaMensagem: ultima ? (ultima.midia ? `📎 ${ultima.midia.tipo}` : ultima.content) : '',
+      grupo,
+      grupoNome,
     }
   })
 }
@@ -155,7 +176,8 @@ export async function apagarMensagem(conversaId: string, p: { ts?: string; indic
 
     const r = await apagarMensagemWhatsApp(instance, {
       id: alvo.waId,
-      remoteJid: `${conv.numero.replace(/\D/g, '')}@s.whatsapp.net`,
+      // grupo já vem com o JID completo; contato individual precisa do sufixo
+      remoteJid: ehGrupo(conv.numero) ? conv.numero : `${conv.numero.replace(/\D/g, '')}@s.whatsapp.net`,
       fromMe: true,
     })
     if (!r.ok) {
@@ -189,7 +211,7 @@ export async function responderConversa(conversaId: string, texto: string, opts?
     return { avisoPrimeiroContato: true as const }
   }
 
-  const env = await enviarTexto(r.instance, r.conv.numero, limpo)
+  const env = await enviarTexto(r.instance, destinoDe(r.conv.numero), limpo)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   await registrarSaida(r.service, r.conv, { role: 'human', content: limpo, waId: idDoEnvio(env.data), waFromMe: true })
@@ -261,7 +283,7 @@ export async function enviarMidiaConversa(conversaId: string, p: { url: string; 
   const r = await resolverConversa(conversaId)
   if ('error' in r) return r
 
-  const env = await enviarMedia(r.instance, r.conv.numero, { mediatype: p.mediatype, media: p.url, fileName: p.fileName })
+  const env = await enviarMedia(r.instance, destinoDe(r.conv.numero), { mediatype: p.mediatype, media: p.url, fileName: p.fileName })
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   await registrarSaida(r.service, r.conv, { role: 'human', content: p.fileName || 'Arquivo', midia: { tipo: p.mediatype, url: p.url, nome: p.fileName }, waId: idDoEnvio(env.data), waFromMe: true })
@@ -273,7 +295,7 @@ export async function enviarAudioConversa(conversaId: string, url: string) {
   const r = await resolverConversa(conversaId)
   if ('error' in r) return r
 
-  const env = await enviarAudio(r.instance, r.conv.numero, url)
+  const env = await enviarAudio(r.instance, destinoDe(r.conv.numero), url)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   await registrarSaida(r.service, r.conv, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url }, waId: idDoEnvio(env.data), waFromMe: true })

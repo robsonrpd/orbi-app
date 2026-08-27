@@ -136,6 +136,26 @@ export async function enviarAudio(instance: string, number: string, audio: strin
   })
 }
 
+/** JID de grupo termina em @g.us — telefone de pessoa, não. */
+export function ehGrupo(numero: string | null | undefined) {
+  return !!numero && numero.endsWith('@g.us')
+}
+
+/**
+ * Destinatário no formato que a Evolution espera: grupo vai com o JID inteiro,
+ * pessoa vai só com os dígitos do telefone.
+ */
+export function destinoDe(numero: string) {
+  return ehGrupo(numero) ? numero : numero.replace(/\D/g, '')
+}
+
+/** Nome (assunto) de um grupo. Buscado uma vez, quando o grupo aparece pela primeira vez. */
+export async function buscarNomeGrupo(instance: string, groupJid: string) {
+  const r = await call(`/group/findGroupInfos/${instance}?groupJid=${encodeURIComponent(groupJid)}`)
+  const d = r.data as { subject?: string } | null
+  return r.ok ? (d?.subject ?? null) : null
+}
+
 /**
  * Apaga a mensagem no WhatsApp de todo mundo (o "Apagar para todos" do app).
  * Só funciona em mensagens enviadas pela própria loja e dentro do prazo do WhatsApp.
