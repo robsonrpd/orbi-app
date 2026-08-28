@@ -275,7 +275,7 @@ async function processarFluxo(
   if (!fluxo.ativo || fluxo.etapas.length === 0) return
 
   const { data: conv } = await service.from('conversations')
-    .select('id, fluxo_etapa').eq('company_id', company.id).eq('numero', numero).maybeSingle()
+    .select('id, fluxo_etapa, messages').eq('company_id', company.id).eq('numero', numero).maybeSingle()
   if (!conv) return
 
   const total = fluxo.etapas.length
@@ -293,10 +293,21 @@ async function processarFluxo(
 
   let i = atual
   let enviadas = 0
+  // o que o roteiro enviar precisa entrar no histórico daqui: quem olha o Conversas
+  // tem que ver a conversa inteira, não só o lado do cliente
+  const enviadasMsgs: Msg[] = []
+
   while (i < total && enviadas < fluxo.maxSeguidas) {
     const etapa = fluxo.etapas[i]
     const env = await enviarTexto(instance, numero, etapa.texto)
     if (!env.ok) break // não avança o ponteiro se falhou: tenta de novo no próximo contato
+
+    const waId = (env.data as { key?: { id?: string } } | null)?.key?.id
+    enviadasMsgs.push({
+      role: 'human', content: etapa.texto, ts: new Date().toISOString(),
+      ...(waId ? { waId, waFromMe: true } : {}),
+    })
+
     enviadas++
     i++
     if (etapa.tipo === 'pergunta') break // espera a resposta do lead
@@ -304,7 +315,17 @@ async function processarFluxo(
   }
 
   if (i === atual) return // nada enviado
-  await service.from('conversations').update({ fluxo_etapa: i }).eq('id', (conv as { id: string }).id)
+
+  // relê as mensagens: entre o início do roteiro e agora, outra mensagem pode ter chegado
+  const { data: atualConv } = await service.from('conversations')
+    .select('messages').eq('id', (conv as { id: string }).id).single()
+  const base = (atualConv?.messages as Msg[] | null) ?? (conv as { messages?: Msg[] }).messages ?? []
+
+  await service.from('conversations').update({
+    fluxo_etapa: i,
+    messages: [...base, ...enviadasMsgs].slice(-40),
+    last_message_at: new Date().toISOString(),
+  }).eq('id', (conv as { id: string }).id)
 
   // roteiro concluído: entrega o lead pro vendedor com menos leads em aberto
   if (i >= total && fluxo.atribuirVendedor && contactId) {
@@ -358,13 +379,23 @@ async function registrarSaida(
   const { data: conv } = await service.from('conversations')
     .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
-  // dedup: se a última mensagem registrada já é esse conteúdo (eco do envio pelo Orbi), ignora.
-  // aproveita pra completar o identificador do WhatsApp, que o envio pelo Orbi nem sempre tem.
-  const ultima = anteriores[anteriores.length - 1]
-  if (ultima && (ultima.role === 'human' || ultima.role === 'assistant') && ultima.content === conteudo) {
-    if (waId && !ultima.waId && conv) {
-      const atualizadas = [...anteriores]
-      atualizadas[atualizadas.length - 1] = { ...ultima, waId, waFromMe: true }
+
+  // Dedup do eco: tudo que o Orbi envia (resposta manual ou roteiro automático) já é gravado
+  // na hora do envio. Quando o WhatsApp devolve o eco dessa mesma mensagem, ela não pode
+  // entrar de novo.
+  //
+  // A checagem pelo identificador vem primeiro porque é exata. A comparação por texto é o
+  // fallback pra mensagens gravadas antes de existir o identificador — e olha as últimas 5,
+  // não só a última: o roteiro envia várias seguidas, e os ecos chegam fora de ordem.
+  if (waId && anteriores.some(m => m.waId === waId)) return
+
+  const recentes = anteriores.slice(-5)
+  const jaTem = recentes.find(m =>
+    (m.role === 'human' || m.role === 'assistant') && m.content === conteudo && !m.waId
+  )
+  if (jaTem) {
+    if (waId && conv) {
+      const atualizadas = anteriores.map(m => m === jaTem ? { ...m, waId, waFromMe: true } : m)
       await service.from('conversations').update({ messages: atualizadas }).eq('id', (conv as { id: string }).id)
     }
     return
