@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId, getCurrentUserName } from '@/lib/auth/company'
 import { statusAquecimento } from '@/lib/whatsapp-warmup'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { revalidatePath } from 'next/cache'
 
 const INTERVALO_MIN = 8
@@ -60,12 +61,20 @@ export async function criarBroadcast(payload: {
   const aquecimento = statusAquecimento(settings?.wa_primeira_conexao, limiteDesejado)
   const limiteDiario = aquecimento.limite
 
-  let query = service.from('contacts').select('id, name, phone, origem').eq('company_id', companyId).eq('active', true)
-  if (!payload.todos) query = query.in('origem', payload.origens)
-  const { data: contatos } = await query
+  // paginado: sem isso um envio para "todos" pararia em 1000 pessoas sem avisar,
+  // e a loja acharia que mandou pra base inteira
+  const contatos = await buscarTodos<{ id: string; name: string | null; phone: string | null; origem: string | null }>(
+    (de, ate) => {
+      let q = service.from('contacts').select('id, name, phone, origem')
+        .eq('company_id', companyId).eq('active', true)
+      if (!payload.todos) q = q.in('origem', payload.origens)
+      return q.range(de, ate)
+    },
+    'destinatarios do envio em massa',
+  )
 
-  const destinatarios = (contatos ?? [])
-    .filter(c => c.phone)
+  const destinatarios = contatos
+    .filter((c): c is typeof c & { phone: string } => !!c.phone)
     .map(c => ({ contact_id: c.id, numero: waNumero(c.phone), nome: c.name ?? '' }))
   if (destinatarios.length === 0) return { error: 'Nenhum cliente com telefone encontrado para esse público.' }
 

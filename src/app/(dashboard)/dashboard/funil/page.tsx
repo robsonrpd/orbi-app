@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { obterColunasFunil } from '@/lib/actions/funil-colunas'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { Topbar } from '@/components/orbi/topbar'
 import { FunilClient } from './funil-client'
 
@@ -10,11 +11,19 @@ export default async function FunilPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
-  const [{ data: contacts }, { data: convs }, { data: vendedores }, colunas] = await Promise.all([
-    service.from('contacts')
-      .select('id, name, phone, email, origem, tags, notes, funil_etapa, funil_valor, responsavel_id, qualificacao, negociacao_status, created_at')
-      .eq('company_id', companyId).eq('active', true).order('created_at', { ascending: false }),
-    service.from('conversations').select('id, numero, messages, last_message_at').eq('company_id', companyId),
+  // leads e conversas paginados: acima de 1000 o funil perdia cards sem avisar
+  const [contacts, convs, { data: vendedores }, colunas] = await Promise.all([
+    buscarTodos<{ id: string; phone: string | null } & Record<string, unknown>>(
+      (de, ate) => service.from('contacts')
+        .select('id, name, phone, email, origem, tags, notes, funil_etapa, funil_valor, responsavel_id, qualificacao, negociacao_status, created_at')
+        .eq('company_id', companyId).eq('active', true).order('created_at', { ascending: false }).range(de, ate) as never,
+      'funil contatos',
+    ),
+    buscarTodos<{ id: string; numero: string | null; messages: Msg[] | null; last_message_at: string | null }>(
+      (de, ate) => service.from('conversations').select('id, numero, messages, last_message_at')
+        .eq('company_id', companyId).range(de, ate) as never,
+      'funil conversas',
+    ),
     service.from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome'),
     obterColunasFunil(),
   ])

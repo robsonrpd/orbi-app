@@ -6,6 +6,8 @@
 // reenvia uma etapa já enviada (o ponteiro fluxo_etapa garante isso) e tem teto de
 // mensagens seguidas por disparo.
 
+import { buscarTodos } from '@/lib/supabase/paginacao'
+
 export type EtapaFluxo = {
   id: string
   tipo: 'mensagem' | 'pergunta'
@@ -133,18 +135,26 @@ export function lerSla(settings: unknown): SlaAtendimento {
  */
 export const ETAPAS_ENCERRADAS = ['convertido', 'perdido']
 
-/** Quantos leads EM ABERTO cada vendedor tem hoje — a base do rodízio. */
+/**
+ * Quantos leads EM ABERTO cada vendedor tem hoje — a base do rodízio.
+ * Paginado: numa loja com mais de 1000 leads a contagem viria truncada e a
+ * distribuição ficaria errada, sempre favorecendo quem aparece nas primeiras linhas.
+ */
 export async function cargaDosVendedores(
   service: { from: (t: string) => any }, companyId: string,
 ): Promise<Map<string, number>> {
-  const { data } = await service.from('contacts')
-    .select('responsavel_id')
-    .eq('company_id', companyId)
-    .not('responsavel_id', 'is', null)
-    .not('funil_etapa', 'in', `(${ETAPAS_ENCERRADAS.join(',')})`)
+  const linhas = await buscarTodos<{ responsavel_id: string }>(
+    (de, ate) => service.from('contacts')
+      .select('responsavel_id')
+      .eq('company_id', companyId)
+      .not('responsavel_id', 'is', null)
+      .not('funil_etapa', 'in', `(${ETAPAS_ENCERRADAS.join(',')})`)
+      .range(de, ate),
+    'carga dos vendedores',
+  )
 
   const carga = new Map<string, number>()
-  for (const c of (data ?? []) as { responsavel_id: string }[]) {
+  for (const c of linhas) {
     carga.set(c.responsavel_id, (carga.get(c.responsavel_id) ?? 0) + 1)
   }
   return carga

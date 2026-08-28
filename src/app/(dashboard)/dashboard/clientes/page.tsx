@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { Topbar } from '@/components/orbi/topbar'
 import { ClientesClient } from './clientes-client'
 
@@ -7,8 +8,14 @@ export default async function ClientesPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
-  const [{ data: contacts }, { data: transactions }, { data: appointments }, { data: vendas }] = await Promise.all([
-    service.from('contacts').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+  // contatos paginados: acima de 1000 a lista era cortada em silêncio e o cliente
+  // "sumia" da tela, sem erro nenhum
+  const [contacts, { data: transactions }, { data: appointments }, { data: vendas }] = await Promise.all([
+    buscarTodos<Record<string, unknown>>(
+      (de, ate) => service.from('contacts').select('*').eq('company_id', companyId)
+        .order('created_at', { ascending: false }).range(de, ate),
+      'clientes',
+    ),
     service.from('transactions').select('contact_id, amount, status, forma_pagamento').eq('company_id', companyId),
     service.from('appointments').select('contact_id').eq('company_id', companyId),
     service.from('vendas').select('contact_id, itens').eq('company_id', companyId),

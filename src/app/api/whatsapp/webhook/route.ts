@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getMediaBase64, buscarFotoPerfil, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { sendEmail } from '@/lib/email'
 
 // dá tempo pro download de mídia terminar antes do timeout padrão da Vercel
@@ -79,7 +80,12 @@ export async function POST(req: NextRequest) {
   if (eventos.length === 0) return NextResponse.json({ ok: true })
 
   // contatos da empresa (id por últimos 8 dígitos do telefone) — captura sem duplicar
-  const { data: contatos } = await service.from('contacts').select('id, phone, foto_url').eq('company_id', company.id)
+  // paginado: truncar aqui faria o webhook não encontrar clientes já cadastrados
+  // e criar contato duplicado pra quem já é cliente
+  const contatos = await buscarTodos<{ id: string; phone: string | null; foto_url: string | null }>(
+    (de, ate) => service.from('contacts').select('id, phone, foto_url').eq('company_id', company!.id).range(de, ate),
+    'webhook contatos',
+  )
   const idPorChave = new Map<string, string>()
   const semFotoPorChave = new Map<string, string>()
   for (const c of contatos ?? []) {
