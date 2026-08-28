@@ -32,6 +32,11 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
   if (!companyId) return []
 
   const service = createServiceClient()
+  // Limite explícito: sem ele o Postgrest corta em 1000 por conta própria, em silêncio —
+  // uma loja movimentada passaria disso e perderia conversas sem nenhum aviso.
+  // 500 cobre meses de histórico numa lista de conversas.
+  const LIMITE_CONVERSAS = 500
+
   // grupo_nome é opcional: se a coluna ainda não existir, a lista carrega sem ela
   let convs: Record<string, unknown>[] | null = null
   const comGrupo = await service
@@ -39,12 +44,14 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
     .select('id, numero, contact_id, messages, last_message_at, handled_by_ai, grupo_nome')
     .eq('company_id', companyId)
     .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(LIMITE_CONVERSAS)
   if (comGrupo.error) {
     const semGrupo = await service
       .from('conversations')
       .select('id, numero, contact_id, messages, last_message_at, handled_by_ai')
       .eq('company_id', companyId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(LIMITE_CONVERSAS)
     convs = semGrupo.data as never
   } else {
     convs = comGrupo.data as never
@@ -52,10 +59,18 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
 
   const lista: Record<string, unknown>[] = convs ?? []
   const contactIds = [...new Set(lista.map(c => c.contact_id).filter(Boolean))] as string[]
-  const { data: contacts } = contactIds.length
-    ? await service.from('contacts').select('id, name, foto_url').in('id', contactIds)
-    : { data: [] }
-  const contatoPorId = new Map((contacts ?? []).map(c => [c.id, c]))
+
+  // Busca em lotes: com muitos contatos, um .in() único monta uma URL gigante e o
+  // Postgrest devolve "Bad Request" — a lista voltava sem nome e sem foto de ninguém.
+  // (Aconteceu de verdade: 977 contatos viravam uma URL de 36 mil caracteres.)
+  const contatoPorId = new Map<string, { id: string; name: string | null; foto_url: string | null }>()
+  const LOTE = 150
+  for (let i = 0; i < contactIds.length; i += LOTE) {
+    const fatia = contactIds.slice(i, i + LOTE)
+    const { data, error } = await service.from('contacts').select('id, name, foto_url').in('id', fatia)
+    if (error) { console.error('[listarConversas contatos]', error.message); continue }
+    for (const ct of data ?? []) contatoPorId.set(ct.id, ct as never)
+  }
 
   return lista.map(c => {
     const msgs = (c.messages as Msg[] | null) ?? []
