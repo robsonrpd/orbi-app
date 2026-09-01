@@ -285,7 +285,21 @@ async function processarFluxo(
   if (!conv) return
 
   const total = fluxo.etapas.length
-  const atual = (conv as { fluxo_etapa: number | null }).fluxo_etapa ?? 0
+  const marcador = (conv as { fluxo_etapa: number | null }).fluxo_etapa
+  const historico = ((conv as { messages?: Msg[] }).messages ?? [])
+
+  // Quem JÁ conversou com a loja não pode receber boas-vindas.
+  // Nesse ponto a mensagem atual já foi salva, então histórico com mais de 1 mensagem
+  // significa que essa pessoa não é primeiro contato — é cliente antigo escrevendo de novo.
+  // Marca como concluído pra nunca mais avaliar essa conversa.
+  if (marcador === null || marcador === undefined) {
+    if (historico.length > 1) {
+      await service.from('conversations').update({ fluxo_etapa: total }).eq('id', (conv as { id: string }).id)
+      return
+    }
+  }
+
+  const atual = marcador ?? 0
   if (atual >= total) return // roteiro já concluído com esse lead
 
   // se a etapa anterior era pergunta, esta mensagem é a resposta
