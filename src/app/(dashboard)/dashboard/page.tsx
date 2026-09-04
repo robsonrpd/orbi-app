@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { getModo } from '@/lib/auth/modo'
 import { obterPersonalizacaoDashboard } from '@/lib/actions/dashboard-config'
@@ -42,19 +43,22 @@ export default async function DashboardPage() {
 
   // Busca paralela de tudo
   const [
-    { data: transactions }, { data: contasPagar }, { data: contacts },
+    { data: transactions }, { data: contasPagar }, contacts,
     { data: ordens }, { data: receitas }, { data: products }, { data: appointments },
     { data: projetos },
   ] = await Promise.all([
     service.from('transactions').select('amount, status, created_at, paid_at, forma_pagamento, contact_id').eq('company_id', companyId),
     service.from('contas_pagar' as never).select('valor, status, pago_em').eq('company_id', companyId),
-    service.from('contacts').select('id, name, phone, data_nascimento, created_at').eq('company_id', companyId),
+    buscarTodos(
+      (de, ate) => service.from('contacts').select('id, name, phone, data_nascimento, created_at').eq('company_id', companyId).range(de, ate),
+      'contatos',
+    ),
     service.from('ordens_servico').select('status, total, created_at').eq('company_id', companyId),
     service.from('receitas').select('id, data_receita, contact_id, contacts(name, phone)').eq('company_id', companyId).lt('data_receita', umAnoAtras.split('T')[0]),
     service.from('products' as never).select('tipo_produto, stock').eq('company_id', companyId).eq('active', true),
     service.from('appointments').select('start_at, status').eq('company_id', companyId),
     isGeral
-      ? service.from('projetos' as never).select('status')
+      ? service.from('projetos' as never).select('status').eq('company_id', companyId)
       : Promise.resolve({ data: [] as { status: string }[] }),
   ])
 

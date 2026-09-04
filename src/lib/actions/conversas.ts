@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
+import { acharConversaPorNumero, acharContatoPorTelefone, mensagensDaConversa } from '@/lib/conversas-busca'
 
 type Midia = { tipo: string; url: string; nome?: string }
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
@@ -105,8 +106,9 @@ export async function obterFotoContato(telefone: string): Promise<string | null>
   if (!chave) return null
 
   const service = createServiceClient()
-  const { data: contatos } = await service.from('contacts').select('id, phone, foto_url').eq('company_id', companyId)
-  const contato = (contatos ?? []).find(c => (c.phone ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const contato = await acharContatoPorTelefone<{ id: string; phone: string | null; foto_url: string | null }>(
+    service, companyId, d, 'id, phone, foto_url',
+  )
   if (contato?.foto_url) return contato.foto_url
 
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
@@ -254,11 +256,11 @@ export async function iniciarConversa(numero: string, texto: string, opts?: { co
   const st = await statusInstancia(instance)
   if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão WhatsApp e escaneie o QR Code de novo pra reconectar.' }
 
-  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
-  const existente = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const existenteId = await acharConversaPorNumero(service, companyId, numeroFmt)
+  const msgsExistentes = existenteId ? (await mensagensDaConversa(service, existenteId)) as Msg[] : []
 
   // segurança: mandar mensagem pra quem nunca escreveu primeiro é o principal gatilho de bloqueio do WhatsApp
-  const jaRecebemos = existente ? ((existente.messages as Msg[] | null) ?? []).some(m => m.role === 'user') : false
+  const jaRecebemos = msgsExistentes.some(m => m.role === 'user')
   if (!jaRecebemos && !opts?.confirmarPrimeiroContato) {
     return { avisoPrimeiroContato: true as const }
   }
@@ -273,15 +275,14 @@ export async function iniciarConversa(numero: string, texto: string, opts?: { co
 
   const nova: Msg = { role: 'human', content: limpo, ts: new Date().toISOString() }
 
-  if (existente) {
-    const messages = [...((existente.messages as Msg[] | null) ?? []), nova].slice(-60)
-    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', existente.id)
+  if (existenteId) {
+    const messages = [...msgsExistentes, nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', existenteId)
     revalidatePath('/dashboard/conversas')
-    return { success: true as const, conversaId: existente.id }
+    return { success: true as const, conversaId: existenteId }
   }
 
-  const { data: contacts } = await service.from('contacts').select('id, phone').eq('company_id', companyId)
-  const contact = (contacts ?? []).find(c => (c.phone ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const contact = await acharContatoPorTelefone<{ id: string; phone: string | null }>(service, companyId, numeroFmt)
 
   const { data: criada, error } = await service.from('conversations').insert({
     company_id: companyId, contact_id: contact?.id ?? null, numero: numeroFmt,

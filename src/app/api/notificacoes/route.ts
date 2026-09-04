@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 
 export async function GET() {
   const supabase = await createClient()
@@ -16,10 +17,14 @@ export async function GET() {
 
   const desde48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
 
-  const [{ data: ordens }, { data: receitas }, { data: contacts }, { data: contas }, { data: agendamentosOnline }] = await Promise.all([
+  const [{ data: ordens }, { data: receitas }, contacts, { data: contas }, { data: agendamentosOnline }] = await Promise.all([
     service.from('ordens_servico').select('id, numero, status').eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelada'),
     service.from('receitas').select('id, contacts(name, phone)').eq('company_id', companyId).lt('data_receita', umAnoAtras.toISOString().split('T')[0]),
-    service.from('contacts').select('id, name, phone, data_nascimento').eq('company_id', companyId),
+    // paginado: aniversariantes some acima de 1000 contatos, e o aviso simplesmente não aparece
+    buscarTodos<{ id: string; name: string | null; phone: string | null; data_nascimento: string | null }>(
+      (de, ate) => service.from('contacts').select('id, name, phone, data_nascimento').eq('company_id', companyId).range(de, ate),
+      'contatos (notificações)',
+    ),
     service.from('contas_pagar' as never).select('id, descricao, valor, status, vencimento').eq('company_id', companyId).eq('status', 'pendente'),
     service.from('appointments').select('id, start_at, contacts(name)').eq('company_id', companyId).eq('notes', 'Agendado pelo cliente (link público)').gte('created_at', desde48h),
   ])

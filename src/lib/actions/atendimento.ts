@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { lerFluxo, lerSla, lerFollowup, type FluxoAtendimento, type SlaAtendimento, type Followup } from '@/lib/atendimento'
+import { acharConversaPorNumero } from '@/lib/conversas-busca'
 import { revalidatePath } from 'next/cache'
 
 export async function obterAtendimento(): Promise<{ fluxo: FluxoAtendimento; sla: SlaAtendimento; followup: Followup }> {
@@ -111,14 +112,12 @@ export async function reiniciarFluxoConversa(numero: string) {
   if (!d) return { error: 'Número inválido.' }
 
   const service = createServiceClient()
-  const { data: convs } = await service.from('conversations')
-    .select('id, numero').eq('company_id', companyId)
-  const alvo = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === d.slice(-8))
-  if (!alvo) return { error: 'Nenhuma conversa encontrada com esse número.' }
+  const alvoId = await acharConversaPorNumero(service, companyId, d)
+  if (!alvoId) return { error: 'Nenhuma conversa encontrada com esse número.' }
 
   await service.from('conversations').update({
     fluxo_etapa: null, sla_alertado_em: null, sla_transferido_em: null,
     followup_etapa: 0, followup_ultimo_em: null,
-  }).eq('id', alvo.id)
+  }).eq('id', alvoId)
   return { success: true as const }
 }

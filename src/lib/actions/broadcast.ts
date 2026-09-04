@@ -27,8 +27,12 @@ export async function listarOrigensDeContatos() {
   const companyId = await getCompanyId()
   if (!companyId) return []
   const service = createServiceClient()
-  const { data } = await service.from('contacts').select('origem').eq('company_id', companyId).not('origem', 'is', null)
-  const set = new Set((data ?? []).map(c => c.origem).filter(Boolean) as string[])
+  // paginado: uma origem usada só por contatos mais recentes sumia da lista de públicos
+  const data = await buscarTodos(
+    (de, ate) => service.from('contacts').select('origem').eq('company_id', companyId).not('origem', 'is', null).range(de, ate),
+    'origens de contatos',
+  )
+  const set = new Set(data.map(c => c.origem).filter(Boolean) as string[])
   return [...set].sort()
 }
 

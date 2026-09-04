@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSuperAdmin } from '@/lib/auth/super-admin'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { FounderClient } from './founder-client'
 
 const PLAN_PRICE: Record<string, number> = { individual: 97, equipe: 197, ilimitado: 297 }
@@ -19,9 +20,14 @@ export default async function FounderPage() {
     .order('created_at', { ascending: false })
 
   // Clientes (contacts) por empresa
-  const { data: contactsCount } = await service.from('contacts').select('company_id')
+  // paginado: são contatos de TODAS as empresas somados. Sem isso o painel parava em 1000
+  // e mostrava uso menor do que o real justamente nas lojas maiores.
+  const contactsCount = await buscarTodos<{ company_id: string }>(
+    (de, ate) => service.from('contacts').select('company_id').range(de, ate),
+    'contatos por empresa (founder)',
+  )
   const usoMap: Record<string, number> = {}
-  ;(contactsCount ?? []).forEach(c => { usoMap[c.company_id] = (usoMap[c.company_id] ?? 0) + 1 })
+  contactsCount.forEach(c => { usoMap[c.company_id] = (usoMap[c.company_id] ?? 0) + 1 })
 
   // E-mail do dono (admin) por empresa
   const { data: users } = await service.from('users').select('company_id, email, name').eq('role', 'admin')

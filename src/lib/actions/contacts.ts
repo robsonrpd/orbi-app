@@ -2,6 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId, getCurrentUserName } from '@/lib/auth/company'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { revalidatePath } from 'next/cache'
 
 function extractFields(formData: FormData) {
@@ -92,8 +93,13 @@ export async function importarContatos(rows: { name: string | null; phone: strin
   const criadoPor = await getCurrentUserName()
   const batchId = crypto.randomUUID()
   const service = createServiceClient()
-  const { data: existentes } = await service.from('contacts').select('phone').eq('company_id', companyId)
-  const telefonesExistentes = new Set((existentes ?? []).map(c => c.phone))
+  // paginado: sem isso, uma loja com mais de 1000 contatos só comparava os 1000 primeiros
+  // e reimportava como "novo" quem já estava cadastrado — duplicando a base
+  const existentes = await buscarTodos<{ phone: string | null }>(
+    (de, ate) => service.from('contacts').select('phone').eq('company_id', companyId).range(de, ate),
+    'telefones já cadastrados',
+  )
+  const telefonesExistentes = new Set(existentes.map(c => c.phone))
 
   let criados = 0, jaExistiamNoOrbi = 0, duplicadosNaPlanilha = 0, invalidos = 0
   const vistosNestaImportacao = new Set<string>()
@@ -127,10 +133,13 @@ export async function listarImportacoes() {
   if (!companyId) return { error: 'Não autenticado.' }
 
   const service = createServiceClient()
-  const { data } = await service.from('contacts')
-    .select('import_batch_id, criado_por, created_at, origem')
-    .eq('company_id', companyId).eq('origem', 'Importação')
-    .order('created_at', { ascending: false })
+  const data = await buscarTodos<{ import_batch_id: string | null; criado_por: string | null; created_at: string; origem: string | null }>(
+    (de, ate) => service.from('contacts')
+      .select('import_batch_id, criado_por, created_at, origem')
+      .eq('company_id', companyId).eq('origem', 'Importação')
+      .order('created_at', { ascending: false }).range(de, ate),
+    'importações',
+  )
 
   const porLote = new Map<string, { total: number; criadoPor: string | null; dataMaisRecente: string }>()
   let semLote = 0
@@ -153,9 +162,13 @@ export async function excluirImportacao(batchId: string) {
   if (!batchId) return { error: 'Lote inválido.' }
 
   const service = createServiceClient()
-  const { data: contatos } = await service.from('contacts')
-    .select('id').eq('company_id', companyId).eq('import_batch_id', batchId as never)
-  if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
+  // paginado: sem isso a exclusão apagava no máximo 1000 e dizia que tinha terminado
+  const contatos = await buscarTodos<{ id: string }>(
+    (de, ate) => service.from('contacts')
+      .select('id').eq('company_id', companyId).eq('import_batch_id', batchId as never).range(de, ate),
+    'contatos do lote',
+  )
+  if (contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
 
   let excluidos = 0, falharam = 0
   for (const c of contatos) {
@@ -185,9 +198,12 @@ export async function excluirImportados() {
   if (!companyId) return { error: 'Não autenticado.' }
 
   const service = createServiceClient()
-  const { data: contatos } = await service.from('contacts')
-    .select('id').eq('company_id', companyId).eq('origem', 'Importação').is('import_batch_id', null)
-  if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
+  const contatos = await buscarTodos<{ id: string }>(
+    (de, ate) => service.from('contacts')
+      .select('id').eq('company_id', companyId).eq('origem', 'Importação').is('import_batch_id', null).range(de, ate),
+    'importados sem lote',
+  )
+  if (contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
 
   let excluidos = 0, falharam = 0
   for (const c of contatos) {
@@ -206,9 +222,12 @@ export async function excluirTodasImportacoes() {
   if (!companyId) return { error: 'Não autenticado.' }
 
   const service = createServiceClient()
-  const { data: contatos } = await service.from('contacts')
-    .select('id').eq('company_id', companyId).eq('origem', 'Importação')
-  if (!contatos || contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
+  const contatos = await buscarTodos<{ id: string }>(
+    (de, ate) => service.from('contacts')
+      .select('id').eq('company_id', companyId).eq('origem', 'Importação').range(de, ate),
+    'todos os importados',
+  )
+  if (contatos.length === 0) return { success: true, excluidos: 0, falharam: 0 }
 
   let excluidos = 0, falharam = 0
   for (const c of contatos) {

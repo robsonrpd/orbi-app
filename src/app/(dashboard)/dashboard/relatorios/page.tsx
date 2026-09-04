@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { guardModo } from '@/lib/auth/modo'
 import { Topbar } from '@/components/orbi/topbar'
@@ -11,7 +12,7 @@ export default async function RelatoriosPage() {
 
   const [
     { data: transactions }, { data: ordens }, { data: orcamentos },
-    { data: products }, { data: vendedores }, { data: receitas }, { data: contacts },
+    { data: products }, { data: vendedores }, { data: receitas }, contacts,
     { data: contasPagar }, { data: company },
   ] = await Promise.all([
     service.from('transactions').select('amount, status, created_at, paid_at, contact_id, contacts(name, phone)').eq('company_id', companyId),
@@ -20,7 +21,10 @@ export default async function RelatoriosPage() {
     service.from('products' as never).select('name, price, cost_price, stock, tipo_produto').eq('company_id', companyId).eq('active', true),
     service.from('vendedores').select('nome, comissao_percent').eq('company_id', companyId).eq('active', true),
     service.from('receitas').select('data_receita, contacts(name, phone)').eq('company_id', companyId),
-    service.from('contacts').select('id, name, phone, email, origem, data_nascimento, created_at').eq('company_id', companyId),
+    buscarTodos(
+      (de, ate) => service.from('contacts').select('id, name, phone, email, origem, data_nascimento, created_at').eq('company_id', companyId).range(de, ate),
+      'contatos',
+    ),
     service.from('contas_pagar' as never).select('descricao, fornecedor, valor, status, vencimento, pago_em').eq('company_id', companyId),
     service.from('companies').select('settings').eq('id', companyId).single(),
   ])

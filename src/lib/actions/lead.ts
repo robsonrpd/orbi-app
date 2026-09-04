@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto } from '@/lib/evolution'
 import { obterColunasFunil } from '@/lib/actions/funil-colunas'
+import { acharConversaPorNumero, mensagensDaConversa } from '@/lib/conversas-busca'
 import { revalidatePath } from 'next/cache'
 
 function waNumero(phone: string) {
@@ -32,14 +33,12 @@ export async function responderLead(contactId: string, texto: string) {
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   // encontra ou cria a conversa (match pelos últimos 8 dígitos)
-  const chave = numero.slice(-8)
-  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
-  const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const convId = await acharConversaPorNumero(service, companyId, numero)
   const nova: Msg = { role: 'human', content: texto.trim(), ts: new Date().toISOString() }
 
-  if (conv) {
-    const messages = [...((conv.messages as Msg[]) ?? []), nova].slice(-60)
-    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  if (convId) {
+    const messages = [...(await mensagensDaConversa(service, convId) as Msg[]), nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', convId)
   } else {
     await service.from('conversations').insert({
       company_id: companyId, contact_id: contactId, numero, messages: [nova],

@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { guardModo } from '@/lib/auth/modo'
 import { Topbar } from '@/components/orbi/topbar'
@@ -11,10 +12,13 @@ export default async function FinanceiroPage() {
   const { data: companyRow } = await service.from('companies').select('slug').eq('id', companyId).single()
   const companySlug = companyRow?.slug ?? 'minha-otica'
 
-  const [{ data: transactions }, { data: contacts }, { data: contasPagar }] = await Promise.all([
+  const [{ data: transactions }, contacts, { data: contasPagar }] = await Promise.all([
     service.from('transactions').select('id, amount, status, due_date, created_at, paid_at, notes, contacts(id, name, phone)')
       .eq('company_id', companyId).order('created_at', { ascending: false }),
-    service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
+    buscarTodos(
+      (de, ate) => service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name').range(de, ate),
+      'contatos',
+    ),
     service.from('contas_pagar' as never).select('*').eq('company_id', companyId).order('vencimento'),
   ])
 

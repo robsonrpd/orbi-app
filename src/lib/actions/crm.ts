@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto, enviarMedia, enviarAudio } from '@/lib/evolution'
+import { acharConversaPorNumero, mensagensDaConversa } from '@/lib/conversas-busca'
 import { revalidatePath } from 'next/cache'
 
 /** Resolve instância + número do lead e registra uma mensagem na conversa. */
@@ -19,13 +20,11 @@ async function envioBase(companyId: string, contactId: string) {
 
 type Midia = { tipo: string; url: string; nome?: string }
 async function logConversa(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, numero: string, content: string, midia?: Midia) {
-  const chave = numero.slice(-8)
-  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
-  const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const convId = await acharConversaPorNumero(service, companyId, numero)
   const nova = { role: 'human', content, ts: new Date().toISOString(), ...(midia ? { midia } : {}) }
-  if (conv) {
-    const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
-    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  if (convId) {
+    const messages = [...(await mensagensDaConversa(service, convId)), nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', convId)
   } else {
     await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, messages: [nova], handled_by_ai: false, last_message_at: new Date().toISOString() } as never)
   }
@@ -132,13 +131,11 @@ export async function enviarOrcamentoLead(contactId: string) {
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   // registra na conversa
-  const chave = numero.slice(-8)
-  const { data: convs } = await service.from('conversations').select('id, numero, messages').eq('company_id', companyId)
-  const conv = (convs ?? []).find(c => (c.numero ?? '').replace(/\D/g, '').slice(-8) === chave)
+  const convId = await acharConversaPorNumero(service, companyId, numero)
   const nova = { role: 'human', content: texto, ts: new Date().toISOString() }
-  if (conv) {
-    const messages = [...((conv.messages as { role: string; content: string }[]) ?? []), nova].slice(-60)
-    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  if (convId) {
+    const messages = [...(await mensagensDaConversa(service, convId)), nova].slice(-60)
+    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', convId)
   } else {
     await service.from('conversations').insert({ company_id: companyId, contact_id: contactId, numero, messages: [nova], handled_by_ai: false, last_message_at: new Date().toISOString() } as never)
   }

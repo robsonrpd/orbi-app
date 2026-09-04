@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { guardNicho } from '@/lib/auth/nicho'
 import { Topbar } from '@/components/orbi/topbar'
@@ -9,10 +10,13 @@ export default async function OrdensServicoPage() {
   const service = createServiceClient()
   const companyId = await getEffectiveCompanyId()
 
-  const [{ data: ordens }, { data: contacts }, { data: services }, { data: products }] = await Promise.all([
+  const [{ data: ordens }, contacts, { data: services }, { data: products }] = await Promise.all([
     service.from('ordens_servico').select('*, contacts(id, name, phone)')
       .eq('company_id', companyId).order('numero', { ascending: false }),
-    service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
+    buscarTodos(
+      (de, ate) => service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name').range(de, ate),
+      'contatos',
+    ),
     service.from('services').select('id, name, price').eq('company_id', companyId).eq('active', true),
     service.from('products' as never).select('id, name, price').eq('company_id', companyId).eq('active', true),
   ])

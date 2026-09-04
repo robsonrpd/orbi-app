@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 import { getEffectiveCompanyId } from '@/lib/auth/company'
 import { guardNicho } from '@/lib/auth/nicho'
 import { Topbar } from '@/components/orbi/topbar'
@@ -13,14 +14,17 @@ export default async function AgendaPage() {
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString()
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0).toISOString()
 
-  const [{ data: appointments }, { data: contacts }, { data: services }, { data: transactions }, { data: company }] = await Promise.all([
+  const [{ data: appointments }, contacts, { data: services }, { data: transactions }, { data: company }] = await Promise.all([
     service.from('appointments')
       .select('id, start_at, end_at, status, professional, notes, contacts(id, name, phone), services(id, name, duration_minutes, price)')
       .eq('company_id', companyId)
       .gte('start_at', monthStart)
       .lte('start_at', monthEnd)
       .order('start_at'),
-    service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name'),
+    buscarTodos(
+      (de, ate) => service.from('contacts').select('id, name, phone').eq('company_id', companyId).order('name').range(de, ate),
+      'contatos',
+    ),
     service.from('services').select('id, name, duration_minutes, price').eq('company_id', companyId).eq('active', true),
     service.from('transactions').select('amount').eq('company_id', companyId).eq('status', 'paid').gte('created_at', monthStart),
     service.from('companies').select('slug').eq('id', companyId).single(),
