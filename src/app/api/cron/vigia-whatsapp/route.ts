@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email'
 import { horaBrasil } from '@/lib/atendimento'
+import { listarInstancias } from '@/lib/evolution'
 
 export const maxDuration = 55
 
@@ -38,12 +39,22 @@ export async function POST(req: NextRequest) {
   const agora = Date.now()
   const avisadas: string[] = []
 
+  // Estado REAL, direto da Evolution. Antes isto usava o wa_state guardado no banco, que
+  // é atualizado por webhook e fica velho: uma loja conectada e recebendo aparecia como
+  // 'connecting' e o vigia a ignorava — justamente a loja que ele deveria estar vigiando.
+  const { ok: evoOk, estados } = await listarInstancias()
+  if (!evoOk) {
+    // sem resposta da Evolution não dá pra saber quem deveria estar recebendo; avisar
+    // agora geraria alarme falso pra todo mundo
+    return NextResponse.json({ ok: false, motivo: 'servidor de WhatsApp não respondeu' })
+  }
+
   const { data: empresas } = await service.from('companies').select('id, name, settings')
 
   for (const empresa of empresas ?? []) {
     const s = (empresa.settings ?? {}) as Record<string, unknown>
     // só interessa quem deveria estar recebendo mensagem agora
-    if (!s.wa_instance || s.wa_state !== 'open') continue
+    if (!s.wa_instance || estados.get(s.wa_instance as string) !== 'open') continue
 
     const { data: ultima } = await service.from('conversations')
       .select('last_message_at').eq('company_id', empresa.id)

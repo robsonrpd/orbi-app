@@ -83,6 +83,19 @@ export async function conectar(instance: string) {
   return { ok: r.ok, qr: base64, raw: d }
 }
 
+/**
+ * Estado real de TODAS as instâncias numa chamada só: { nome da instância -> estado }.
+ * Existe pra quem precisa checar várias empresas de uma vez (ex: o vigia de silêncio):
+ * uma chamada por empresa estouraria o tempo limite da rota.
+ */
+export async function listarInstancias() {
+  const r = await call('/instance/fetchInstances')
+  const lista = Array.isArray(r.data) ? (r.data as { name?: string; connectionStatus?: string }[]) : []
+  const mapa = new Map<string, string>()
+  for (const i of lista) if (i.name) mapa.set(i.name, i.connectionStatus ?? 'close')
+  return { ok: r.ok && Array.isArray(r.data), estados: mapa }
+}
+
 /** Estado da conexão: 'open' = conectado, 'connecting' = aguardando QR, 'close' = desconectado. */
 export async function statusInstancia(instance: string) {
   const r = await call(`/instance/connectionState/${instance}`)
