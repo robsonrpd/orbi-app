@@ -38,6 +38,14 @@ export async function conectarWhatsApp() {
   const st0 = await statusInstancia(atual)
   if (st0.state === 'open') return { conectado: true }
 
+  // Conectar é DESTRUTIVO: apaga a sessão atual pra criar outra. Só que statusInstancia
+  // devolve 'close' também quando a Evolution não responde (timeout, 500, servidor fora).
+  // Sem esta checagem, um problema no servidor virava "sessão morta" e o botão apagava uma
+  // conexão que estava viva — foi assim que a loja perdeu o WhatsApp durante uma queda.
+  if (!st0.ok) {
+    return { error: 'O servidor de WhatsApp não respondeu agora. Não vou recriar a conexão às cegas: se a sessão atual estiver viva, isso derrubaria ela. Tente de novo em alguns minutos.' }
+  }
+
   // apaga a instância anterior (limpa a sessão morta) e cria UMA NOVA com nome único
   await deletarInstancia(atual)
   await deletarInstancia(c.slug) // limpa também a antiga baseada no slug, se existir
@@ -45,6 +53,15 @@ export async function conectarWhatsApp() {
 
   const instance = `${c.slug}-${Date.now().toString(36)}`
   const r = await criarInstancia(instance, wh)
+
+  // Confirma que a instância existe MESMO antes de apontar a empresa pra ela. Já aconteceu
+  // de a criação falhar em silêncio e o Orbi ficar apontando pra uma instância fantasma:
+  // a tela pedia QR pra sempre e nenhuma mensagem chegava.
+  const chk = await statusInstancia(instance)
+  if (!chk.ok) {
+    return { error: 'Não consegui criar a conexão no servidor de WhatsApp. A conexão anterior foi encerrada — tente conectar de novo em instantes.' }
+  }
+
   await setWebhook(instance, wh)
 
   const service = createServiceClient()

@@ -41,8 +41,12 @@ export function WhatsappConnect({ stateInicial }: { stateInicial: 'open' | 'conn
   }
 
   async function novoQR() {
-    setEstado('loading')
-    await renovarQR()
+    setEstado('loading'); setErro(null)
+    const r = await renovarQR()
+    // sem isto, uma falha aqui caía direto em "Gerando QR Code…" e girava pra sempre
+    if (r?.error) { setErro(r.error); setEstado('erro'); return }
+    if (r?.conectado) { setEstado('open'); setQr(null); return }
+    if (r?.qr) { setQr(r.qr); setEstado('qr'); return }
     setEstado('connecting')
   }
 
