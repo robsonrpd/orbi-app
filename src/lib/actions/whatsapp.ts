@@ -49,7 +49,13 @@ export async function conectarWhatsApp() {
 
   const service = createServiceClient()
   const settings = { ...(c.settings ?? {}), wa_instance: instance } as Record<string, unknown>
+  // instância nova ainda não tem sessão: o estado antigo precisa sair daqui, senão a tela
+  // acha que já está conectada e nunca mostra o QR desta instância
   delete settings.wa_qr
+  delete settings.wa_state
+  delete settings.wa_last_event
+  delete settings.wa_disconnect_alert_sent
+  delete settings.wa_silencio_avisado_em
   if (r.qr) settings.wa_qr = r.qr
   await service.from('companies').update({ settings }).eq('id', c.id)
 
@@ -96,7 +102,15 @@ export async function desconectarWhatsApp() {
   await deletarInstancia(instanciaDe(c))
   const service = createServiceClient()
   const settings = { ...(c.settings ?? {}) } as Record<string, unknown>
+  // Apaga TODO o rastro da conexão anterior. Guardar o estado antigo fazia a tela
+  // continuar dizendo "conectado" depois de desconectar, e o QR nunca aparecia —
+  // era impossível reconectar quando a sessão morria do lado do servidor.
   delete settings.wa_qr
+  delete settings.wa_state
+  delete settings.wa_last_event
+  delete settings.wa_instance
+  delete settings.wa_disconnect_alert_sent
+  delete settings.wa_silencio_avisado_em
   await service.from('companies').update({ settings }).eq('id', c.id)
   revalidatePath('/dashboard/ia')
   return { success: true }
