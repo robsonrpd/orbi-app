@@ -99,9 +99,13 @@ export async function listarInstancias() {
 /** Estado da conexão: 'open' = conectado, 'connecting' = aguardando QR, 'close' = desconectado. */
 export async function statusInstancia(instance: string) {
   const r = await call(`/instance/connectionState/${instance}`)
-  const d = r.data as { instance?: { state?: string }; state?: string } | null
+  const d = r.data as { instance?: { state?: string }; state?: string; response?: { message?: unknown } } | null
   const state = d?.instance?.state ?? d?.state ?? 'close'
-  return { ok: r.ok, state }
+  // 404 COM a mensagem do próprio Evolution = "essa instância não existe" (loja nova que nunca
+  // conectou, ou instância já apagada). É uma resposta VÁLIDA, não uma falha do servidor.
+  // Um 404 sem essa mensagem (ex: o proxy do Railway com o serviço fora do ar) continua sendo falha.
+  const naoExiste = r.status === 404 && /instance does not exist/i.test(JSON.stringify(d?.response?.message ?? ''))
+  return { ok: r.ok, state, status: r.status, naoExiste }
 }
 
 /** Desconecta (logout) a instância. */

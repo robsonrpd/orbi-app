@@ -12,6 +12,15 @@
 --
 -- Como usar: SQL Editor do Supabase -> colar tudo -> Run.
 -- Pode rodar mais de uma vez (tudo é "if not exists").
+--
+-- ATENÇÃO — configuração que NÃO é SQL e precisa ser feita no projeto novo (Authentication):
+--   * Confirmação de e-mail DESLIGADA ("Confirm email" off). O cadastro chama signUp no navegador e
+--     depois /api/setup-account, que exige sessão: com a confirmação ligada o signUp não devolve
+--     sessão e a tela mostra "Não autenticado".
+--   * Site URL = https://www.orbisistem.com.br e Redirect URLs = https://www.orbisistem.com.br/**
+--     (senão os e-mails de "esqueci a senha" apontam para http://localhost:3000).
+--   Feito em 2026-09-30 com "supabase config push" (config.toml numa pasta à parte).
+-- Pode rodar mais de uma vez (tudo é "if not exists").
 -- ============================================================
 
 
@@ -28,7 +37,8 @@ create table if not exists public.companies (
   settings             jsonb not null default '{}'::jsonb,
   subscription_status  text default 'trial',
   subscription_plan    text,
-  trial_ends_at        timestamptz,
+  -- o cadastro promete "14 dias grátis" e o código nunca grava esta data: quem define é o banco
+  trial_ends_at        timestamptz default (now() + interval '14 days'),
   active               boolean not null default true,
   created_at           timestamptz not null default now()
 );

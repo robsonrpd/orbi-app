@@ -42,7 +42,8 @@ export async function conectarWhatsApp() {
   // devolve 'close' também quando a Evolution não responde (timeout, 500, servidor fora).
   // Sem esta checagem, um problema no servidor virava "sessão morta" e o botão apagava uma
   // conexão que estava viva — foi assim que a loja perdeu o WhatsApp durante uma queda.
-  if (!st0.ok) {
+  // "instância não existe" é o caso normal de uma loja nova: aí não há sessão a proteger
+  if (!st0.ok && !st0.naoExiste) {
     return { error: 'O servidor de WhatsApp não respondeu agora. Não vou recriar a conexão às cegas: se a sessão atual estiver viva, isso derrubaria ela. Tente de novo em alguns minutos.' }
   }
 
