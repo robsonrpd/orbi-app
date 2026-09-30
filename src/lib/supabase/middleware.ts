@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { deveRedirecionar, ROTA_INICIAL } from '@/lib/produto'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -38,6 +39,15 @@ export async function updateSession(request: NextRequest) {
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
+  // Módulos desligados (ver src/lib/produto.ts): quem digita a URL na mão, ou tem um link
+  // salvo de antes, cai na tela inicial em vez de numa página de um módulo que não existe mais.
+  if (user && isDashboard && deveRedirecionar(request.nextUrl.pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = ROTA_INICIAL
+    url.search = ''
     return NextResponse.redirect(url)
   }
 

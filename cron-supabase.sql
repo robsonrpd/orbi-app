@@ -13,7 +13,7 @@ create extension if not exists pg_net;
 -- 2. Remove agendamentos anteriores (pra poder rodar de novo sem duplicar)
 select cron.unschedule('orbi-vigia-whatsapp')  where exists (select 1 from cron.job where jobname = 'orbi-vigia-whatsapp');
 select cron.unschedule('orbi-sla-atendimento') where exists (select 1 from cron.job where jobname = 'orbi-sla-atendimento');
-select cron.unschedule('orbi-broadcast')       where exists (select 1 from cron.job where jobname = 'orbi-broadcast');
+select cron.unschedule('orbi-broadcast')       where exists (select 1 from cron.job where jobname = 'orbi-broadcast'); -- remove o antigo, se existir
 
 -- ------------------------------------------------------------
 -- 3. VIGIA DO WHATSAPP — de hora em hora
@@ -50,22 +50,6 @@ select cron.schedule(
 );
 
 -- ------------------------------------------------------------
--- 5. ENVIO EM MASSA — a cada 1 minuto
---    Esta rota é GET (as outras são POST). Cada chamada trabalha
---    ~48s respeitando o intervalo configurado na campanha.
--- ------------------------------------------------------------
-select cron.schedule(
-  'orbi-broadcast',
-  '* * * * *',
-  $$
-  select net.http_get(
-    url     := 'https://www.orbisistem.com.br/api/cron/broadcast',
-    headers := '{"Authorization":"Bearer pCx5yzdjQ73QRJYIokKre0XOb-zE7Xf1"}'::jsonb
-  );
-  $$
-);
-
--- ------------------------------------------------------------
--- 6. Confere se os três foram criados
+-- 5. Confere se os dois foram criados (o envio em massa está desligado no produto)
 -- ------------------------------------------------------------
 select jobname, schedule, active from cron.job where jobname like 'orbi-%' order by jobname;

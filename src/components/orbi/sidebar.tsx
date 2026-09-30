@@ -15,6 +15,7 @@ import { Camera, Loader2, ChevronDown, MessageCircle, Building2, Check } from 'l
 import { saveCompanyLogo } from '@/lib/actions/empresa'
 import { ModoFuncionario } from '@/components/orbi/modo-funcionario'
 import { BLOQUEIO_POR_HREF } from '@/lib/permissoes'
+import { MODO_CRM, rotaPermitida } from '@/lib/produto'
 import { useMobileNav } from '@/components/orbi/mobile-nav'
 import { termoEquipe } from '@/lib/nichos'
 import { listarMinhasEmpresas, trocarEmpresaAtiva, type MinhaEmpresa } from '@/lib/actions/empresas'
@@ -79,6 +80,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
     setTrocandoEmpresa(false)
   }
   function podeVer(href: string) {
+    if (!rotaPermitida(href)) return false              // módulo desligado no produto (lib/produto.ts)
     if (esconderNicho.includes(href)) return false      // nicho da empresa
     if (!m.funcionario) return true
     const bloq = BLOQUEIO_POR_HREF[href]                 // bloqueio do vendedor
@@ -89,7 +91,8 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
     .map(item => item.href === '/dashboard/vendedores' ? { ...item, label: equipe.plural } : item)
   const waChildren = orbiWhatsapp.children.filter(c => podeVer(c.href))
   const waAtivo = waChildren.some(c => pathname.startsWith(c.href))
-  const [waOpen, setWaOpen] = useState(waAtivo)
+  // no modo CRM o WhatsApp É o produto: o submenu já abre aberto, com o funil à vista
+  const [waOpen, setWaOpen] = useState(waAtivo || MODO_CRM)
   const [logo, setLogo] = useState<string | null>(logoUrl ?? null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
@@ -270,12 +273,14 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
               <Crown className="size-4 shrink-0 text-[#F59E0B]" strokeWidth={1.5} />
               Seu Plano
             </Link>
-            <Link href="/dashboard/parametros"
-              className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
-              <SlidersHorizontal className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
-              Parâmetros
-            </Link>
+            {rotaPermitida('/dashboard/parametros') && (
+              <Link href="/dashboard/parametros"
+                className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                  isActive('/dashboard/parametros') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+                <SlidersHorizontal className="size-4 shrink-0 text-white/50" strokeWidth={1.5} />
+                Parâmetros
+              </Link>
+            )}
             <Link href="/dashboard/settings"
               className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
                 isActive('/dashboard/settings') ? 'text-white bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>

@@ -1,6 +1,8 @@
+import { MODO_CRM, rotaPermitida } from '@/lib/produto'
+
 // Lista única de permissões do vendedor.
 // `href` = item de menu que some quando bloqueado; null = ação especial (sem menu próprio).
-export const PERMISSOES: { key: string; label: string; href: string | null }[] = [
+const TODAS_AS_PERMISSOES: { key: string; label: string; href: string | null }[] = [
   { key: 'faturamento', label: 'Ver faturamento e valores (Dashboard)', href: null },
   { key: 'clientes', label: 'Clientes', href: '/dashboard/clientes' },
   { key: 'funil', label: 'Funil de Leads', href: '/dashboard/funil' },
@@ -23,6 +25,10 @@ export const PERMISSOES: { key: string; label: string; href: string | null }[] =
   { key: 'envio_massa', label: 'Envio em Massa (WhatsApp)', href: '/dashboard/envio-massa' },
   { key: 'atendimento_auto', label: 'Atendimento Automático', href: '/dashboard/atendimento' },
 ]
+
+// No modo CRM (lib/produto.ts) só sobram as permissões de telas que existem: oferecer ao dono
+// "bloquear Caixa" pra um vendedor, num sistema que não tem Caixa, só confunde.
+export const PERMISSOES = TODAS_AS_PERMISSOES.filter(p => (p.href ? rotaPermitida(p.href) : !MODO_CRM))
 
 // Mapa href -> chave de bloqueio (para esconder menus no Modo Vendedor)
 export const BLOQUEIO_POR_HREF: Record<string, string> = Object.fromEntries(
