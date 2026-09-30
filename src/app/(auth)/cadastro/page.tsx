@@ -5,13 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, User, Building2, Mail, Lock, ArrowRight, Check, Phone, Eye, EyeOff } from 'lucide-react'
-import { NICHOS } from '@/lib/nichos'
 
 const perks = ['14 dias grátis', 'Sem cartão de crédito', 'Cancele quando quiser']
 
 export default function CadastroPage() {
   const router = useRouter()
-  const [form, setForm] = useState({ name: '', company: '', phone: '', email: '', password: '', confirmPassword: '', business_type: 'otica' })
+  const [form, setForm] = useState({ name: '', company: '', phone: '', email: '', password: '', confirmPassword: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -47,7 +46,7 @@ export default function CadastroPage() {
     const res = await fetch('/api/setup-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, companyName: form.company, phone: form.phone, businessType: form.business_type }),
+      body: JSON.stringify({ name: form.name, companyName: form.company, phone: form.phone }),
     })
 
     if (!res.ok) {
@@ -124,26 +123,6 @@ export default function CadastroPage() {
                 onChange={e => set('company', e.target.value)} required
                 className="w-full h-11 pl-10 pr-3 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
             </div>
-          </div>
-        </div>
-
-        {/* Ramo do negócio */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[#2E2D29] uppercase tracking-wider" style={{ fontFamily: 'Barlow, sans-serif' }}>
-            Qual o ramo?
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {NICHOS.map(n => {
-              const ativo = form.business_type === n.key
-              return (
-                <button type="button" key={n.key} onClick={() => set('business_type', n.key)}
-                  className="flex items-center gap-2 h-11 px-3 rounded-xl border-2 transition-all text-left"
-                  style={{ borderColor: ativo ? '#1A56FF' : '#EAE8E1', background: ativo ? '#EEF2FF' : '#F7F6F3' }}>
-                  <span className="text-lg">{n.emoji}</span>
-                  <span className="text-sm font-semibold text-[#1C1B18]">{n.label}</span>
-                </button>
-              )
-            })}
           </div>
         </div>
 
