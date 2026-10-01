@@ -15,6 +15,18 @@ export default function CadastroPage() {
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  // Código de loja: só pra quem JÁ usava o Orbi e vai assumir a loja que existe (com leads e WhatsApp)
+  const [temCodigo, setTemCodigo] = useState(false)
+  const [codigo, setCodigo] = useState('')
+  const [lojaDoCodigo, setLojaDoCodigo] = useState<string | null>(null)
+
+  async function conferirCodigo(c: string): Promise<string | null> {
+    const res = await fetch('/api/cadastro/validar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo: c }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok ? (data.loja as string) : null
+  }
 
   function set(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -31,13 +43,34 @@ export default function CadastroPage() {
 
     setLoading(true)
 
+    // confere o código ANTES de criar a conta: se não valer, a pessoa ficaria com login e sem loja
+    const codigoLimpo = codigo.trim()
+    if (codigoLimpo) {
+      const loja = await conferirCodigo(codigoLimpo)
+      if (!loja) {
+        setError('Código da loja inválido ou já usado. Confira com quem te enviou, ou apague o campo para criar uma loja nova.')
+        setLoading(false)
+        return
+      }
+    }
+
     const supabase = createClient()
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
     })
 
-    if (authError || !authData.user) {
+    // E-mail que já tem conta: se a senha confere, é a pessoa retomando um cadastro que ficou pela
+    // metade (conta criada, loja não) — segue. Se não confere, manda entrar pelo login.
+    const jaTemConta = (!authError && authData.user?.identities?.length === 0) || (!!authError && /already|registered/i.test(authError.message))
+    if (jaTemConta) {
+      const { error: loginErr } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password })
+      if (loginErr) {
+        setError('Este e-mail já tem conta. Use "Entrar" com a sua senha.')
+        setLoading(false)
+        return
+      }
+    } else if (authError || !authData.user) {
       setError(authError?.message ?? 'Erro ao criar conta.')
       setLoading(false)
       return
@@ -46,7 +79,7 @@ export default function CadastroPage() {
     const res = await fetch('/api/setup-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, companyName: form.company, phone: form.phone }),
+      body: JSON.stringify({ name: form.name, companyName: form.company, phone: form.phone, codigo: codigoLimpo || undefined }),
     })
 
     if (!res.ok) {
@@ -120,7 +153,7 @@ export default function CadastroPage() {
             <div className="relative">
               <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
               <input placeholder="Meu Negócio" value={form.company}
-                onChange={e => set('company', e.target.value)} required
+                onChange={e => set('company', e.target.value)} required={!codigo.trim()}
                 className="w-full h-11 pl-10 pr-3 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
             </div>
           </div>
@@ -153,6 +186,28 @@ export default function CadastroPage() {
               className="w-full h-11 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
           </div>
         </div>
+
+        {/* Código da loja (só pra quem já usava o Orbi) */}
+        {!temCodigo ? (
+          <button type="button" onClick={() => setTemCodigo(true)}
+            className="text-xs font-semibold text-[#1A56FF] hover:underline">
+            Já usava o Orbi? Tenho um código da loja
+          </button>
+        ) : (
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#2E2D29] uppercase tracking-wider"
+              style={{ fontFamily: 'Barlow, sans-serif' }}>
+              Código da loja
+            </label>
+            <input placeholder="XXXXX-XXXXX" value={codigo} autoComplete="off" spellCheck={false}
+              onChange={e => { setCodigo(e.target.value.toUpperCase()); setLojaDoCodigo(null) }}
+              onBlur={async () => { if (codigo.trim()) setLojaDoCodigo(await conferirCodigo(codigo.trim())) }}
+              className="w-full h-11 px-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm font-mono tracking-widest text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10" />
+            {lojaDoCodigo
+              ? <p className="text-xs text-[#0DB57A] flex items-center gap-1"><Check className="size-3" strokeWidth={2.5} /> Você vai entrar na loja <strong>{lojaDoCodigo}</strong>, com os contatos e o WhatsApp que já estavam ligados.</p>
+              : <p className="text-xs text-[#8C8880]">Com o código você entra na sua loja já existente. Sem ele, cria-se uma loja nova e vazia.</p>}
+          </div>
+        )}
 
         {/* Senha */}
         <div className="space-y-1.5">
