@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 
 type Mode = 'login' | 'recovery'
 
@@ -16,7 +16,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [recoverySent, setRecoverySent] = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -31,80 +30,44 @@ export default function LoginPage() {
     router.refresh()
   }
 
-  async function handleRecovery(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true); setError(null)
-    const supabase = createClient()
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/redefinir-senha`,
-    })
-    setLoading(false)
-    if (error) { setError('Não foi possível enviar o e-mail. Verifique o endereço.'); return }
-    setRecoverySent(true)
-  }
-
   const inputCls = "w-full h-12 pl-10 pr-4 rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] text-sm text-[#1C1B18] placeholder:text-[#C8C5BB] outline-none transition-all focus:border-[#1A56FF] focus:bg-white focus:ring-4 focus:ring-[#1A56FF]/10"
   const labelCls = "text-xs font-semibold text-[#2E2D29] uppercase tracking-wider"
 
   // === MODO RECUPERAÇÃO ===
+  // Sem e-mail: quem redefine a senha é quem administra o acesso — o dono da loja (para vendedores)
+  // e o suporte do Orbi (para o dono). Nada é enviado por e-mail.
   if (mode === 'recovery') {
     return (
       <div className="space-y-7">
-        {recoverySent ? (
-          <div className="text-center space-y-4 py-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#E6F9F3] flex items-center justify-center mx-auto">
-              <CheckCircle2 className="size-8 text-[#0DB57A]" strokeWidth={1.5} />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>
-                E-mail enviado!
-              </h1>
-              <p className="text-sm text-[#8C8880] mt-1.5 leading-relaxed">
-                Enviamos um link de recuperação para<br />
-                <strong className="text-[#1C1B18]">{email}</strong>.<br />
-                Verifique sua caixa de entrada e spam.
-              </p>
-            </div>
-            <button onClick={() => { setMode('login'); setRecoverySent(false) }}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1A56FF] hover:underline">
-              <ArrowLeft className="size-4" /> Voltar ao login
-            </button>
+        <button onClick={() => { setMode('login'); setError(null) }}
+          className="inline-flex items-center gap-1.5 text-sm text-[#8C8880] hover:text-[#1A56FF] transition-colors">
+          <ArrowLeft className="size-4" /> Voltar
+        </button>
+        <div>
+          <h1 className="text-2xl font-black text-[#1C1B18] leading-tight" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
+            Esqueci minha senha
+          </h1>
+          <p className="text-sm text-[#8C8880] mt-1">Quem redefine depende de quem você é:</p>
+        </div>
+        <div className="space-y-3">
+          <div className="rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] p-4">
+            <p className="text-sm font-bold text-[#1C1B18]">Sou vendedor ou atendente</p>
+            <p className="text-sm text-[#8C8880] mt-1 leading-relaxed">
+              Peça ao dono da loja. Ele define uma nova senha para você na tela <strong className="text-[#1C1B18]">Vendedores</strong>.
+            </p>
           </div>
-        ) : (
-          <>
-            <button onClick={() => { setMode('login'); setError(null) }}
-              className="inline-flex items-center gap-1.5 text-sm text-[#8C8880] hover:text-[#1A56FF] transition-colors">
-              <ArrowLeft className="size-4" /> Voltar
-            </button>
-            <div>
-              <h1 className="text-2xl font-black text-[#1C1B18] leading-tight" style={{ fontFamily: 'Fraunces, serif', letterSpacing: '-0.02em' }}>
-                Recuperar senha
-              </h1>
-              <p className="text-sm text-[#8C8880] mt-1">
-                Informe seu e-mail e enviaremos um link para criar uma nova senha.
-              </p>
-            </div>
-            {error && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">
-                <span className="shrink-0 mt-0.5">⚠️</span>{error}
-              </div>
-            )}
-            <form onSubmit={handleRecovery} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className={labelCls} style={{ fontFamily: 'Barlow, sans-serif' }}>E-mail</label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#C8C5BB]" />
-                  <input type="email" placeholder="seu@email.com" value={email} onChange={e => setEmail(e.target.value)} required className={inputCls} />
-                </div>
-              </div>
-              <button type="submit" disabled={loading}
-                className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60"
-                style={{ fontFamily: 'Barlow, sans-serif', letterSpacing: '0.3px', background: 'linear-gradient(135deg, #1A56FF 0%, #1445DD 100%)', boxShadow: '0 4px 24px rgba(26,86,255,0.35)' }}>
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <><span>Enviar link de recuperação</span><ArrowRight className="size-4" /></>}
-              </button>
-            </form>
-          </>
-        )}
+          <div className="rounded-xl border border-[#EAE8E1] bg-[#F7F6F3] p-4">
+            <p className="text-sm font-bold text-[#1C1B18]">Sou o dono da loja</p>
+            <p className="text-sm text-[#8C8880] mt-1 leading-relaxed">
+              Fale com o suporte do Orbi, o mesmo contato que te passou o acesso. Você recebe uma senha temporária e troca por uma sua em <strong className="text-[#1C1B18]">Configurações, Alterar senha</strong>.
+            </p>
+          </div>
+        </div>
+        <button onClick={() => { setMode('login'); setError(null) }}
+          className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all active:scale-[0.98]"
+          style={{ fontFamily: 'Barlow, sans-serif', letterSpacing: '0.3px', background: 'linear-gradient(135deg, #1A56FF 0%, #1445DD 100%)', boxShadow: '0 4px 24px rgba(26,86,255,0.35)' }}>
+          Voltar ao login
+        </button>
       </div>
     )
   }

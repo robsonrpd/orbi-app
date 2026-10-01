@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { GlowCard } from '@/components/orbi/glow-card'
 import { createVendedor, updateVendedor, deleteVendedor } from '@/lib/actions/vendedores'
-import { criarLoginVendedor, removerLoginVendedor } from '@/lib/actions/vendedor-login'
+import { criarLoginVendedor, removerLoginVendedor, redefinirSenhaVendedor } from '@/lib/actions/vendedor-login'
 import { Users, Plus, Phone, Mail, Trash2, Loader2, X, Check, Edit2, ShieldCheck, Lock, KeyRound, LogIn } from 'lucide-react'
 import { PERMISSOES as ALL_AREAS } from '@/lib/permissoes'
 
@@ -35,8 +35,20 @@ export function VendedoresClient({ vendedores, termo = { singular: 'Vendedor', p
   const [senhaLogin, setSenhaLogin] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginMsg, setLoginMsg] = useState<{ ok?: string; err?: string } | null>(null)
-  const [credenciais, setCredenciais] = useState<{ email: string; senha: string } | null>(null)
+  const [credenciais, setCredenciais] = useState<{ email: string; senha: string; redefinida?: boolean } | null>(null)
   const [copiado, setCopiado] = useState(false)
+  const [novaSenha, setNovaSenha] = useState('')
+
+  // Esqueceu a senha: o dono define uma nova aqui (sem e-mail) e entrega ao vendedor
+  async function redefinirSenha() {
+    if (!editing) return
+    setLoginLoading(true); setLoginMsg(null)
+    const r = await redefinirSenhaVendedor(editing.id, novaSenha)
+    setLoginLoading(false)
+    if (r?.error) { setLoginMsg({ err: r.error }); return }
+    setCredenciais({ email: r.email ?? editing.email ?? '', senha: novaSenha, redefinida: true })
+    setNovaSenha('')
+  }
 
   async function removerLogin() {
     if (!editing) return
@@ -224,7 +236,7 @@ export function VendedoresClient({ vendedores, termo = { singular: 'Vendedor', p
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.75)', backdropFilter: 'blur(6px)' }}>
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-[#E6F9F3] flex items-center justify-center mx-auto mb-3"><Check className="size-6 text-[#0DB57A]" strokeWidth={2} /></div>
-            <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Acesso criado! 🎉</p>
+            <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{credenciais.redefinida ? 'Senha redefinida! 🔑' : 'Acesso criado! 🎉'}</p>
             <p className="text-sm text-[#8C8880] mt-1 mb-4">Entregue estas credenciais ao {termo.singular.toLowerCase()}. Ele entra em <strong>/login</strong>.</p>
             <div className="rounded-xl bg-[#F7F6F3] border border-[#EAE8E1] p-3 text-left text-sm space-y-1 mb-3">
               <p><span className="text-[#8C8880]">E-mail:</span> <strong className="text-[#1C1B18] break-all">{credenciais.email}</strong></p>
@@ -315,14 +327,27 @@ export function VendedoresClient({ vendedores, termo = { singular: 'Vendedor', p
                   <p className="text-xs font-bold text-[#2E2D29] uppercase tracking-wider">Acesso ao sistema (login próprio)</p>
                 </div>
                 {editing?.temLogin ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-1.5 text-sm text-[#0DB57A] font-semibold">
-                      <Check className="size-4" /> Já entra com o e-mail dele.
-                    </span>
-                    <button type="button" onClick={removerLogin} disabled={loginLoading}
-                      className="text-xs font-semibold text-red-500 hover:underline shrink-0">
-                      {loginLoading ? '...' : 'Remover acesso'}
-                    </button>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-1.5 text-sm text-[#0DB57A] font-semibold">
+                        <Check className="size-4" /> Já entra com o e-mail dele.
+                      </span>
+                      <button type="button" onClick={removerLogin} disabled={loginLoading}
+                        className="text-xs font-semibold text-red-500 hover:underline shrink-0">
+                        {loginLoading ? '...' : 'Remover acesso'}
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 pt-2 border-t border-[#EAE8E1]">
+                      <p className="text-xs text-[#8C8880]">Esqueceu a senha? Defina uma nova e entregue a ele:</p>
+                      <div className="flex gap-2">
+                        <input value={novaSenha} onChange={e => setNovaSenha(e.target.value)} type="text"
+                          placeholder="Nova senha (mín. 6)" className={inputCls} />
+                        <button type="button" onClick={redefinirSenha} disabled={loginLoading || novaSenha.length < 6}
+                          className="shrink-0 h-11 px-4 rounded-xl text-sm font-bold text-white disabled:opacity-40" style={{ background: '#1A56FF' }}>
+                          {loginLoading ? '...' : 'Redefinir'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-1.5">

@@ -5,6 +5,8 @@ import { Topbar } from '@/components/orbi/topbar'
 import { SettingsForm } from './settings-form'
 import { NichoSelector } from '@/components/orbi/nicho-selector'
 import { MinhasEmpresas } from '@/components/orbi/minhas-empresas'
+import { AlterarSenha } from '@/components/orbi/alterar-senha'
+import { MODO_CRM } from '@/lib/produto'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -21,8 +23,10 @@ export default async function SettingsPage() {
     <div className="flex flex-col flex-1 overflow-hidden">
       <Topbar title="Configurações" subtitle="Gerencie o seu negócio e conta" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <NichoSelector atual={company?.business_type ?? null} />
+        {/* o ramo só decidia quais módulos apareciam; no CRM de leads não há o que escolher */}
+        {!MODO_CRM && <NichoSelector atual={company?.business_type ?? null} />}
         <SettingsForm userData={userData} userEmail={user?.email ?? ''} waInstance={waInstance} />
+        <AlterarSenha email={user?.email ?? ''} />
         {userRow?.role !== 'staff' && (
           <div className="max-w-2xl">
             <MinhasEmpresas />

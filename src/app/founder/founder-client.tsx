@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { updateCompanyStatus, updateCompanyPlan, extendTrial } from '@/lib/actions/founder'
+import { updateCompanyStatus, updateCompanyPlan, extendTrial, gerarSenhaTemporariaDono } from '@/lib/actions/founder'
 import { acessarComo } from '@/lib/actions/impersonate'
 import {
   Eye, Building2, Clock, CheckCircle2, AlertTriangle,
   Search, MoreVertical, Loader2, Calendar, DollarSign, Ban, Check,
-  Sun, Moon, Mail, MessageCircle, Download, X, LogIn
+  Sun, Moon, Mail, MessageCircle, Download, X, LogIn, KeyRound
 } from 'lucide-react'
 
 type Company = {
@@ -42,6 +42,18 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
   const [filter, setFilter] = useState('todos')
   const [menu, setMenu] = useState<{ company: Company; x: number; y: number } | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // senha temporária do dono: aparece só nesta janela, uma vez — não fica salva em lugar nenhum
+  const [senhaModal, setSenhaModal] = useState<{
+    loja: string; carregando: boolean; erro?: string; email?: string; nome?: string | null; senha?: string; copiado?: boolean
+  } | null>(null)
+
+  async function redefinirSenhaDono(c: Company) {
+    setMenu(null)
+    setSenhaModal({ loja: c.name, carregando: true })
+    const r = await gerarSenhaTemporariaDono(c.id)
+    if ('error' in r && r.error) { setSenhaModal({ loja: c.name, carregando: false, erro: r.error }); return }
+    setSenhaModal({ loja: c.name, carregando: false, email: r.email, nome: r.nome, senha: r.senha })
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem('founder_theme')
@@ -251,6 +263,43 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
         </div>
       </div>
 
+      {/* Senha temporária do dono */}
+      {senhaModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}
+          onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6" style={{ background: t.menuBg, border: `1px solid ${t.menuBorder}`, color: t.text }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold flex items-center gap-2"><KeyRound className="size-4 text-[#6B8CFF]" /> Senha do dono — {senhaModal.loja}</p>
+              <button onClick={() => setSenhaModal(null)} aria-label="Fechar"><X className="size-4" /></button>
+            </div>
+            {senhaModal.carregando && <div className="flex justify-center py-6"><Loader2 className="size-5 animate-spin" /></div>}
+            {senhaModal.erro && <p className="text-sm text-red-400 py-2">{senhaModal.erro}</p>}
+            {senhaModal.senha && (
+              <>
+                <p className="text-xs mb-3 opacity-70">A senha antiga deixou de valer. <strong>Esta senha aparece só agora</strong> — copie e envie ao dono.</p>
+                <div className="rounded-xl p-3 text-sm space-y-1 mb-3" style={{ background: t.inputBg, border: `1px solid ${t.rowBorder}` }}>
+                  <p><span className="opacity-60">E-mail:</span> <strong className="break-all">{senhaModal.email}</strong></p>
+                  <p><span className="opacity-60">Senha temporária:</span> <strong className="font-mono tracking-wider">{senhaModal.senha}</strong></p>
+                </div>
+                <button
+                  onClick={() => {
+                    const nome = senhaModal.nome?.split(' ')[0]
+                    const texto = `${nome ? `Olá, ${nome}! ` : ''}Seu novo acesso ao Orbi:\nE-mail: ${senhaModal.email}\nSenha temporária: ${senhaModal.senha}\nEntrar: ${window.location.origin}/login\n\nDepois de entrar, troque por uma senha sua em Configurações > Alterar senha.`
+                    navigator.clipboard.writeText(texto)
+                    setSenhaModal(s => s && { ...s, copiado: true })
+                  }}
+                  className="w-full h-11 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-1.5" style={{ background: '#1A56FF' }}>
+                  {senhaModal.copiado ? <><Check className="size-4" /> Mensagem copiada</> : <>Copiar mensagem pronta</>}
+                </button>
+              </>
+            )}
+            {!senhaModal.carregando && (
+              <button onClick={() => setSenhaModal(null)} className="w-full h-10 mt-2 rounded-xl text-sm font-semibold opacity-70 hover:opacity-100">Fechar</button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Menu de ações (fixed — escapa do overflow da tabela) */}
       {menu && (
         <div className="fixed z-50 w-56 rounded-xl shadow-2xl overflow-hidden"
@@ -261,6 +310,10 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
           <button onClick={() => acessarComo(menu.company.id)}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[#F59E0B]/10" style={{ color: '#F59E0B' }}>
             <LogIn className="size-3.5" /> Acessar como esta ótica
+          </button>
+          <button onClick={() => redefinirSenhaDono(menu.company)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[#1A56FF]/10" style={{ color: '#6B8CFF' }}>
+            <KeyRound className="size-3.5" /> Redefinir senha do dono
           </button>
           <div style={{ borderTop: `1px solid ${t.menuBorder}` }} />
 

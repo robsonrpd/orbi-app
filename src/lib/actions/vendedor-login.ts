@@ -87,3 +87,24 @@ export async function removerLoginVendedor(vendedorId: string) {
   revalidatePath('/dashboard/vendedores')
   return { success: true }
 }
+
+/**
+ * O dono define uma NOVA senha para um vendedor que já tem acesso (esqueceu a senha).
+ * Não envolve e-mail: a tela mostra a senha ao dono, que a entrega ao vendedor.
+ */
+export async function redefinirSenhaVendedor(vendedorId: string, novaSenha: string) {
+  const a = await assertAdmin()
+  if ('error' in a) return { error: a.error }
+  if ((novaSenha ?? '').length < 6) return { error: 'A senha precisa de ao menos 6 caracteres.' }
+
+  const service = createServiceClient()
+  // o vendedor tem que ser DESTA empresa: sem o company_id o dono de uma loja mudaria a senha de outra
+  const { data: u } = await service.from('users')
+    .select('id, email').eq('vendedor_id', vendedorId).eq('company_id', a.companyId).maybeSingle()
+  if (!u) return { error: 'Esse vendedor ainda não tem acesso. Crie o acesso primeiro.' }
+
+  const { error } = await service.auth.admin.updateUserById(u.id, { password: novaSenha })
+  if (error) return { error: 'Não foi possível redefinir a senha.' }
+
+  return { success: true, email: u.email as string }
+}
