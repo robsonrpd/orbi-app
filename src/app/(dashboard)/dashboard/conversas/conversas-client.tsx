@@ -160,8 +160,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
           return [...mapa.values()].sort(ordenar)
         })
         if (sel && novas.some(n => n.id === sel)) carregarMensagens(sel)
-      } else if (sel && ticks % 3 === 0) {
-        carregarMensagens(sel) // a cada ~30 s: pega mensagem apagada ou confirmação que não mexe na ordem da lista
+      } else if (sel && ticks % 12 === 0) {
+        carregarMensagens(sel) // a cada ~2 min: pega mensagem apagada que não mexe na ordem da lista
       }
       // 10 s (e não 6): cada passada é uma execução na Vercel, e o plano Hobby limita a 1 milhão por mês —
       // com várias abas abertas o dia todo, 6 s passaria disso. Dez segundos é imperceptível numa conversa.
