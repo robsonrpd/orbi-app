@@ -43,10 +43,16 @@ export async function POST(req: NextRequest) {
     const instance = instanceEmpresa
     const limiteAlerta = new Date(agora - sla.minutosAlerta * 60_000).toISOString()
 
+    // Janela de 3 dias + só quem ainda não foi alertado/transferido. Sem isso esta consulta baixava o
+    // histórico de todas as conversas da loja a cada 10 minutos (megabytes por rodada, o dia todo) e
+    // tratava lead parado há meses como atraso de hoje: alerta de demora só faz sentido pra conversa recente.
+    const janelaSla = new Date(agora - 3 * 24 * 3_600_000).toISOString()
     const { data: convs } = await service.from('conversations')
       .select('id, numero, contact_id, messages, last_message_at, sla_alertado_em, sla_transferido_em')
       .eq('company_id', empresa.id)
       .lt('last_message_at', limiteAlerta)
+      .gte('last_message_at', janelaSla)
+      .or('sla_alertado_em.is.null,sla_transferido_em.is.null')
       .order('last_message_at', { ascending: false })
       .limit(200)
 
@@ -137,10 +143,17 @@ async function processarFollowups(
   const menorHoras = Math.min(...cfg.etapas.map(e => e.horas))
   const limite = new Date(agora - menorHoras * 3_600_000).toISOString()
 
+  // Janela: a maior espera configurada + 48 h de folga (mínimo 7 dias). Conversa mais velha que isso já
+  // passou do ponto de cobrança — e sem o corte esta consulta baixava o histórico da loja inteira a cada
+  // rodada. Também deixa de fora quem já esgotou as cobranças (followup_etapa >= nº de etapas).
+  const maiorEspera = Math.max(...cfg.etapas.map(e => e.horas))
+  const janela = new Date(agora - Math.max(7 * 24, maiorEspera + 48) * 3_600_000).toISOString()
   const { data: convs } = await service.from('conversations')
     .select('id, numero, contact_id, messages, last_message_at, followup_etapa, followup_ultimo_em')
     .eq('company_id', empresa.id)
     .lt('last_message_at', limite)
+    .gte('last_message_at', janela)
+    .or(`followup_etapa.is.null,followup_etapa.lt.${cfg.etapas.length}`)
     .order('last_message_at', { ascending: false })
     .limit(300)
 

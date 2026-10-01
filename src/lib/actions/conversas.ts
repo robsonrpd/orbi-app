@@ -27,38 +27,14 @@ export type ConversaResumo = {
   grupoNome: string | null
 }
 
-/** Lista todas as conversas da empresa, mais recentes primeiro. */
-export async function listarConversas(): Promise<ConversaResumo[]> {
-  const companyId = await getCompanyId()
-  if (!companyId) return []
+type LinhaResumo = {
+  id: string; numero: string; contact_id: string | null; grupo_nome: string | null
+  last_message_at: string | null; handled_by_ai: boolean | null
+  ultima_texto: string | null; ultima_midia: string | null
+}
 
-  const service = createServiceClient()
-  // Limite explícito: sem ele o Postgrest corta em 1000 por conta própria, em silêncio —
-  // uma loja movimentada passaria disso e perderia conversas sem nenhum aviso.
-  // 500 cobre meses de histórico numa lista de conversas.
-  const LIMITE_CONVERSAS = 500
-
-  // grupo_nome é opcional: se a coluna ainda não existir, a lista carrega sem ela
-  let convs: Record<string, unknown>[] | null = null
-  const comGrupo = await service
-    .from('conversations')
-    .select('id, numero, contact_id, messages, last_message_at, handled_by_ai, grupo_nome')
-    .eq('company_id', companyId)
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .limit(LIMITE_CONVERSAS)
-  if (comGrupo.error) {
-    const semGrupo = await service
-      .from('conversations')
-      .select('id, numero, contact_id, messages, last_message_at, handled_by_ai')
-      .eq('company_id', companyId)
-      .order('last_message_at', { ascending: false, nullsFirst: false })
-      .limit(LIMITE_CONVERSAS)
-    convs = semGrupo.data as never
-  } else {
-    convs = comGrupo.data as never
-  }
-
-  const lista: Record<string, unknown>[] = convs ?? []
+/** Junta nome e foto do contato a cada linha do resumo e monta o formato que a tela usa. */
+async function montarResumos(service: ReturnType<typeof createServiceClient>, lista: LinhaResumo[]): Promise<ConversaResumo[]> {
   const contactIds = [...new Set(lista.map(c => c.contact_id).filter(Boolean))] as string[]
 
   // Busca em lotes: com muitos contatos, um .in() único monta uma URL gigante e o
@@ -69,31 +45,85 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
   for (let i = 0; i < contactIds.length; i += LOTE) {
     const fatia = contactIds.slice(i, i + LOTE)
     const { data, error } = await service.from('contacts').select('id, name, foto_url').in('id', fatia)
-    if (error) { console.error('[listarConversas contatos]', error.message); continue }
+    if (error) { console.error('[montarResumos contatos]', error.message); continue }
     for (const ct of data ?? []) contatoPorId.set(ct.id, ct as never)
   }
 
   return lista.map(c => {
-    const msgs = (c.messages as Msg[] | null) ?? []
-    const ultima = msgs[msgs.length - 1]
-    const contato = c.contact_id ? contatoPorId.get(c.contact_id as string) : null
-    const numero = c.numero as string
-    const grupo = ehGrupo(numero)
-    const grupoNome = (c.grupo_nome as string | null) ?? null
+    const contato = c.contact_id ? contatoPorId.get(c.contact_id) : null
+    const grupo = ehGrupo(c.numero)
+    const grupoNome = c.grupo_nome ?? null
     return {
-      id: c.id as string,
-      numero,
-      contactId: (c.contact_id as string | null) ?? null,
+      id: c.id,
+      numero: c.numero,
+      contactId: c.contact_id ?? null,
       // grupo não tem contato: o nome vem do assunto do grupo
       contactName: grupo ? (grupoNome ?? 'Grupo') : (contato?.name ?? null),
       contactFoto: grupo ? null : (contato?.foto_url ?? null),
-      lastMessageAt: (c.last_message_at as string | null) ?? null,
+      lastMessageAt: c.last_message_at ?? null,
       handledByAi: !!c.handled_by_ai,
-      ultimaMensagem: ultima ? (ultima.midia ? `📎 ${ultima.midia.tipo}` : ultima.content) : '',
+      ultimaMensagem: c.ultima_midia ? `📎 ${c.ultima_midia}` : (c.ultima_texto ?? ''),
       grupo,
       grupoNome,
     }
   })
+}
+
+// Limite explícito: sem ele o Postgrest corta em 1000 por conta própria, em silêncio —
+// uma loja movimentada passaria disso e perderia conversas sem nenhum aviso.
+// 500 cobre meses de histórico numa lista de conversas.
+const LIMITE_CONVERSAS = 500
+
+/**
+ * Lista as conversas da empresa, mais recentes primeiro.
+ *
+ * Usa a função conversas_resumo (supabase/conversas-resumo.sql), que devolve só o texto da última
+ * mensagem. A consulta antiga baixava o histórico inteiro das 500 conversas (~1,2 MB por chamada) e a
+ * tela chamava isso a cada 6 segundos — estourava a cota gratuita do Supabase em um dia.
+ */
+export async function listarConversas(): Promise<ConversaResumo[]> {
+  const companyId = await getCompanyId()
+  if (!companyId) return []
+  const service = createServiceClient()
+
+  const { data, error } = await service.rpc('conversas_resumo', { p_company: companyId, p_limite: LIMITE_CONVERSAS })
+  if (!error) return montarResumos(service, (data ?? []) as LinhaResumo[])
+
+  // Plano B se a função não existir (banco restaurado sem rodar o SQL): funciona, só é pesado.
+  console.error('[listarConversas] conversas_resumo indisponível, usando consulta completa:', error.message)
+  const { data: convs } = await service
+    .from('conversations')
+    .select('id, numero, contact_id, messages, last_message_at, handled_by_ai, grupo_nome')
+    .eq('company_id', companyId)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(LIMITE_CONVERSAS)
+  const linhas: LinhaResumo[] = ((convs ?? []) as Record<string, unknown>[]).map(c => {
+    const msgs = (c.messages as Msg[] | null) ?? []
+    const ultima = msgs[msgs.length - 1]
+    return {
+      id: c.id as string, numero: c.numero as string, contact_id: (c.contact_id as string | null) ?? null,
+      grupo_nome: (c.grupo_nome as string | null) ?? null, last_message_at: (c.last_message_at as string | null) ?? null,
+      handled_by_ai: !!c.handled_by_ai,
+      ultima_texto: ultima ? (ultima.content ?? '').slice(0, 160) : null,
+      ultima_midia: ultima?.midia?.tipo ?? null,
+    }
+  })
+  return montarResumos(service, linhas)
+}
+
+/**
+ * Só as conversas com atividade a partir de `desde` (a marca d'água da lista que a tela já tem).
+ * É o que a tela consulta a cada poucos segundos: quando nada mudou a resposta é vazia, em vez de
+ * baixar a lista toda de novo.
+ */
+export async function conversasAtualizadas(desde: string | null): Promise<ConversaResumo[]> {
+  const companyId = await getCompanyId()
+  if (!companyId) return []
+  const service = createServiceClient()
+  const { data, error } = await service.rpc('conversas_resumo', { p_company: companyId, p_limite: 100, p_desde: desde })
+  if (error) { console.error('[conversasAtualizadas]', error.message); return [] }
+  const linhas = (data ?? []) as LinhaResumo[]
+  return linhas.length ? montarResumos(service, linhas) : []
 }
 
 /** Foto de perfil de um número (usado na tela de "nova conversa", antes de existir uma conversation). Busca no cadastro; se não tiver, tenta buscar ao vivo na Evolution API e salva pra próxima vez. */

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { type FunilColuna } from '@/lib/funil'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
+import { obterMensagens } from '@/lib/actions/conversas'
 import { setResponsavel, avisarVendedorHandoff, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
 import {
   X, Send, Loader2, Mail, MapPin, Tag, Check, MessageCircle, DollarSign, Plus,
@@ -47,6 +48,17 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   vendedores: Vendedor[]; msgsProntas: MsgPronta[]; produtosLoja: ProdLoja[]; colunas: FunilColuna[]
 }) {
   const [msgs, setMsgs] = useState<Msg[]>(lead.messages ?? [])
+  // a página do funil NÃO envia mais as mensagens de todos os leads (pesava megabytes por visita):
+  // a conversa deste lead é buscada aqui, só quando o painel abre
+  const [carregandoMsgs, setCarregandoMsgs] = useState(!!lead.conversaId && (lead.messages?.length ?? 0) === 0)
+  useEffect(() => {
+    if (!lead.conversaId) { setCarregandoMsgs(false); return }
+    let vivo = true
+    obterMensagens(lead.conversaId)
+      .then(m => { if (vivo) setMsgs(m as Msg[]) })
+      .finally(() => { if (vivo) setCarregandoMsgs(false) })
+    return () => { vivo = false }
+  }, [lead.conversaId])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erroChat, setErroChat] = useState<string | null>(null)
@@ -229,7 +241,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
           {/* Chat */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-[#EAE8E1]">
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ECE5DD]">
-              {msgs.length === 0 && <p className="text-sm text-[#8C8880] text-center py-10">Nenhuma mensagem ainda.</p>}
+              {carregandoMsgs && msgs.length === 0 && <div className="flex justify-center py-10"><Loader2 className="size-5 animate-spin text-[#8C8880]" /></div>}
+              {!carregandoMsgs && msgs.length === 0 && <p className="text-sm text-[#8C8880] text-center py-10">Nenhuma mensagem ainda.</p>}
               {msgs.map((m, i) => {
                 const meu = m.role === 'assistant' || m.role === 'human'
                 return (

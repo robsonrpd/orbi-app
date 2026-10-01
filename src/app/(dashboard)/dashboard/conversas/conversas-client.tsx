@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
-  listarConversas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
+  listarConversas, conversasAtualizadas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
   apagarMensagem,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
@@ -114,13 +114,60 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     obterFotoContato(telParam).then(setFotoNaoEncontrada)
   }, [naoEncontrada, telParam])
 
+  // Atualização automática. Antes: a cada 6 s baixava a lista inteira COM o histórico de todas as
+  // conversas (~1,2 MB por vez, ~6 GB por dia numa aba aberta — a cota gratuita do banco é 5 GB por MÊS).
+  // Agora: pergunta só "o que mudou desde a última marca?" e, quando nada mudou, a resposta é vazia.
+  const marcaRef = useRef<string | null>(null)
+  const selecionadaRef = useRef<string | null>(selecionada)
+  const ocultoDesdeRef = useRef<number | null>(null)
+  useEffect(() => { selecionadaRef.current = selecionada }, [selecionada])
   useEffect(() => {
-    const t = setInterval(() => {
-      listarConversas().then(setConversas)
-      if (selecionada) carregarMensagens(selecionada)
-    }, 6000)
-    return () => clearInterval(t)
-  }, [selecionada, carregarMensagens])
+    marcaRef.current = conversas.reduce<string | null>((m, c) => (c.lastMessageAt && (!m || c.lastMessageAt > m)) ? c.lastMessageAt : m, null)
+  }, [conversas])
+
+  useEffect(() => {
+    let ticks = 0
+    let ultimoCompleto = Date.now()
+    const ordenar = (a: ConversaResumo, b: ConversaResumo) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? '')
+
+    // voltou pra aba depois de um tempo: o que mudou nesse intervalo pode passar do que a
+    // atualização incremental traz (até 100), então a próxima passada recarrega a lista inteira
+    const aoMudarVisibilidade = () => {
+      if (document.hidden) { ocultoDesdeRef.current = Date.now(); return }
+      if (ocultoDesdeRef.current && Date.now() - ocultoDesdeRef.current > 60_000) ultimoCompleto = 0
+      ocultoDesdeRef.current = null
+    }
+    document.addEventListener('visibilitychange', aoMudarVisibilidade)
+
+    const t = setInterval(async () => {
+      if (document.hidden) return // aba em segundo plano não consome nada
+      ticks++
+      const sel = selecionadaRef.current
+
+      // a cada 5 min (ou ao voltar de uma ausência longa) recarrega tudo: pega nome/foto alterados
+      if (Date.now() - ultimoCompleto > 5 * 60_000) {
+        ultimoCompleto = Date.now()
+        listarConversas().then(setConversas)
+        if (sel) carregarMensagens(sel)
+        return
+      }
+
+      const novas = await conversasAtualizadas(marcaRef.current)
+      if (novas.length > 0) {
+        setConversas(prev => {
+          const mapa = new Map(prev.map(c => [c.id, c]))
+          for (const n of novas) mapa.set(n.id, n)
+          return [...mapa.values()].sort(ordenar)
+        })
+        if (sel && novas.some(n => n.id === sel)) carregarMensagens(sel)
+      } else if (sel && ticks % 3 === 0) {
+        carregarMensagens(sel) // a cada ~30 s: pega mensagem apagada ou confirmação que não mexe na ordem da lista
+      }
+      // 10 s (e não 6): cada passada é uma execução na Vercel, e o plano Hobby limita a 1 milhão por mês —
+      // com várias abas abertas o dia todo, 6 s passaria disso. Dez segundos é imperceptível numa conversa.
+    }, 10_000)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoMudarVisibilidade) }
+  }, [carregarMensagens])
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' })

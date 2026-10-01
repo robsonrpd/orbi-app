@@ -19,8 +19,11 @@ export default async function FunilPage() {
         .eq('company_id', companyId).eq('active', true).order('created_at', { ascending: false }).range(de, ate) as never,
       'funil contatos',
     ),
-    buscarTodos<{ id: string; numero: string | null; messages: Msg[] | null; last_message_at: string | null }>(
-      (de, ate) => service.from('conversations').select('id, numero, messages, last_message_at')
+    // SEM as mensagens: os cartões só precisam saber se há conversa e quando foi a última atividade.
+    // Antes isto baixava o histórico de todos os leads a cada visita (~2,5 MB numa loja de 1.200 leads,
+    // tudo enviado também ao navegador) — o painel do lead agora busca só a conversa que for aberta.
+    buscarTodos<{ id: string; numero: string | null; last_message_at: string | null }>(
+      (de, ate) => service.from('conversations').select('id, numero, last_message_at')
         .eq('company_id', companyId).range(de, ate) as never,
       'funil conversas',
     ),
@@ -41,10 +44,10 @@ export default async function FunilPage() {
   try { msgsProntas = ((await service.from('mensagens_prontas').select('id, titulo, texto').eq('company_id', companyId).order('titulo')).data ?? []) as never } catch {}
   try { produtos = ((await service.from('lead_produtos').select('id, contact_id, nome, quantidade, preco, desconto').eq('company_id', companyId)).data ?? []) as never } catch {}
 
-  const convPorChave = new Map<string, { id: string; messages: Msg[]; last_message_at: string }>()
+  const convPorChave = new Map<string, { id: string; last_message_at: string }>()
   for (const c of convs ?? []) {
     const k = (c.numero ?? '').replace(/\D/g, '').slice(-8)
-    if (k) convPorChave.set(k, { id: c.id as string, messages: (c.messages as Msg[]) ?? [], last_message_at: c.last_message_at as string })
+    if (k) convPorChave.set(k, { id: c.id as string, last_message_at: c.last_message_at as string })
   }
 
   const leads = (contacts ?? []).map(l => {
@@ -53,7 +56,7 @@ export default async function FunilPage() {
     return {
       ...l,
       conversaId: conv?.id ?? null,
-      messages: conv?.messages ?? [],
+      messages: [] as Msg[], // carregadas sob demanda pelo painel do lead (obterMensagens)
       lastMessageAt: conv?.last_message_at ?? null,
       tarefas: tarefas.filter(t => t.contact_id === l.id),
       anotacoes: anotacoes.filter(a => a.contact_id === l.id),
