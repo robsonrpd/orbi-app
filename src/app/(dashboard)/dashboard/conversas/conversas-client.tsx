@@ -26,7 +26,11 @@ function FotoContato({ src, className, children }: { src: string | null; classNa
 }
 
 /** Tiques como no WhatsApp: ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida. Sem status conhecido = enviada. */
-function Tiques({ status }: { status?: Msg['status'] }) {
+function Tiques({ status, ts }: { status?: Msg['status']; ts?: string }) {
+  // Sem status conhecido: se acabou de ser enviada é "enviada" (o aviso de entrega chega em segundos);
+  // se é ANTIGA (de antes dos tiques existirem) não dá pra saber — melhor não mostrar nada do que
+  // afirmar "enviada" de uma mensagem que o cliente já leu.
+  if (!status && ts && Date.now() - new Date(ts).getTime() > 10 * 60_000) return null
   const lida = status === 'read'
   const Icone = status === 'delivered' || lida ? CheckCheck : Check
   return (
@@ -450,7 +454,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                       {m.ts && (
                         <span className={`block text-[10px] mt-1 text-right ${m.apagada ? 'text-[#C8C5BB]' : minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
                           {fmtHora(m.ts)}
-                          {minha && !m.apagada && <Tiques status={m.status} />}
+                          {minha && !m.apagada && <Tiques status={m.status} ts={m.ts} />}
                         </span>
                       )}
                     </div>

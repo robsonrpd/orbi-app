@@ -13,6 +13,7 @@ create extension if not exists pg_net;
 -- 2. Remove agendamentos anteriores (pra poder rodar de novo sem duplicar)
 select cron.unschedule('orbi-vigia-whatsapp')  where exists (select 1 from cron.job where jobname = 'orbi-vigia-whatsapp');
 select cron.unschedule('orbi-sla-atendimento') where exists (select 1 from cron.job where jobname = 'orbi-sla-atendimento');
+select cron.unschedule('orbi-fotos')           where exists (select 1 from cron.job where jobname = 'orbi-fotos');
 select cron.unschedule('orbi-broadcast')       where exists (select 1 from cron.job where jobname = 'orbi-broadcast'); -- remove o antigo, se existir
 
 -- ------------------------------------------------------------
@@ -43,6 +44,23 @@ select cron.schedule(
   $$
   select net.http_post(
     url     := 'https://www.orbisistem.com.br/api/cron/sla-atendimento',
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer pCx5yzdjQ73QRJYIokKre0XOb-zE7Xf1"}'::jsonb,
+    body    := '{}'::jsonb
+  );
+  $$
+);
+
+-- ------------------------------------------------------------
+-- 4b. FOTOS DE PERFIL — a cada 10 minutos (minutos 5, 15, 25...: não colide com o SLA)
+--     Migra pro Storage as fotos guardadas como link do WhatsApp (o link vence em ~2 semanas) e busca
+--     as que faltam: 8 contatos por loja por rodada, com pausa (é consulta ao WhatsApp, não é pra martelar).
+-- ------------------------------------------------------------
+select cron.schedule(
+  'orbi-fotos',
+  '5-59/10 * * * *',
+  $$
+  select net.http_post(
+    url     := 'https://www.orbisistem.com.br/api/cron/fotos',
     headers := '{"Content-Type":"application/json","Authorization":"Bearer pCx5yzdjQ73QRJYIokKre0XOb-zE7Xf1"}'::jsonb,
     body    := '{}'::jsonb
   );

@@ -258,7 +258,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                         <span className={`block text-[10px] mt-1 text-right ${m.role === 'assistant' ? 'text-white/60' : 'text-[#8C8880]'}`}>
                           {fmtHoraMsg(m.ts)}
                           {m.role === 'human' && (() => {
-                            // ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida (sem status conhecido = enviada)
+                            // ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida. Sem status e ANTIGA = não mostra (não dá pra saber)
+                            if (!m.status && m.ts && Date.now() - new Date(m.ts).getTime() > 10 * 60_000) return null
                             const lida = m.status === 'read'
                             const Icone = m.status === 'delivered' || lida ? CheckCheck : Check
                             return <Icone className={`inline size-3.5 ml-1 -mb-[3px] ${lida ? 'text-[#53BDEB]' : 'text-[#6B7C65]'}`} strokeWidth={2.2} />
