@@ -556,11 +556,67 @@ on conflict (id) do update set public = true;
 
 
 -- ------------------------------------------------------------
--- 7b. FUNÇÃO DA LISTA DE CONVERSAS (leve)
---     (mesmo conteúdo de supabase/conversas-resumo.sql)
+-- 7b. TIQUES DE LEITURA, FOTOS DE PERFIL E BUSCAS DIRETAS (funções leves)
+--     (mesmo conteúdo de supabase/status-mensagens.sql e supabase/fotos.sql)
 -- ------------------------------------------------------------
 
-create or replace function public.conversas_resumo(
+alter table public.conversations add column if not exists status_em timestamptz;
+
+-- permite achar a conversa de uma mensagem pelo id do WhatsApp (waId) sem varrer a tabela
+create index if not exists conversations_messages_gin
+  on public.conversations using gin (messages jsonb_path_ops);
+
+-- busca de contato por telefone (8 últimos dígitos, ignorando formatação)
+create index if not exists contacts_fone8_idx
+  on public.contacts (company_id, (right(regexp_replace(phone, '\D', '', 'g'), 8)));
+
+create or replace function public.atualizar_status_mensagem(
+  p_company uuid,
+  p_wa_id   text,
+  p_status  text
+)
+returns int
+language plpgsql
+as $$
+declare
+  novo int := case p_status when 'sent' then 1 when 'delivered' then 2 when 'read' then 3 else 0 end;
+  n    int := 0;
+begin
+  if novo = 0 or coalesce(p_wa_id, '') = '' then return 0; end if;
+
+  update public.conversations c
+     set messages = (
+           select jsonb_agg(
+                    case
+                      when e.m ->> 'waId' = p_wa_id
+                       and (case coalesce(e.m ->> 'status', '')
+                              when 'read' then 3 when 'delivered' then 2 when 'sent' then 1 else 0 end) < novo
+                      then jsonb_set(e.m, '{status}', to_jsonb(p_status))
+                      else e.m
+                    end
+                    order by e.i)
+             from jsonb_array_elements(c.messages) with ordinality as e(m, i)
+         ),
+         status_em = now()
+   where c.company_id = p_company
+     and c.messages @> jsonb_build_array(jsonb_build_object('waId', p_wa_id))
+     -- só toca a conversa se alguma mensagem ainda vai MUDAR de status (evita reescrever o jsonb à toa)
+     and exists (
+           select 1 from jsonb_array_elements(c.messages) x(m)
+            where x.m ->> 'waId' = p_wa_id
+              and (case coalesce(x.m ->> 'status', '')
+                     when 'read' then 3 when 'delivered' then 2 when 'sent' then 1 else 0 end) < novo);
+
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+-- (achar_contato_por_telefone é criada em fotos.sql, que devolve também foto_tentada_em)
+
+-- Lista de conversas: agora devolve atividade_em e filtra por ela (troca a assinatura, por isso o drop).
+drop function if exists public.conversas_resumo(uuid, int, timestamptz);
+create function public.conversas_resumo(
   p_company uuid,
   p_limite  int default 500,
   p_desde   timestamptz default null
@@ -571,6 +627,7 @@ returns table (
   contact_id      uuid,
   grupo_nome      text,
   last_message_at timestamptz,
+  atividade_em    timestamptz,
   handled_by_ai   boolean,
   ultima_texto    text,
   ultima_midia    text
@@ -578,21 +635,72 @@ returns table (
 language sql
 stable
 as $$
-  select c.id, c.numero, c.contact_id, c.grupo_nome, c.last_message_at, c.handled_by_ai,
+  select c.id, c.numero, c.contact_id, c.grupo_nome, c.last_message_at,
+         greatest(c.last_message_at, c.status_em),
+         c.handled_by_ai,
          left(c.messages -> -1 ->> 'content', 160),
          c.messages -> -1 -> 'midia' ->> 'tipo'
   from public.conversations c
   where c.company_id = p_company
-    and (p_desde is null or c.last_message_at >= p_desde)
+    and (p_desde is null or greatest(c.last_message_at, c.status_em) >= p_desde)
   order by c.last_message_at desc nulls last
   limit least(greatest(p_limite, 1), 1000)
 $$;
 
--- Esta função lê conversas de QUALQUER empresa pelo id informado. Funções em "public" ficam
--- expostas à API pública por padrão: sem o revoke abaixo, quem tivesse a chave anônima
--- poderia listar as conversas de outra loja. Só o servidor (service_role) pode chamar.
-revoke all on function public.conversas_resumo(uuid, int, timestamptz) from public, anon, authenticated;
-grant execute on function public.conversas_resumo(uuid, int, timestamptz) to service_role;
+-- Estas funções leem/gravam conversas de QUALQUER empresa pelo id informado. Funções em "public" ficam
+-- expostas à API pública por padrão: sem o revoke, quem tivesse a chave anônima mexeria em outra loja.
+-- Só o servidor (service_role) pode chamar.
+revoke all on function public.atualizar_status_mensagem(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.conversas_resumo(uuid, int, timestamptz)    from public, anon, authenticated;
+grant execute on function public.atualizar_status_mensagem(uuid, text, text) to service_role;
+grant execute on function public.conversas_resumo(uuid, int, timestamptz)    to service_role;
+
+
+alter table public.contacts add column if not exists foto_tentada_em timestamptz;
+
+-- troca a assinatura (agora devolve foto_tentada_em), por isso o drop
+drop function if exists public.achar_contato_por_telefone(uuid, text);
+create function public.achar_contato_por_telefone(p_company uuid, p_chave text)
+returns table (id uuid, phone text, foto_url text, foto_tentada_em timestamptz)
+language sql
+stable
+as $$
+  select c.id, c.phone, c.foto_url, c.foto_tentada_em
+    from public.contacts c
+   where c.company_id = p_company
+     and right(regexp_replace(c.phone, '\D', '', 'g'), 8) = p_chave
+   order by c.created_at
+   limit 1
+$$;
+
+-- Contatos que precisam de foto, na ordem em que vale a pena buscar:
+--   1º) quem tem link do WhatsApp (vai vencer): migrar pro Storage; revisita no máximo 1x por dia
+--   2º) quem não tem foto: tenta de novo a cada 3 dias (a pessoa pode ter colocado uma)
+-- dentro de cada grupo, as conversas mais recentes primeiro (são as que aparecem no topo da lista).
+create or replace function public.fotos_pendentes(p_company uuid, p_limite int default 8)
+returns table (id uuid, phone text, foto_url text)
+language sql
+stable
+as $$
+  select c.id, c.phone, c.foto_url
+    from public.contacts c
+    left join lateral (
+      select max(v.last_message_at) as ultima from public.conversations v where v.contact_id = c.id
+    ) u on true
+   where c.company_id = p_company
+     and c.active
+     and (
+          (c.foto_url like '%pps.whatsapp.net%' and (c.foto_tentada_em is null or c.foto_tentada_em < now() - interval '1 day'))
+       or (c.foto_url is null                  and (c.foto_tentada_em is null or c.foto_tentada_em < now() - interval '3 days'))
+     )
+   order by (c.foto_url is not null) desc, u.ultima desc nulls last
+   limit least(greatest(p_limite, 1), 50)
+$$;
+
+revoke all on function public.achar_contato_por_telefone(uuid, text) from public, anon, authenticated;
+revoke all on function public.fotos_pendentes(uuid, int)             from public, anon, authenticated;
+grant execute on function public.achar_contato_por_telefone(uuid, text) to service_role;
+grant execute on function public.fotos_pendentes(uuid, int)             to service_role;
 
 
 -- ------------------------------------------------------------

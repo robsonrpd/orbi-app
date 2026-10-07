@@ -6,13 +6,13 @@ import { responderLead, atualizarLead } from '@/lib/actions/lead'
 import { obterMensagens } from '@/lib/actions/conversas'
 import { setResponsavel, avisarVendedorHandoff, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
 import {
-  X, Send, Loader2, Mail, MapPin, Tag, Check, MessageCircle, DollarSign, Plus,
+  X, Send, Loader2, Mail, MapPin, Tag, Check, CheckCheck, MessageCircle, DollarSign, Plus,
   UserCog, CheckSquare, Square, Calendar, Zap, StickyNote, Trash2, Star, ShoppingBag, FileText,
   Paperclip, Mic, Image as ImageIcon, Square as StopIcon,
 } from 'lucide-react'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; status?: 'sent' | 'delivered' | 'read' }
 
 function fmtHoraMsg(ts: string | undefined) {
   if (!ts) return null
@@ -257,6 +257,12 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                       {fmtHoraMsg(m.ts) && (
                         <span className={`block text-[10px] mt-1 text-right ${m.role === 'assistant' ? 'text-white/60' : 'text-[#8C8880]'}`}>
                           {fmtHoraMsg(m.ts)}
+                          {m.role === 'human' && (() => {
+                            // ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida (sem status conhecido = enviada)
+                            const lida = m.status === 'read'
+                            const Icone = m.status === 'delivered' || lida ? CheckCheck : Check
+                            return <Icone className={`inline size-3.5 ml-1 -mb-[3px] ${lida ? 'text-[#53BDEB]' : 'text-[#6B7C65]'}`} strokeWidth={2.2} />
+                          })()}
                         </span>
                       )}
                     </div>

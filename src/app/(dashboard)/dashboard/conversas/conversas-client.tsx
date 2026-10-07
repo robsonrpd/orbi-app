@@ -10,10 +10,30 @@ import {
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
-  AlertTriangle, X, Trash2, Ban, UsersRound,
+  AlertTriangle, X, Trash2, Ban, UsersRound, Check, CheckCheck,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read' }
+
+/**
+ * Foto do contato com plano B: se a imagem falhar ao carregar (link vencido, arquivo apagado), mostra as
+ * iniciais em vez do ícone de imagem quebrada.
+ */
+function FotoContato({ src, className, children }: { src: string | null; className: string; children: React.ReactNode }) {
+  const [erro, setErro] = useState(false)
+  if (src && !erro) return <img src={src} alt="" className={`${className} object-cover`} onError={() => setErro(true)} />
+  return <>{children}</>
+}
+
+/** Tiques como no WhatsApp: ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida. Sem status conhecido = enviada. */
+function Tiques({ status }: { status?: Msg['status'] }) {
+  const lida = status === 'read'
+  const Icone = status === 'delivered' || lida ? CheckCheck : Check
+  return (
+    <Icone className={`inline size-3.5 ml-1 -mb-[3px] ${lida ? 'text-[#53BDEB]' : 'text-[#6B7C65]'}`} strokeWidth={2.2}
+      aria-label={lida ? 'Lida' : status === 'delivered' ? 'Entregue' : 'Enviada'} />
+  )
+}
 
 const EMOJIS = ['😀', '😂', '😍', '👍', '🙏', '🎉', '❤️', '😊', '😢', '😮', '🔥', '✅', '👏', '🙌', '😅', '🤔', '😎', '💪', '📅', '⏰']
 
@@ -122,7 +142,12 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const ocultoDesdeRef = useRef<number | null>(null)
   useEffect(() => { selecionadaRef.current = selecionada }, [selecionada])
   useEffect(() => {
-    marcaRef.current = conversas.reduce<string | null>((m, c) => (c.lastMessageAt && (!m || c.lastMessageAt > m)) ? c.lastMessageAt : m, null)
+    // marca d'água = maior atividade (mensagem nova OU leitura/entrega), não só a última mensagem:
+    // senão uma leitura nunca passaria da marca e o tique azul só apareceria na recarga de 5 min
+    marcaRef.current = conversas.reduce<string | null>((m, c) => {
+      const t = c.atividadeEm ?? c.lastMessageAt
+      return t && (!m || t > m) ? t : m
+    }, null)
   }, [conversas])
 
   useEffect(() => {
@@ -300,14 +325,12 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
             return (
               <button key={c.id} onClick={() => setSelecionada(c.id)}
                 className={`w-full flex items-start gap-2.5 px-3 py-3 border-b border-[#EAE8E1] text-left transition-colors ${ativo ? 'bg-white' : 'hover:bg-white/60'}`}>
-                {c.contactFoto ? (
-                  <img src={c.contactFoto} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
-                ) : (
+                <FotoContato key={c.contactFoto ?? 'sem'} src={c.contactFoto} className="w-10 h-10 rounded-full shrink-0">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
                     style={{ background: c.grupo ? '#8B5CF6' : '#1A56FF' }}>
                     {c.grupo ? <UsersRound className="size-5" strokeWidth={1.5} /> : iniciais(nome)}
                   </div>
-                )}
+                </FotoContato>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-bold text-[#1C1B18] truncate">{nome}</p>
@@ -372,14 +395,12 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
         ) : (
           <>
             <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
-              {ativa.contactFoto ? (
-                <img src={ativa.contactFoto} alt="" className="w-9 h-9 rounded-full object-cover" />
-              ) : (
+              <FotoContato key={ativa.contactFoto ?? 'sem'} src={ativa.contactFoto} className="w-9 h-9 rounded-full">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
                   style={{ background: ativa.grupo ? '#8B5CF6' : '#1A56FF' }}>
                   {ativa.grupo ? <UsersRound className="size-4.5" strokeWidth={1.5} /> : iniciais(ativa.contactName ?? ativa.numero)}
                 </div>
-              )}
+              </FotoContato>
               <div>
                 <p className="text-sm font-bold text-[#1C1B18] flex items-center gap-1.5">
                   {ativa.contactName ?? ativa.numero}
@@ -429,6 +450,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                       {m.ts && (
                         <span className={`block text-[10px] mt-1 text-right ${m.apagada ? 'text-[#C8C5BB]' : minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
                           {fmtHora(m.ts)}
+                          {minha && !m.apagada && <Tiques status={m.status} />}
                         </span>
                       )}
                     </div>

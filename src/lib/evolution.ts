@@ -45,7 +45,7 @@ export async function criarInstancia(instance: string, webhookUrl: string) {
         url: webhookUrl,
         byEvents: false,
         base64: true,
-        events: ['MESSAGES_UPSERT', 'QRCODE_UPDATED', 'CONNECTION_UPDATE'],
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'QRCODE_UPDATED', 'CONNECTION_UPDATE'],
       },
     }),
   })
@@ -69,7 +69,7 @@ export async function setWebhook(instance: string, url: string) {
         url,
         byEvents: false,
         base64: true,
-        events: ['MESSAGES_UPSERT', 'QRCODE_UPDATED', 'CONNECTION_UPDATE'],
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'QRCODE_UPDATED', 'CONNECTION_UPDATE'],
       },
     }),
   })

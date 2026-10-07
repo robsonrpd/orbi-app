@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getMediaBase64, buscarFotoPerfil, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
+import { getMediaBase64, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
+import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 import { buscarTodos } from '@/lib/supabase/paginacao'
 import { sendEmail } from '@/lib/email'
@@ -9,7 +10,18 @@ import { sendEmail } from '@/lib/email'
 // (sem isso, a Evolution API pode reenviar o mesmo webhook e processar a mensagem 2x)
 export const maxDuration = 60
 
-// Evolution chama este endpoint a cada mensagem recebida (evento MESSAGES_UPSERT).
+/** Traduz o status que a Evolution manda (texto ou o número do WhatsApp) para o que a tela mostra. */
+function statusDoAviso(s: unknown): 'sent' | 'delivered' | 'read' | null {
+  if (typeof s === 'number') return s === 2 ? 'sent' : s === 3 ? 'delivered' : s >= 4 ? 'read' : null
+  const t = String(s ?? '').toUpperCase()
+  if (t === 'SERVER_ACK') return 'sent'
+  if (t === 'DELIVERY_ACK') return 'delivered'
+  if (t === 'READ' || t === 'PLAYED') return 'read'
+  return null
+}
+
+// Evolution chama este endpoint a cada mensagem recebida (MESSAGES_UPSERT) e a cada aviso de
+// entrega/leitura de uma mensagem enviada (MESSAGES_UPDATE).
 export async function POST(req: NextRequest) {
   // valida o token secreto (se configurado) — barra POSTs forjados de terceiros
   const tokenEsperado = process.env.WHATSAPP_WEBHOOK_TOKEN
@@ -74,30 +86,72 @@ export async function POST(req: NextRequest) {
   }
 
 
+  // Aviso de ENTREGA/LEITURA de uma mensagem que a loja enviou (✓ enviada, ✓✓ entregue, ✓✓ azul lida).
+  // Tem que ser tratado ANTES de carregar qualquer coisa: o aviso chega 2 a 3 vezes por mensagem
+  // enviada e só precisa do id da mensagem. A gravação é feita dentro do banco (não baixa o histórico).
+  if (evento.includes('messages.update')) {
+    const avisos = Array.isArray(raw) ? raw : raw ? [raw] : []
+    await Promise.all(avisos.map(async (a) => {
+      const u = a as { keyId?: string; key?: { id?: string; fromMe?: boolean }; fromMe?: boolean; status?: unknown; update?: { status?: unknown } }
+      const waId = u.keyId ?? u.key?.id
+      const fromMe = u.fromMe ?? u.key?.fromMe
+      if (!waId || fromMe === false) return // só interessa mensagem que NÓS enviamos
+      const status = statusDoAviso(u.status ?? u.update?.status)
+      if (!status) return
+      const { error } = await service.rpc('atualizar_status_mensagem', { p_company: company!.id, p_wa_id: waId, p_status: status })
+      if (error) console.error('[wh status]', error.message)
+    }))
+    return NextResponse.json({ ok: true })
+  }
+
   // a partir daqui, só mensagens
   if (evento && !evento.includes('messages')) return NextResponse.json({ ok: true })
   const eventos = Array.isArray(raw) ? raw : raw ? [raw] : []
   if (eventos.length === 0) return NextResponse.json({ ok: true })
 
-  // contatos da empresa (id por últimos 8 dígitos do telefone) — captura sem duplicar
-  // paginado: truncar aqui faria o webhook não encontrar clientes já cadastrados
-  // e criar contato duplicado pra quem já é cliente
-  const contatos = await buscarTodos<{ id: string; phone: string | null; foto_url: string | null }>(
-    (de, ate) => service.from('contacts').select('id, phone, foto_url').eq('company_id', company!.id).range(de, ate),
-    'webhook contatos',
-  )
+  // Contatos da empresa (id por últimos 8 dígitos do telefone) — captura sem duplicar.
+  // Achados SOB DEMANDA, direto no banco: antes cada mensagem baixava a tabela inteira de contatos
+  // (~100 KB numa loja de 1.200) só pra achar um. Se a função do banco não existir, cai no
+  // carregamento completo (paginado: truncar em 1.000 faria o webhook não achar clientes já
+  // cadastrados e criar contato duplicado).
   const idPorChave = new Map<string, string>()
   const semFotoPorChave = new Map<string, string>()
-  for (const c of contatos ?? []) {
-    const k = (c.phone ?? '').replace(/\D/g, '').slice(-8)
-    if (!k) continue
-    idPorChave.set(k, c.id)
-    if (!c.foto_url) semFotoPorChave.set(k, c.id)
+  const consultados = new Set<string>()
+  let carregouTodos = false
+  async function carregarContato(chave: string) {
+    if (!chave || consultados.has(chave) || carregouTodos) return
+    consultados.add(chave)
+    const { data, error } = await service.rpc('achar_contato_por_telefone', { p_company: company!.id, p_chave: chave })
+    if (!error) {
+      const c = (data as { id: string; foto_url: string | null; foto_tentada_em: string | null }[] | null)?.[0]
+      if (c) { idPorChave.set(chave, c.id); if (precisaFoto(c)) semFotoPorChave.set(chave, c.id) }
+      return
+    }
+    console.error('[wh contato] busca direta indisponível, carregando todos:', error.message)
+    const todos = await buscarTodos<{ id: string; phone: string | null; foto_url: string | null; foto_tentada_em: string | null }>(
+      (de, ate) => service.from('contacts').select('id, phone, foto_url, foto_tentada_em').eq('company_id', company!.id).range(de, ate),
+      'webhook contatos',
+    )
+    carregouTodos = true
+    for (const c of todos) {
+      const k = (c.phone ?? '').replace(/\D/g, '').slice(-8)
+      if (!k) continue
+      idPorChave.set(k, c.id)
+      if (precisaFoto(c)) semFotoPorChave.set(k, c.id)
+    }
   }
+  // sem foto E (nunca tentou OU a última tentativa foi há mais de 6 h). Antes tentava a CADA mensagem de
+  // quem esconde a foto (até 8 s de espera no webhook); agora quem falha é revisitado pela rotina de fundo.
+  const precisaFoto = (c: { foto_url: string | null; foto_tentada_em: string | null }) =>
+    !c.foto_url && (!c.foto_tentada_em || Date.now() - new Date(c.foto_tentada_em).getTime() > 6 * 3600_000)
 
   for (const ev of eventos) {
-    const e = ev as { key?: { remoteJid?: string; fromMe?: boolean; id?: string }; message?: Record<string, unknown>; pushName?: string }
-    const jid = e.key?.remoteJid ?? ''
+    const e = ev as { key?: { remoteJid?: string; remoteJidAlt?: string; fromMe?: boolean; id?: string }; message?: Record<string, unknown>; pushName?: string }
+    // O WhatsApp passou a identificar parte dos contatos por um código interno (@lid) que NÃO é o
+    // telefone. O telefone real vem em remoteJidAlt. Sem isto o "telefone" do lead virava esse código:
+    // não dá pra responder, não casa com o cadastro e a foto de perfil nunca é encontrada.
+    const alt = e.key?.remoteJidAlt ?? ''
+    const jid = (e.key?.remoteJid ?? '').endsWith('@lid') && alt.endsWith('@s.whatsapp.net') ? alt : (e.key?.remoteJid ?? '')
     if (!jid) continue
     // grupo entra como UMA conversa: guarda o JID inteiro e não vira lead.
     // Cada participante virando contato entupiria o CRM de gente que não é cliente.
@@ -153,6 +207,7 @@ export async function POST(req: NextRequest) {
     }
 
     // CAPTURA AUTOMÁTICA: número novo vira lead na 1ª coluna do funil (personalizada ou "Novo Lead")
+    await carregarContato(chave)
     let contactId = chave ? idPorChave.get(chave) : undefined
     if (chave && !contactId) {
       const funilColunas = (company.settings as { funil_colunas?: { key: string }[] })?.funil_colunas
@@ -190,8 +245,9 @@ export async function POST(req: NextRequest) {
     if (chave && semFotoPorChave.has(chave)) {
       semFotoPorChave.delete(chave)
       try {
-        const foto = await buscarFotoPerfil(instance, numero)
-        if (foto) await service.from('contacts').update({ foto_url: foto } as never).eq('id', contactId ?? idPorChave.get(chave))
+        const idFoto = contactId ?? idPorChave.get(chave)
+        // baixa, reduz e hospeda a imagem (o link do WhatsApp vence em ~2 semanas) e registra a tentativa
+        if (idFoto) await atualizarFotoDoContato(service, { companyId: company.id, contactId: idFoto, instance, phone: numero })
       } catch (err) { console.error('[wh fotoPerfil]', err) }
     }
   }

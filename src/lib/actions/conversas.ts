@@ -5,9 +5,10 @@ import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 import { acharConversaPorNumero, acharContatoPorTelefone, mensagensDaConversa } from '@/lib/conversas-busca'
+import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read' }
 
 /** Extrai o id que o WhatsApp devolve ao enviar — é o que permite apagar a mensagem depois. */
 function idDoEnvio(data: unknown): string | undefined {
@@ -21,6 +22,8 @@ export type ConversaResumo = {
   contactName: string | null
   contactFoto: string | null
   lastMessageAt: string | null
+  /** Última mudança na conversa: mensagem nova OU leitura/entrega. É a marca d'água da atualização incremental. */
+  atividadeEm: string | null
   handledByAi: boolean
   ultimaMensagem: string
   grupo: boolean
@@ -29,7 +32,7 @@ export type ConversaResumo = {
 
 type LinhaResumo = {
   id: string; numero: string; contact_id: string | null; grupo_nome: string | null
-  last_message_at: string | null; handled_by_ai: boolean | null
+  last_message_at: string | null; atividade_em?: string | null; handled_by_ai: boolean | null
   ultima_texto: string | null; ultima_midia: string | null
 }
 
@@ -61,6 +64,7 @@ async function montarResumos(service: ReturnType<typeof createServiceClient>, li
       contactName: grupo ? (grupoNome ?? 'Grupo') : (contato?.name ?? null),
       contactFoto: grupo ? null : (contato?.foto_url ?? null),
       lastMessageAt: c.last_message_at ?? null,
+      atividadeEm: c.atividade_em ?? c.last_message_at ?? null,
       handledByAi: !!c.handled_by_ai,
       ultimaMensagem: c.ultima_midia ? `📎 ${c.ultima_midia}` : (c.ultima_texto ?? ''),
       grupo,
@@ -147,9 +151,15 @@ export async function obterFotoContato(telefone: string): Promise<string | null>
 
   const numeroFmt = d.startsWith('55') ? d : `55${d}`
   try {
-    const foto = await buscarFotoPerfil(instance, numeroFmt)
-    if (foto && contato) await service.from('contacts').update({ foto_url: foto } as never).eq('id', contato.id)
-    return foto
+    if (contato) {
+      // contato cadastrado: baixa e hospeda a foto (o link do WhatsApp vence em ~2 semanas) e devolve o link permanente
+      const r = await atualizarFotoDoContato(service, { companyId, contactId: contato.id, instance, phone: numeroFmt })
+      if (r !== 'ok') return null
+      const { data } = await service.from('contacts').select('foto_url').eq('id', contato.id).maybeSingle()
+      return (data as { foto_url: string | null } | null)?.foto_url ?? null
+    }
+    // ainda não é contato: só mostra a foto na tela (não há onde guardar)
+    return await buscarFotoPerfil(instance, numeroFmt)
   } catch { return null }
 }
 
