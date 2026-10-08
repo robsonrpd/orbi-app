@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { updateCompanyStatus, updateCompanyPlan, extendTrial, gerarSenhaTemporariaDono } from '@/lib/actions/founder'
+import { updateCompanyStatus, updateCompanyPlan, extendTrial, gerarSenhaTemporariaDono, resumoExclusaoCliente, excluirCliente } from '@/lib/actions/founder'
+import type { ResumoExclusao, ResultadoExclusao } from '@/lib/exclusao-cliente'
+import { useRouter } from 'next/navigation'
 import { acessarComo } from '@/lib/actions/impersonate'
 import {
   Eye, Building2, Clock, CheckCircle2, AlertTriangle,
   Search, MoreVertical, Loader2, Calendar, DollarSign, Ban, Check,
-  Sun, Moon, Mail, MessageCircle, Download, X, LogIn, KeyRound
+  Sun, Moon, Mail, MessageCircle, Download, X, LogIn, KeyRound, Trash2
 } from 'lucide-react'
 
 type Company = {
@@ -46,6 +48,30 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
   const [senhaModal, setSenhaModal] = useState<{
     loja: string; carregando: boolean; erro?: string; email?: string; nome?: string | null; senha?: string; copiado?: boolean
   } | null>(null)
+
+  // exclusão DEFINITIVA de cliente: mostra o que será apagado e só libera o botão com o nome digitado
+  const router = useRouter()
+  const [excluirModal, setExcluirModal] = useState<{
+    loja: string; id: string; carregando: boolean; erro?: string; resumo?: ResumoExclusao
+    nome: string; apagando: boolean; resultado?: ResultadoExclusao
+  } | null>(null)
+  const normalizar = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
+
+  async function abrirExclusao(c: Company) {
+    setMenu(null)
+    setExcluirModal({ loja: c.name, id: c.id, carregando: true, nome: '', apagando: false })
+    const r = await resumoExclusaoCliente(c.id)
+    if ('error' in r && r.error) { setExcluirModal(m => m && { ...m, carregando: false, erro: r.error }); return }
+    setExcluirModal(m => m && { ...m, carregando: false, resumo: 'resumo' in r ? r.resumo : undefined })
+  }
+
+  async function confirmarExclusao() {
+    if (!excluirModal) return
+    setExcluirModal(m => m && { ...m, apagando: true, erro: undefined })
+    const r = await excluirCliente(excluirModal.id, excluirModal.nome)
+    if ('error' in r && r.error) { setExcluirModal(m => m && { ...m, apagando: false, erro: r.error }); return }
+    setExcluirModal(m => m && { ...m, apagando: false, resultado: 'resultado' in r ? r.resultado : undefined })
+  }
 
   async function redefinirSenhaDono(c: Company) {
     setMenu(null)
@@ -263,6 +289,83 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
         </div>
       </div>
 
+      {/* Excluir cliente (definitivo) */}
+      {excluirModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}
+          onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: t.menuBg, border: `1px solid ${t.menuBorder}`, color: t.text }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold flex items-center gap-2 text-red-500"><Trash2 className="size-4" /> Excluir cliente — {excluirModal.loja}</p>
+              {!excluirModal.apagando && <button onClick={() => { const feito = !!excluirModal.resultado; setExcluirModal(null); if (feito) router.refresh() }} aria-label="Fechar"><X className="size-4" /></button>}
+            </div>
+
+            {excluirModal.carregando && <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin" /></div>}
+            {excluirModal.erro && <p className="text-sm text-red-400 py-2">{excluirModal.erro}</p>}
+
+            {/* loja protegida (tem a conta do fundador) */}
+            {excluirModal.resumo?.protegida && <p className="text-sm py-2" style={{ color: '#F59E0B' }}>{excluirModal.resumo.protegida}</p>}
+
+            {/* confirmação */}
+            {excluirModal.resumo && !excluirModal.resumo.protegida && !excluirModal.resultado && (
+              <>
+                <div className="rounded-xl p-3 mb-3 text-sm space-y-1.5" style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.35)' }}>
+                  <p className="font-bold text-red-500">Isto apaga para sempre. Não dá para desfazer e não existe backup.</p>
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    <li><strong>{excluirModal.resumo.leads}</strong> leads e <strong>{excluirModal.resumo.conversas}</strong> conversas</li>
+                    <li>
+                      <strong>{excluirModal.resumo.usuarios.length}</strong> login(s)
+                      {excluirModal.resumo.usuarios.length > 0 && <span className="opacity-70">: {excluirModal.resumo.usuarios.map(u => u.email).join(', ')}</span>}
+                    </li>
+                    <li>
+                      {excluirModal.resumo.conexoes.length > 0
+                        ? <>WhatsApp: <strong>{excluirModal.resumo.conexoes.length}</strong> conexão(ões) será(ão) desvinculada(s) do celular da loja</>
+                        : excluirModal.resumo.conexoesVerificadas ? 'Nenhuma conexão de WhatsApp encontrada' : 'Não consegui verificar o WhatsApp agora (servidor fora do ar)'}
+                    </li>
+                    <li>Fotos, anexos e tudo o mais que a loja guardou</li>
+                  </ul>
+                </div>
+                <label className="block text-xs mb-1 opacity-80">
+                  Para confirmar, digite o nome da loja: <strong className="select-all">{excluirModal.resumo.nome}</strong>
+                </label>
+                <input value={excluirModal.nome} onChange={e => setExcluirModal(m => m && { ...m, nome: e.target.value })}
+                  placeholder="Nome da loja" autoComplete="off" disabled={excluirModal.apagando}
+                  className="w-full h-11 px-3 rounded-xl text-sm outline-none mb-3" style={{ background: t.inputBg, border: `1px solid ${t.rowBorder}`, color: t.text }} />
+                <button onClick={confirmarExclusao}
+                  disabled={excluirModal.apagando || normalizar(excluirModal.nome) !== normalizar(excluirModal.resumo.nome)}
+                  className="w-full h-11 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-35" style={{ background: '#DC2626' }}>
+                  {excluirModal.apagando ? <><Loader2 className="size-4 animate-spin" /> Apagando…</> : <><Trash2 className="size-4" /> Excluir definitivamente</>}
+                </button>
+              </>
+            )}
+
+            {/* resultado */}
+            {excluirModal.resultado && (
+              <div className="text-sm space-y-2">
+                <p className="font-bold flex items-center gap-1.5" style={{ color: '#0DB57A' }}><Check className="size-4" /> {excluirModal.resultado.nome} foi excluída.</p>
+                <ul className="list-disc pl-5 space-y-0.5 opacity-90">
+                  <li>{excluirModal.resultado.leads} leads e {excluirModal.resultado.conversas} conversas apagados</li>
+                  <li>{excluirModal.resultado.usuariosRemovidos} login(s) removido(s){excluirModal.resultado.usuariosMantidos > 0 ? `, ${excluirModal.resultado.usuariosMantidos} mantido(s) por terem outra loja` : ''}</li>
+                  <li>{excluirModal.resultado.arquivos} arquivo(s) apagado(s)</li>
+                  <li>WhatsApp: {excluirModal.resultado.conexoesRemovidas.length} conexão(ões) removida(s)</li>
+                </ul>
+                {(excluirModal.resultado.conexoesFalharam.length > 0 || !excluirModal.resultado.conexoesVerificadas) && (
+                  <p className="text-xs rounded-lg p-2.5" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
+                    {excluirModal.resultado.conexoesFalharam.length > 0
+                      ? <>Não consegui apagar {excluirModal.resultado.conexoesFalharam.length} conexão(ões) do WhatsApp ({excluirModal.resultado.conexoesFalharam.join(', ')}). Ficam sem efeito (a loja não existe mais), mas o celular pode continuar com o aparelho vinculado: peça à pessoa para remover em <strong>WhatsApp, Aparelhos conectados</strong>.</>
+                      : 'O servidor de WhatsApp não respondeu: se havia conexão, o celular pode continuar com o aparelho vinculado (remover em WhatsApp, Aparelhos conectados).'}
+                  </p>
+                )}
+                <button onClick={() => { setExcluirModal(null); router.refresh() }} className="w-full h-10 mt-1 rounded-xl text-sm font-semibold" style={{ background: t.inputBg, border: `1px solid ${t.rowBorder}` }}>Fechar</button>
+              </div>
+            )}
+
+            {!excluirModal.carregando && !excluirModal.resultado && !excluirModal.apagando && (
+              <button onClick={() => setExcluirModal(null)} className="w-full h-10 mt-2 rounded-xl text-sm font-semibold opacity-70 hover:opacity-100">Cancelar</button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Senha temporária do dono */}
       {senhaModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}
@@ -365,6 +468,12 @@ export function FounderClient({ companies, mrr, adminEmail }: { companies: Compa
               <AlertTriangle className="size-3.5 text-[#F59E0B]" /> Marcar como atrasado
             </button>
           )}
+
+          {/* Excluir (definitivo) */}
+          <button onClick={() => abrirExclusao(menu.company)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors" style={{ borderTop: `1px solid ${t.menuBorder}` }}>
+            <Trash2 className="size-3.5" /> Excluir cliente…
+          </button>
         </div>
       )}
     </div>

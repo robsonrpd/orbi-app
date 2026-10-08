@@ -4,6 +4,9 @@ import { getSuperAdmin } from '@/lib/auth/super-admin'
 import { buscarTodos } from '@/lib/supabase/paginacao'
 import { FounderClient } from './founder-client'
 
+// exclusão de cliente chama o Evolution e apaga arquivos: pode levar mais que o limite padrão
+export const maxDuration = 60
+
 const PLAN_PRICE: Record<string, number> = { individual: 97, equipe: 197, ilimitado: 297 }
 
 export default async function FounderPage() {
