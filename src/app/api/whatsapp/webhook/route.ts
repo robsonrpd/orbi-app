@@ -20,6 +20,34 @@ function statusDoAviso(s: unknown): 'sent' | 'delivered' | 'read' | null {
   return null
 }
 
+/**
+ * Hora REAL em que a mensagem foi escrita (o WhatsApp manda em segundos). Antes tudo era carimbado com a
+ * hora em que o Orbi recebeu: normalmente a diferença é de segundos, mas depois de uma queda do servidor o
+ * WhatsApp entrega o acumulado de uma vez — e 14 dias de conversa apareceram como "hoje, 15h42".
+ * Valores estranhos (ausente, futuro, mais velho que 30 dias) caem na hora atual.
+ */
+function horaDaMensagem(ts: unknown): string {
+  const agora = Date.now()
+  let seg = NaN
+  if (typeof ts === 'number') seg = ts
+  else if (typeof ts === 'string') seg = Number(ts)
+  else if (ts && typeof ts === 'object' && 'low' in ts) seg = Number((ts as { low: number }).low) // protobuf Long
+  const ms = seg * 1000
+  if (!Number.isFinite(ms) || ms > agora + 5 * 60_000 || ms < agora - 30 * 86_400_000) return new Date(agora).toISOString()
+  return new Date(ms).toISOString()
+}
+
+/** Acrescenta uma mensagem mantendo a ordem pela hora real (o acumulado pode chegar fora de ordem) e o limite de 40. */
+function juntarMensagens(anteriores: Msg[], nova: Msg): Msg[] {
+  const todas = [...anteriores, nova]
+  const ultima = anteriores[anteriores.length - 1]
+  // só reordena quando a nova é mais ANTIGA que a última (o caso normal é só anexar)
+  if (ultima?.ts && nova.ts && nova.ts < ultima.ts) {
+    todas.sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? '')) // estável: mensagens sem hora ficam onde estavam
+  }
+  return todas.slice(-40)
+}
+
 // Evolution chama este endpoint a cada mensagem recebida (MESSAGES_UPSERT) e a cada aviso de
 // entrega/leitura de uma mensagem enviada (MESSAGES_UPDATE).
 export async function POST(req: NextRequest) {
@@ -146,7 +174,8 @@ export async function POST(req: NextRequest) {
     !c.foto_url && (!c.foto_tentada_em || Date.now() - new Date(c.foto_tentada_em).getTime() > 6 * 3600_000)
 
   for (const ev of eventos) {
-    const e = ev as { key?: { remoteJid?: string; remoteJidAlt?: string; fromMe?: boolean; id?: string }; message?: Record<string, unknown>; pushName?: string }
+    const e = ev as { key?: { remoteJid?: string; remoteJidAlt?: string; fromMe?: boolean; id?: string }; message?: Record<string, unknown>; pushName?: string; messageTimestamp?: unknown }
+    const quando = horaDaMensagem(e.messageTimestamp)
     // O WhatsApp passou a identificar parte dos contatos por um código interno (@lid) que NÃO é o
     // telefone. O telefone real vem em remoteJidAlt. Sem isto o "telefone" do lead virava esse código:
     // não dá pra responder, não casa com o cadastro e a foto de perfil nunca é encontrada.
@@ -202,7 +231,7 @@ export async function POST(req: NextRequest) {
 
     // mensagem enviada PELA LOJA (pelo celular ou pelo Orbi) → registra como saída sem duplicar o eco do Orbi
     if (e.key?.fromMe) {
-      await registrarSaida(service, company.id, numero, conteudo, midia, e.key.id)
+      await registrarSaida(service, company.id, numero, conteudo, midia, e.key.id, quando)
       continue
     }
 
@@ -225,7 +254,7 @@ export async function POST(req: NextRequest) {
     // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
     // em grupo, o texto vai prefixado com quem falou: sem isso a conversa fica ilegível
     const conteudoFinal = grupo && e.pushName?.trim() ? `${e.pushName.trim()}: ${conteudo}` : conteudo
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo)
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo, quando)
 
     // roteiro de boas-vindas: NUNCA em grupo — o bot respondendo num grupo seria um desastre
     if (!grupo) {
@@ -450,10 +479,10 @@ async function atribuirPorRodizio(
 
 async function registrarSaida(
   service: ReturnType<typeof createServiceClient>,
-  companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string,
+  companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string, quando?: string,
 ) {
   const { data: conv } = await service.from('conversations')
-    .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
+    .select('id, messages, last_message_at').eq('company_id', companyId).eq('numero', numero).maybeSingle()
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
 
   // Dedup do eco: tudo que o Orbi envia (resposta manual ou roteiro automático) já é gravado
@@ -476,8 +505,11 @@ async function registrarSaida(
     }
     return
   }
-  const novas: Msg[] = [...anteriores, { role: 'human' as const, content: conteudo, ts: new Date().toISOString(), ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}) }].slice(-40)
-  const patch = { messages: novas, last_message_at: new Date().toISOString() }
+  const ts = quando ?? new Date().toISOString()
+  const novas = juntarMensagens(anteriores, { role: 'human' as const, content: conteudo, ts, ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}) })
+  // a conversa nunca "volta no tempo": mensagem atrasada do acumulado não pode rebaixar a última atividade
+  const anterior = (conv as { last_message_at?: string | null } | null)?.last_message_at
+  const patch = { messages: novas, last_message_at: anterior && anterior > ts ? anterior : ts }
   if (conv) await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
   else await service.from('conversations').insert({ company_id: companyId, contact_id: null, numero, ...patch } as never)
 }
@@ -485,21 +517,24 @@ async function registrarSaida(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean,
+  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean, quando?: string,
 ) {
   const { data: conv } = await service.from('conversations')
-    .select('id, messages').eq('company_id', companyId).eq('numero', numero).maybeSingle()
+    .select('id, messages, last_message_at').eq('company_id', companyId).eq('numero', numero).maybeSingle()
 
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
-  const agora = new Date().toISOString()
-  const novas: Msg[] = [...anteriores, { role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}) }]
+  const agora = quando ?? new Date().toISOString()
+  const novas: Msg[] = juntarMensagens(anteriores, { role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}) })
+  // a conversa nunca "volta no tempo": mensagem atrasada do acumulado não pode rebaixar a última atividade
+  const anteriorEm = (conv as { last_message_at?: string | null } | null)?.last_message_at
+  const ultimaEm = anteriorEm && anteriorEm > agora ? anteriorEm : agora
 
   // NUNCA misturar campos opcionais aqui: se um deles não existir no banco, a gravação
   // inteira falha e a mensagem do cliente se perde — sem erro visível pra ninguém.
   // Salvar a mensagem é o que não pode falhar; o resto vai depois, separado.
   const patch: Record<string, unknown> = {
-    messages: novas.slice(-40),
-    last_message_at: new Date().toISOString(),
+    messages: novas,
+    last_message_at: ultimaEm,
     handled_by_ai: false,
   }
 
