@@ -42,11 +42,19 @@ export async function POST(req: NextRequest) {
   // Estado REAL, direto da Evolution. Antes isto usava o wa_state guardado no banco, que
   // é atualizado por webhook e fica velho: uma loja conectada e recebendo aparecia como
   // 'connecting' e o vigia a ignorava — justamente a loja que ele deveria estar vigiando.
-  const { ok: evoOk, estados } = await listarInstancias()
+  let { ok: evoOk, estados } = await listarInstancias()
   if (!evoOk) {
-    // sem resposta da Evolution não dá pra saber quem deveria estar recebendo; avisar
-    // agora geraria alarme falso pra todo mundo
-    return NextResponse.json({ ok: false, motivo: 'servidor de WhatsApp não respondeu' })
+    // uma falha isolada de rede não pode virar alarme: confirma com uma segunda tentativa
+    await new Promise(r => setTimeout(r, 4000))
+    ;({ ok: evoOk, estados } = await listarInstancias())
+  }
+  if (!evoOk) {
+    // Servidor de WhatsApp FORA DO AR. Sem isto o vigia ficava calado justamente quando o problema era o
+    // servidor: em 08/10 o Evolution parou e ninguém foi avisado por 13 dias — as lojas seguiram
+    // atendendo pelo celular enquanto o Orbi não recebia nada. Avisa só o fundador (o dono da loja não
+    // tem o que fazer), no máximo uma vez a cada 12 h.
+    const avisou = await avisarServidorFora(service)
+    return NextResponse.json({ ok: false, motivo: 'servidor de WhatsApp não respondeu', fundadorAvisado: avisou })
   }
 
   const { data: empresas } = await service.from('companies').select('id, name, settings')
@@ -77,6 +85,48 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, avisadas })
+}
+
+/**
+ * E-mail ao fundador: o servidor de WhatsApp não responde. Devolve true se enviou agora.
+ * Limite de 1 aviso por janela de 12 h, controlado por uma chave única na tabela de deduplicação
+ * (a primeira rodada da janela grava a chave e envia; as outras batem na chave e não enviam).
+ */
+async function avisarServidorFora(service: ReturnType<typeof createServiceClient>): Promise<boolean> {
+  try {
+    const janela = Math.floor(Date.now() / (HORAS_ENTRE_AVISOS * 3_600_000))
+    const { error } = await service.from('whatsapp_mensagens_processadas' as never)
+      .insert({ message_id: `alerta-servidor-whatsapp:${janela}` } as never)
+    if (error) return false // 23505 = já avisou nesta janela (ou o banco falhou: melhor não repetir e-mail)
+
+    const destinos = (process.env.SUPER_ADMIN_EMAILS ?? '').split(',').map(e => e.trim()).filter(Boolean)
+    const url = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+    for (const to of destinos) {
+      await sendEmail({
+        to,
+        subject: '🚨 Servidor de WhatsApp FORA DO AR — nenhuma loja está recebendo mensagens',
+        html: `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+            <h2 style="color:#E0383D">O servidor de WhatsApp (Evolution, no Railway) não responde</h2>
+            <p>O Orbi tentou falar com ele duas vezes e não obteve resposta. Enquanto isso, <strong>nenhuma loja
+            recebe mensagens no Orbi</strong> — no celular delas tudo segue normal, o que torna o problema fácil de
+            passar despercebido.</p>
+            <p><strong>O que verificar, nesta ordem:</strong></p>
+            <ol>
+              <li>Railway, <em>Billing</em>: fatura em aberto ou crédito/teste esgotado.</li>
+              <li>Railway, projeto do Evolution: o serviço está parado ou com falha no deploy?</li>
+              <li><a href="https://status.railway.com">status.railway.com</a>: há incidente da plataforma?</li>
+            </ol>
+            <p style="color:#8C8880;font-size:13px">Você recebe este aviso no máximo a cada ${HORAS_ENTRE_AVISOS} horas, enquanto durar.
+            ${url ? `<br/>Painel: ${url}/founder` : ''}</p>
+          </div>`,
+      })
+    }
+    return destinos.length > 0
+  } catch (err) {
+    console.error('[vigia avisarServidorFora]', err)
+    return false
+  }
 }
 
 async function avisarSilencio(

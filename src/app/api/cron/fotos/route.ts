@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
+import { listarInstancias } from '@/lib/evolution'
 
 export const maxDuration = 55
 
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
   if (!segredo || req.headers.get('authorization') !== `Bearer ${segredo}`) {
     return NextResponse.json({ error: 'não autorizado' }, { status: 401 })
   }
+
+  // servidor de WhatsApp fora do ar: não adianta tentar contato por contato (cada um esperaria o timeout
+  // inteiro e a rodada estouraria o tempo à toa). O vigia é quem avisa o fundador.
+  if (!(await listarInstancias()).ok) return NextResponse.json({ ok: false, motivo: 'servidor de WhatsApp não respondeu' })
 
   const service = createServiceClient()
   const inicio = Date.now()
