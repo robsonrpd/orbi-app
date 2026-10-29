@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getMediaBase64, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
+import { extrairConteudo } from '@/lib/whatsapp-mensagem'
+import { importarHistorico } from '@/lib/historico-whatsapp'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 import { buscarTodos } from '@/lib/supabase/paginacao'
 import { sendEmail } from '@/lib/email'
@@ -114,6 +116,17 @@ export async function POST(req: NextRequest) {
   }
 
 
+  // HISTÓRICO que o WhatsApp entrega quando um aparelho é pareado (e ao reconectar). Tem que vir ANTES do
+  // caminho das mensagens normais: o nome do evento contém "messages" e seria tratado como mensagem nova
+  // chegando agora (gerando lead, boas-vindas e alerta de demora para conversas de meses atrás).
+  if (evento.includes('messages.set')) {
+    try {
+      const resumo = await importarHistorico(service, { id: company.id, settings: company.settings }, raw)
+      console.log('[wh historico]', company.name, JSON.stringify(resumo))
+    } catch (err) { console.error('[wh historico]', err) }
+    return NextResponse.json({ ok: true })
+  }
+
   // Aviso de ENTREGA/LEITURA de uma mensagem que a loja enviou (✓ enviada, ✓✓ entregue, ✓✓ azul lida).
   // Tem que ser tratado ANTES de carregar qualquer coisa: o aviso chega 2 a 3 vezes por mensagem
   // enviada e só precisa do id da mensagem. A gravação é feita dentro do banco (não baixa o histórico).
@@ -201,25 +214,8 @@ export async function POST(req: NextRequest) {
 
     // monta o conteúdo: texto, legenda ou rótulo da mídia (foto/áudio/doc/etc.)
     const msg = e.message ?? {}
-    const cap = (m: unknown) => (m as { caption?: string })?.caption
-    const texto = (msg.conversation as string)
-      ?? (msg.extendedTextMessage as { text?: string })?.text
-      ?? cap(msg.imageMessage) ?? cap(msg.videoMessage) ?? cap(msg.documentMessage)
-      ?? ''
-    const docNome = (msg.documentMessage as { fileName?: string })?.fileName
-    const midiaTipo = msg.imageMessage ? 'image'
-      : msg.videoMessage ? 'video'
-      : (msg.audioMessage || msg.pttMessage) ? 'audio'
-      : (msg.documentMessage ? 'document' : null)
-    const rotulo = midiaTipo === 'image' ? '📷 Imagem'
-      : midiaTipo === 'video' ? '🎥 Vídeo'
-      : midiaTipo === 'audio' ? '🎤 Áudio'
-      : midiaTipo === 'document' ? `📎 ${docNome || 'Documento'}`
-      : msg.stickerMessage ? '😀 Figurinha'
-      : msg.locationMessage ? '📍 Localização'
-      : msg.contactMessage ? '👤 Contato'
-      : null
-    const conteudo = texto.trim() || rotulo
+    // desembrulha mensagens temporárias / de visualização única antes de procurar o texto (ver whatsapp-mensagem.ts)
+    const { conteudo, midiaTipo, docNome } = extrairConteudo(msg)
     if (!conteudo) continue
 
     // baixa a mídia (se houver) e guarda no Storage → URL pública pra exibir no chat

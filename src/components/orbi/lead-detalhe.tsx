@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { type FunilColuna } from '@/lib/funil'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
-import { obterMensagens } from '@/lib/actions/conversas'
+import { obterMensagens, obterMensagensAnteriores, temMensagensAnteriores } from '@/lib/actions/conversas'
 import { setResponsavel, avisarVendedorHandoff, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
 import {
   X, Send, Loader2, Mail, MapPin, Tag, Check, CheckCheck, MessageCircle, DollarSign, Plus,
@@ -59,6 +59,25 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
       .finally(() => { if (vivo) setCarregandoMsgs(false) })
     return () => { vivo = false }
   }, [lead.conversaId])
+  // mensagens mais antigas que as da conversa ativa (ficam no arquivo e são buscadas sob demanda)
+  const [anteriores, setAnteriores] = useState<Msg[]>([])
+  const [temAnteriores, setTemAnteriores] = useState(false)
+  const [carregandoAnt, setCarregandoAnt] = useState(false)
+  useEffect(() => {
+    if (!lead.conversaId) return
+    let vivo = true
+    temMensagensAnteriores(lead.conversaId).then(t => { if (vivo) setTemAnteriores(t) })
+    return () => { vivo = false }
+  }, [lead.conversaId])
+  async function carregarAnteriores() {
+    if (!lead.conversaId || carregandoAnt) return
+    setCarregandoAnt(true)
+    const marco = anteriores[0]?.ts ?? msgs[0]?.ts ?? null
+    const r = await obterMensagensAnteriores(lead.conversaId, marco, 50)
+    setAnteriores(prev => [...(r.msgs as Msg[]), ...prev])
+    setTemAnteriores(r.temMais)
+    setCarregandoAnt(false)
+  }
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erroChat, setErroChat] = useState<string | null>(null)
@@ -241,6 +260,31 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
           {/* Chat */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-[#EAE8E1]">
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ECE5DD]">
+              {(temAnteriores || anteriores.length > 0) && (
+                <div className="flex justify-center pb-1">
+                  {temAnteriores ? (
+                    <button onClick={carregarAnteriores} disabled={carregandoAnt}
+                      className="text-xs font-semibold text-[#1A56FF] bg-white border border-[#EAE8E1] rounded-full px-4 py-1.5 hover:bg-[#F7F6F3] disabled:opacity-60 flex items-center gap-1.5">
+                      {carregandoAnt ? <Loader2 className="size-3 animate-spin" /> : null} Ver mensagens anteriores
+                    </button>
+                  ) : <span className="text-[11px] text-[#8C8880]">Início da conversa</span>}
+                </div>
+              )}
+              {/* mensagens do arquivo: só leitura, e sem repetir as que já estão na conversa ativa */}
+              {anteriores
+                .filter(a => !msgs.some(m => ((m as { waId?: string }).waId && (m as { waId?: string }).waId === (a as { waId?: string }).waId) || (m.ts === a.ts && m.content === a.content)))
+                .map((m, i) => {
+                  const meu = m.role === 'assistant' || m.role === 'human'
+                  return (
+                    <div key={'ant' + i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${meu ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
+                        {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full max-h-60 mb-1" />}
+                        <span>{m.content}</span>
+                        {m.ts && <span className="block text-[10px] mt-1 text-right text-[#8C8880]">{new Date(m.ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })} {fmtHoraMsg(m.ts)}</span>}
+                      </div>
+                    </div>
+                  )
+                })}
               {carregandoMsgs && msgs.length === 0 && <div className="flex justify-center py-10"><Loader2 className="size-5 animate-spin text-[#8C8880]" /></div>}
               {!carregandoMsgs && msgs.length === 0 && <p className="text-sm text-[#8C8880] text-center py-10">Nenhuma mensagem ainda.</p>}
               {msgs.map((m, i) => {

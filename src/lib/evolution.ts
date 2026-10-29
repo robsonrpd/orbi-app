@@ -32,6 +32,12 @@ async function call(path: string, init?: RequestInit) {
   }
 }
 
+/**
+ * Eventos que o Evolution avisa ao Orbi. MESSAGES_UPDATE traz entrega/leitura (tiques) e MESSAGES_SET traz o
+ * histórico do pareamento. O webhook trata cada um explicitamente: evento novo aqui exige tratamento lá.
+ */
+export const EVENTOS_WEBHOOK = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'MESSAGES_SET', 'QRCODE_UPDATED', 'CONNECTION_UPDATE']
+
 /** Cria a instância (se não existir) e já configura o webhook. Retorna o QR code (base64). */
 export async function criarInstancia(instance: string, webhookUrl: string) {
   // tenta criar; se já existir, o connect retorna o QR
@@ -41,11 +47,15 @@ export async function criarInstancia(instance: string, webhookUrl: string) {
       instanceName: instance,
       qrcode: true,
       integration: 'WHATSAPP-BAILEYS',
+      // Pede ao WhatsApp o histórico COMPLETO no pareamento (o padrão é só o recente). É a única hora em que o
+      // WhatsApp entrega histórico: depois de pareado não dá mais pra pedir. O Orbi importa o que vier em
+      // MESSAGES_SET (src/lib/historico-whatsapp.ts). Sem isto a conversa de um cliente novo começava do zero.
+      syncFullHistory: true,
       webhook: {
         url: webhookUrl,
         byEvents: false,
         base64: true,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'QRCODE_UPDATED', 'CONNECTION_UPDATE'],
+        events: EVENTOS_WEBHOOK,
       },
     }),
   })
@@ -69,7 +79,7 @@ export async function setWebhook(instance: string, url: string) {
         url,
         byEvents: false,
         base64: true,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'QRCODE_UPDATED', 'CONNECTION_UPDATE'],
+        events: EVENTOS_WEBHOOK,
       },
     }),
   })

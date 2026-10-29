@@ -357,3 +357,33 @@ export async function enviarAudioConversa(conversaId: string, url: string) {
   await registrarSaida(r.service, r.conv, { role: 'human', content: '🎤 Áudio', midia: { tipo: 'audio', url }, waId: idDoEnvio(env.data), waFromMe: true })
   return { success: true as const }
 }
+
+/**
+ * Mensagens ANTERIORES às que a conversa mostra (as mais antigas ficam no arquivo: a conversa ativa guarda
+ * só as últimas 40 pra não pesar). Devolve até `limite` mensagens imediatamente anteriores a `antesDe`, em ordem
+ * cronológica, e se ainda há mais antigas.
+ */
+export async function obterMensagensAnteriores(conversaId: string, antesDe: string | null, limite = 50): Promise<{ msgs: Msg[]; temMais: boolean }> {
+  const companyId = await getCompanyId()
+  if (!companyId) return { msgs: [], temMais: false }
+  const service = createServiceClient()
+  // a conversa precisa ser DESTA loja (o arquivo é lido pelo id da conversa)
+  const { data: conv } = await service.from('conversations').select('id').eq('id', conversaId).eq('company_id', companyId).maybeSingle()
+  if (!conv) return { msgs: [], temMais: false }
+
+  let q = service.from('mensagens_arquivo').select('msg, ts').eq('conversation_id', conversaId).eq('company_id', companyId)
+  if (antesDe) q = q.lt('ts', antesDe)
+  const { data } = await q.order('ts', { ascending: false }).limit(limite + 1)
+  const linhas = (data ?? []) as { msg: Msg; ts: string }[]
+  return { msgs: linhas.slice(0, limite).map(l => l.msg).reverse(), temMais: linhas.length > limite }
+}
+
+/** A conversa tem mensagens no arquivo? (decide se o botão "ver mensagens anteriores" aparece) */
+export async function temMensagensAnteriores(conversaId: string): Promise<boolean> {
+  const companyId = await getCompanyId()
+  if (!companyId) return false
+  const service = createServiceClient()
+  const { count } = await service.from('mensagens_arquivo').select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversaId).eq('company_id', companyId)
+  return (count ?? 0) > 0
+}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
-  listarConversas, conversasAtualizadas, obterMensagens, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
+  listarConversas, conversasAtualizadas, obterMensagens, obterMensagensAnteriores, temMensagensAnteriores, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
   apagarMensagem,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
@@ -23,6 +23,11 @@ function FotoContato({ src, className, children }: { src: string | null; classNa
   const [erro, setErro] = useState(false)
   if (src && !erro) return <img src={src} alt="" className={`${className} object-cover`} onError={() => setErro(true)} />
   return <>{children}</>
+}
+
+/** "dd/mm/aa" — as mensagens do arquivo são antigas, então mostram a data junto da hora. */
+function fmtDataCompleta(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 /** Tiques como no WhatsApp: ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida. Sem status conhecido = enviada. */
@@ -103,6 +108,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [carregandoMsgs, setCarregandoMsgs] = useState(false)
+  // mensagens mais antigas que as 40 da conversa ativa (ficam no arquivo e são buscadas sob demanda)
+  const [anteriores, setAnteriores] = useState<Msg[]>([])
+  const [temAnteriores, setTemAnteriores] = useState(false)
+  const [carregandoAnt, setCarregandoAnt] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [anexoOpen, setAnexoOpen] = useState(false)
   const [gravando, setGravando] = useState(false)
@@ -131,7 +140,23 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     if (!selecionada) return
     setCarregandoMsgs(true)
     obterMensagens(selecionada).then(m => { setMensagens(m); setCarregandoMsgs(false) })
+    // conversa nova na tela: zera o que foi carregado da anterior e vê se há mensagens antigas no arquivo
+    setAnteriores([]); setTemAnteriores(false)
+    let vivo = true
+    temMensagensAnteriores(selecionada).then(t => { if (vivo) setTemAnteriores(t) })
+    return () => { vivo = false }
   }, [selecionada])
+
+  async function carregarAnteriores() {
+    if (!selecionada || carregandoAnt) return
+    setCarregandoAnt(true)
+    // continua de onde parou: antes da mais antiga já carregada ou, na 1ª vez, antes da mais antiga da conversa ativa
+    const marco = anteriores[0]?.ts ?? mensagens[0]?.ts ?? null
+    const r = await obterMensagensAnteriores(selecionada, marco, 50)
+    setAnteriores(prev => [...r.msgs, ...prev])
+    setTemAnteriores(r.temMais)
+    setCarregandoAnt(false)
+  }
 
   useEffect(() => {
     if (!naoEncontrada || !telParam) { setFotoNaoEncontrada(null); return }
@@ -415,6 +440,40 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {!carregandoMsgs && (temAnteriores || anteriores.length > 0) && (
+                <div className="flex justify-center pb-1">
+                  {temAnteriores ? (
+                    <button onClick={carregarAnteriores} disabled={carregandoAnt}
+                      className="text-xs font-semibold text-[#1A56FF] bg-white border border-[#EAE8E1] rounded-full px-4 py-1.5 hover:bg-[#F7F6F3] disabled:opacity-60 flex items-center gap-1.5">
+                      {carregandoAnt ? <Loader2 className="size-3 animate-spin" /> : null} Ver mensagens anteriores
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-[#8C8880]">Início da conversa</span>
+                  )}
+                </div>
+              )}
+              {/* mensagens do arquivo: só leitura (não dá pra apagar), e sem repetir as que já estão na conversa ativa */}
+              {!carregandoMsgs && anteriores
+                .filter(a => !mensagens.some(m => (a.waId && m.waId === a.waId) || (!a.waId && m.ts === a.ts && m.content === a.content)))
+                .map((m, i) => {
+                  const minha = m.role === 'assistant' || m.role === 'human'
+                  return (
+                    <div key={'ant' + i} className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
+                      <div className="max-w-[75%] rounded-xl px-3.5 py-2 text-sm shadow-sm opacity-95"
+                        style={{ background: m.apagada ? '#F0F0F0' : minha ? '#DCF8C6' : '#FFFFFF' }}>
+                        {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full mb-1" />}
+                        {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
+                        <p className={`whitespace-pre-wrap ${m.apagada ? 'italic text-[#8C8880]' : 'text-[#1C1B18]'}`}>{m.apagada ? 'Mensagem apagada' : m.content}</p>
+                        {m.ts && (
+                          <span className={`block text-[10px] mt-1 text-right ${minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
+                            {fmtDataCompleta(m.ts)}{' '}{fmtHora(m.ts)}
+                            {minha && !m.apagada && m.status && <Tiques status={m.status} ts={m.ts} />}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               {carregandoMsgs && (
                 <div className="flex justify-center py-6"><Loader2 className="size-5 animate-spin text-[#1A56FF]" /></div>
               )}
