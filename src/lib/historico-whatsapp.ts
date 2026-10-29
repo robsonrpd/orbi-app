@@ -207,8 +207,10 @@ export async function importarHistorico(
   r.naoProcessadosPorTempo += await emLotes(mesclar, SIMULTANEOS, async ({ conversationId, msgs }) => {
     const { data, error } = await service.rpc('mesclar_mensagens', { p_conversation: conversationId, p_msgs: msgs, p_ativas: 40 })
     if (error) { console.error('[historico mesclar]', error.message); r.erros++; return }
-    r.conversasMescladas++
-    r.mensagensNovas += Number(data) || 0
+    const novas = Number(data) || 0
+    // só conta a conversa se ela realmente ganhou mensagens (um reenvio do mesmo histórico não infla o placar)
+    if (novas > 0) r.conversasMescladas++
+    r.mensagensNovas += novas
   }, ORCAMENTO_MS, inicio)
 
   return r
