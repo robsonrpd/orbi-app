@@ -25,8 +25,14 @@ function instanciaDe(c: { slug: string; settings: Record<string, unknown> }) {
   return (c.settings?.wa_instance as string) || c.slug
 }
 
-/** Inicia a conexão: cria uma instância NOVA (sessão limpa) + webhook. O QR chega via webhook. */
-export async function conectarWhatsApp() {
+/**
+ * Inicia a conexão: cria uma instância NOVA (sessão limpa) + webhook. O QR chega via webhook.
+ *
+ * `forcar`: refaz a conexão MESMO com o WhatsApp conectado ("Reconectar e importar histórico"). O WhatsApp só
+ * entrega o histórico antigo das conversas quando um aparelho é pareado, então importar histórico de uma loja
+ * que já está conectada exige parear de novo (QR). Sem `forcar`, uma conexão aberta é deixada em paz.
+ */
+export async function conectarWhatsApp(opts?: { forcar?: boolean }) {
   if (!evolutionConfigurado()) return { error: 'WhatsApp ainda não configurado no servidor (EVOLUTION_API_URL / KEY).' }
   const c = await getCompany()
   if (!c) return { error: 'Não autenticado.' }
@@ -34,9 +40,9 @@ export async function conectarWhatsApp() {
   const atual = instanciaDe(c)
   const wh = webhookUrl()
 
-  // se já está conectado, nada a fazer
+  // se já está conectado, nada a fazer (a não ser que a pessoa tenha pedido pra reconectar)
   const st0 = await statusInstancia(atual)
-  if (st0.state === 'open') return { conectado: true }
+  if (st0.state === 'open' && !opts?.forcar) return { conectado: true }
 
   // Conectar é DESTRUTIVO: apaga a sessão atual pra criar outra. Só que statusInstancia
   // devolve 'close' também quando a Evolution não responde (timeout, 500, servidor fora).
@@ -47,11 +53,8 @@ export async function conectarWhatsApp() {
     return { error: 'O servidor de WhatsApp não respondeu agora. Não vou recriar a conexão às cegas: se a sessão atual estiver viva, isso derrubaria ela. Tente de novo em alguns minutos.' }
   }
 
-  // apaga a instância anterior (limpa a sessão morta) e cria UMA NOVA com nome único
-  await deletarInstancia(atual)
-  await deletarInstancia(c.slug) // limpa também a antiga baseada no slug, se existir
-  await new Promise(res => setTimeout(res, 1200))
-
+  // Cria a instância NOVA (nome único) ANTES de apagar a antiga: se a criação falhar, a conexão atual da loja
+  // continua intacta. (Antes apagava primeiro e, se a nova não nascesse, a loja ficava sem WhatsApp.)
   const instance = `${c.slug}-${Date.now().toString(36)}`
   const r = await criarInstancia(instance, wh)
 
@@ -60,7 +63,7 @@ export async function conectarWhatsApp() {
   // a tela pedia QR pra sempre e nenhuma mensagem chegava.
   const chk = await statusInstancia(instance)
   if (!chk.ok) {
-    return { error: 'Não consegui criar a conexão no servidor de WhatsApp. A conexão anterior foi encerrada — tente conectar de novo em instantes.' }
+    return { error: 'Não consegui criar a nova conexão no servidor de WhatsApp. A conexão atual NÃO foi alterada — tente de novo em instantes.' }
   }
 
   await setWebhook(instance, wh)
@@ -75,9 +78,39 @@ export async function conectarWhatsApp() {
   delete settings.wa_disconnect_alert_sent
   delete settings.wa_silencio_avisado_em
   if (r.qr) settings.wa_qr = r.qr
+  // zera o placar do histórico: o que chegar a partir de agora é desta conexão (a tela mostra o andamento)
+  settings.wa_historico = { pedidoEm: new Date().toISOString(), mensagens: 0, conversas: 0, leads: 0, blocos: 0 }
   await service.from('companies').update({ settings }).eq('id', c.id)
 
+  // Só AGORA apaga a antiga (desvincula o aparelho e limpa a sessão), com a empresa já apontando pra nova:
+  // o Evolution avisa "desconectou" ao apagar, e o webhook ignora avisos de conexões que não são a atual.
+  // Apagar antes de apontar mandaria e-mail de "WhatsApp caiu" numa reconexão proposital.
+  if (atual !== instance) await deletarInstancia(atual)
+  if (c.slug !== atual) await deletarInstancia(c.slug) // limpa também a antiga baseada no slug, se existir
+  await new Promise(res => setTimeout(res, 1200))
+
   return { aguardando: true, qr: r.qr ?? null }
+}
+
+/** "Reconectar e importar histórico": refaz a conexão da loja (novo QR) pra o WhatsApp entregar o histórico das conversas. */
+export async function reconectarImportandoHistorico() {
+  return conectarWhatsApp({ forcar: true })
+}
+
+export type HistoricoImportado = {
+  pedidoEm: string | null; mensagens: number; conversas: number; leads: number; blocos: number; atualizadoEm: string | null
+}
+
+/** Andamento da importação do histórico da conexão atual (null = nunca pedida). */
+export async function obterHistoricoImportado(): Promise<HistoricoImportado | null> {
+  const c = await getCompany()
+  if (!c) return null
+  const h = (c.settings?.wa_historico ?? null) as Partial<HistoricoImportado> | null
+  if (!h) return null
+  return {
+    pedidoEm: h.pedidoEm ?? null, mensagens: Number(h.mensagens) || 0, conversas: Number(h.conversas) || 0,
+    leads: Number(h.leads) || 0, blocos: Number(h.blocos) || 0, atualizadoEm: h.atualizadoEm ?? null,
+  }
 }
 
 /** Busca o QR (recebido via webhook) + o estado da conexão. */

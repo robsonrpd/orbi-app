@@ -78,6 +78,15 @@ export async function POST(req: NextRequest) {
   if (!company) company = (await service.from('companies').select(sel).eq('slug', instance).maybeSingle()).data as Comp | null
   if (!company) return NextResponse.json({ ok: true })
 
+  // Avisos de CONEXÃO e de QR só valem para a conexão ATUAL da loja. Quando a loja troca de conexão (reconectar,
+  // importar histórico) a antiga é apagada e o Evolution avisa "desconectou": sem esta checagem isso virava
+  // e-mail de "WhatsApp caiu" e sobrescrevia o estado da conexão nova. (Mensagens continuam valendo de qualquer
+  // uma — nada de mensagem se perde.) Empresa sem wa_instance (legado) não é filtrada.
+  const instanciaAtual = (company.settings as { wa_instance?: string } | null)?.wa_instance
+  if ((evento.includes('connection') || evento.includes('qrcode')) && instanciaAtual && instance !== instanciaAtual) {
+    return NextResponse.json({ ok: true })
+  }
+
   // conexão mudou → registra estado, limpa QR se abriu, avisa por e-mail se caiu
   if (evento.includes('connection')) {
     const d = raw as { state?: string; statusReason?: number } | null
@@ -123,6 +132,10 @@ export async function POST(req: NextRequest) {
     try {
       const resumo = await importarHistorico(service, { id: company.id, settings: company.settings }, raw)
       console.log('[wh historico]', company.name, JSON.stringify(resumo))
+      // placar que a tela de Conexão mostra ("X mensagens importadas")
+      await service.rpc('registrar_historico_importado', {
+        p_company: company.id, p_mensagens: resumo.mensagensNovas, p_conversas: resumo.conversasMescladas, p_leads: resumo.leadsCriados,
+      })
     } catch (err) { console.error('[wh historico]', err) }
     return NextResponse.json({ ok: true })
   }

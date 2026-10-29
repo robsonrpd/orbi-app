@@ -859,6 +859,30 @@ grant execute on function public.mesclar_mensagens(uuid, jsonb, int) to service_
 grant execute on function public.contatos_por_chaves(uuid, text[])   to service_role;
 
 
+-- Placar da importação do histórico (a tela de Conexão mostra "X mensagens importadas"). Soma NO BANCO, de forma
+-- atômica: o histórico chega em vários blocos ao mesmo tempo e o webhook também grava outras chaves em
+-- companies.settings (estado da conexão, QR); ler-e-regravar o JSON inteiro perderia atualizações.
+create or replace function public.registrar_historico_importado(p_company uuid, p_mensagens int, p_conversas int, p_leads int)
+returns void
+language sql
+as $$
+  update public.companies
+     set settings = jsonb_set(
+           coalesce(settings, '{}'::jsonb), '{wa_historico}',
+           jsonb_build_object(
+             'pedidoEm',  coalesce(settings #>> '{wa_historico,pedidoEm}', null),
+             'mensagens', coalesce((settings #>> '{wa_historico,mensagens}')::int, 0) + p_mensagens,
+             'conversas', coalesce((settings #>> '{wa_historico,conversas}')::int, 0) + p_conversas,
+             'leads',     coalesce((settings #>> '{wa_historico,leads}')::int, 0) + p_leads,
+             'blocos',    coalesce((settings #>> '{wa_historico,blocos}')::int, 0) + 1,
+             'atualizadoEm', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+           ))
+   where id = p_company
+$$;
+revoke all on function public.registrar_historico_importado(uuid, int, int, int) from public, anon, authenticated;
+grant execute on function public.registrar_historico_importado(uuid, int, int, int) to service_role;
+
+
 -- ------------------------------------------------------------
 -- 8. CONFERÊNCIA — o resultado esperado é: tabelas = 28 e bucket = 1
 -- ------------------------------------------------------------
