@@ -430,16 +430,11 @@ async function processarFluxo(
 
   if (i === atual) return // nada enviado
 
-  // relê as mensagens: entre o início do roteiro e agora, outra mensagem pode ter chegado
-  const { data: atualConv } = await service.from('conversations')
-    .select('messages').eq('id', (conv as { id: string }).id).single()
-  const base = (atualConv?.messages as Msg[] | null) ?? (conv as { messages?: Msg[] }).messages ?? []
-
-  await service.from('conversations').update({
-    fluxo_etapa: i,
-    messages: [...base, ...enviadasMsgs].slice(-40),
-    last_message_at: new Date().toISOString(),
-  }).eq('id', (conv as { id: string }).id)
+  // cada mensagem do roteiro entra pela gravação atômica do banco: entre o início do roteiro e agora o cliente
+  // pode ter escrito de novo, e regravar a lista inteira apagaria essa mensagem
+  for (const m of enviadasMsgs) await anexarMensagem(service, company.id, numero, contactId, m, false)
+  const { error: eFluxo } = await service.from('conversations').update({ fluxo_etapa: i }).eq('id', (conv as { id: string }).id)
+  if (eFluxo) console.error('[wh fluxo_etapa]', eFluxo.message)
 
   // roteiro concluído: entrega o lead pro vendedor com menos leads em aberto
   if (i >= total && fluxo.atribuirVendedor && contactId) {

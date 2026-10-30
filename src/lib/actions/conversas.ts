@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
-import { acharConversaPorNumero, acharContatoPorTelefone, mensagensDaConversa } from '@/lib/conversas-busca'
+import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 
 type Midia = { tipo: string; url: string; nome?: string }
@@ -178,7 +178,7 @@ async function resolverConversa(conversaId: string) {
   if (!companyId) return { error: 'Não autenticado.' as const }
 
   const service = createServiceClient()
-  const { data: conv } = await service.from('conversations').select('id, numero, messages').eq('id', conversaId).eq('company_id', companyId).single()
+  const { data: conv } = await service.from('conversations').select('id, numero, messages, contact_id, company_id').eq('id', conversaId).eq('company_id', companyId).single()
   if (!conv) return { error: 'Conversa não encontrada.' as const }
 
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
@@ -191,10 +191,13 @@ async function resolverConversa(conversaId: string) {
   return { service, conv, instance }
 }
 
-async function registrarSaida(service: ReturnType<typeof createServiceClient>, conv: { id: string; messages: unknown }, msg: Msg) {
+async function registrarSaida(service: ReturnType<typeof createServiceClient>, conv: { id: string; numero: string; contact_id?: string | null; company_id: string }, msg: Msg) {
   const comTimestamp = { ...msg, ts: msg.ts ?? new Date().toISOString() }
-  const messages = [...((conv.messages as Msg[] | null) ?? []), comTimestamp].slice(-60)
-  await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', conv.id)
+  // gravação atômica no banco: não apaga a mensagem que o cliente mandar no mesmo instante
+  const { error } = await service.rpc('anexar_mensagem', {
+    p_company: conv.company_id, p_numero: conv.numero, p_contact: conv.contact_id ?? null, p_msg: comTimestamp, p_marcar_cliente: true,
+  })
+  if (error) console.error('[registrarSaida]', error.message)
   revalidatePath('/dashboard/conversas')
 }
 
@@ -296,7 +299,8 @@ export async function iniciarConversa(numero: string, texto: string, opts?: { co
   const st = await statusInstancia(instance)
   if (st.state !== 'open') return { error: 'O WhatsApp desconectou. Vá em Conexão WhatsApp e escaneie o QR Code de novo pra reconectar.' }
 
-  const existenteId = await acharConversaPorNumero(service, companyId, numeroFmt)
+  const existente = await acharConversa(service, companyId, numeroFmt)
+  const existenteId = existente?.id ?? null
   const msgsExistentes = existenteId ? (await mensagensDaConversa(service, existenteId)) as Msg[] : []
 
   // segurança: mandar mensagem pra quem nunca escreveu primeiro é o principal gatilho de bloqueio do WhatsApp
@@ -315,23 +319,14 @@ export async function iniciarConversa(numero: string, texto: string, opts?: { co
 
   const nova: Msg = { role: 'human', content: limpo, ts: new Date().toISOString() }
 
-  if (existenteId) {
-    const messages = [...msgsExistentes, nova].slice(-60)
-    await service.from('conversations').update({ messages, handled_by_ai: false, last_message_at: new Date().toISOString() }).eq('id', existenteId)
-    revalidatePath('/dashboard/conversas')
-    return { success: true as const, conversaId: existenteId }
-  }
-
-  const contact = await acharContatoPorTelefone<{ id: string; phone: string | null }>(service, companyId, numeroFmt)
-
-  const { data: criada, error } = await service.from('conversations').insert({
-    company_id: companyId, contact_id: contact?.id ?? null, numero: numeroFmt,
-    messages: [nova], handled_by_ai: false, last_message_at: new Date().toISOString(),
-  }).select('id').single()
-  if (error || !criada) return { error: 'Mensagem enviada, mas houve um erro ao salvar a conversa.' }
+  const contact = existente ? null : await acharContatoPorTelefone<{ id: string; phone: string | null }>(service, companyId, numeroFmt)
+  // gravação atômica (cria a conversa se não existir; não apaga mensagem que chegue no mesmo instante)
+  const conversaId = await registrarMensagemDaLoja(service, companyId, contact?.id ?? null, existente?.numero ?? numeroFmt,
+    { role: 'human', content: limpo, ts: nova.ts ?? new Date().toISOString() })
+  if (!conversaId) return { error: 'Mensagem enviada, mas houve um erro ao salvar a conversa.' }
 
   revalidatePath('/dashboard/conversas')
-  return { success: true as const, conversaId: criada.id }
+  return { success: true as const, conversaId }
 }
 
 /** Envia uma imagem ou documento (já hospedado em uma URL pública) pelo WhatsApp. */

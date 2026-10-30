@@ -53,9 +53,10 @@ export async function criarBroadcast(payload: {
 
   const service = createServiceClient()
 
+  // .limit(1) e não .maybeSingle(): com 2 envios ativos o maybeSingle dá ERRO, vira "não há nenhum" e deixaria criar mais um
   const { data: emAndamento } = await service.from('broadcasts' as never)
-    .select('id').eq('company_id', companyId).eq('status', 'ativo').maybeSingle()
-  if (emAndamento) return { error: 'Já existe um envio em massa em andamento. Pause ou cancele antes de criar um novo.' }
+    .select('id').eq('company_id', companyId).eq('status', 'ativo').limit(1)
+  if (emAndamento && (emAndamento as unknown[]).length > 0) return { error: 'Já existe um envio em massa em andamento. Pause ou cancele antes de criar um novo.' }
 
   const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
   const settings = (comp?.settings as { wa_instance?: string; wa_primeira_conexao?: string } | null) ?? null

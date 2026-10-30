@@ -27,8 +27,8 @@ export async function criarLoginVendedor(vendedorId: string, senha: string) {
   if (!v) return { error: 'Vendedor não encontrado.' }
   if (!v.email) return { error: 'Cadastre um e-mail no vendedor antes de criar o acesso.' }
 
-  const { data: existing } = await service.from('users').select('id').eq('vendedor_id', vendedorId).maybeSingle()
-  if (existing) return { error: 'Esse vendedor já tem acesso.' }
+  const { data: existing } = await service.from('users').select('id').eq('vendedor_id', vendedorId).limit(1)
+  if (existing && existing.length > 0) return { error: 'Esse vendedor já tem acesso.' }
 
   const { data: created, error: cErr } = await service.auth.admin.createUser({
     email: v.email, password: senha, email_confirm: true,
@@ -77,8 +77,9 @@ export async function removerLoginVendedor(vendedorId: string) {
   if ('error' in a) return { error: a.error }
 
   const service = createServiceClient()
-  const { data: u } = await service.from('users')
-    .select('id').eq('vendedor_id', vendedorId).eq('company_id', a.companyId).maybeSingle()
+  const { data: us } = await service.from('users')
+    .select('id').eq('vendedor_id', vendedorId).eq('company_id', a.companyId).limit(1)
+  const u = us?.[0]
   if (!u) return { error: 'Esse vendedor não tem acesso.' }
 
   await service.from('users').delete().eq('id', u.id)
@@ -99,8 +100,9 @@ export async function redefinirSenhaVendedor(vendedorId: string, novaSenha: stri
 
   const service = createServiceClient()
   // o vendedor tem que ser DESTA empresa: sem o company_id o dono de uma loja mudaria a senha de outra
-  const { data: u } = await service.from('users')
-    .select('id, email').eq('vendedor_id', vendedorId).eq('company_id', a.companyId).maybeSingle()
+  const { data: us } = await service.from('users')
+    .select('id, email').eq('vendedor_id', vendedorId).eq('company_id', a.companyId).limit(1)
+  const u = us?.[0]
   if (!u) return { error: 'Esse vendedor ainda não tem acesso. Crie o acesso primeiro.' }
 
   const { error } = await service.auth.admin.updateUserById(u.id, { password: novaSenha })

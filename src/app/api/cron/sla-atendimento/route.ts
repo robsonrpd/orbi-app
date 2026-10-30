@@ -187,13 +187,17 @@ async function processarFollowups(
     const env = await enviarTexto(instance, (conv.numero as string).replace(/\D/g, ''), proxima.texto)
     if (!env.ok) continue // não avança o contador: tenta de novo na próxima passagem
 
+    // gravação atômica da mensagem (não apaga o que o cliente escrever no mesmo instante) e, separado, o contador
     const registro: Msg = { role: 'human', content: proxima.texto, ts: new Date().toISOString() }
-    await service.from('conversations').update({
-      messages: [...msgs, registro].slice(-60),
+    const { error: eMsg } = await service.rpc('anexar_mensagem', {
+      p_company: empresa.id, p_numero: conv.numero as string, p_contact: (conv.contact_id as string | null) ?? null, p_msg: registro, p_marcar_cliente: false,
+    })
+    if (eMsg) console.error('[sla followup msg]', eMsg.message)
+    const { error: eFlw } = await service.from('conversations').update({
       followup_etapa: etapaAtual + 1,
       followup_ultimo_em: new Date().toISOString(),
-      last_message_at: new Date().toISOString(),
     }).eq('id', conv.id)
+    if (eFlw) console.error('[sla followup etapa]', eFlw.message)
 
     enviados++
     await new Promise(r => setTimeout(r, 1500)) // espaça os envios

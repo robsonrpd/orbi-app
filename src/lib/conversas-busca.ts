@@ -25,13 +25,41 @@ export function chaveTelefone(v: string | null | undefined) {
  * Aqui a busca é paginada e carrega só id + numero.
  */
 export async function acharConversaPorNumero(service: Service, companyId: string, numero: string) {
+  return (await acharConversa(service, companyId, numero))?.id ?? null
+}
+
+/** Igual a acharConversaPorNumero, mas devolve também o número como está gravado na conversa. */
+export async function acharConversa(service: Service, companyId: string, numero: string) {
   const chave = chaveTelefone(numero)
   if (!chave) return null
   const convs = await buscarTodos<{ id: string; numero: string | null }>(
     (de, ate) => service.from('conversations').select('id, numero').eq('company_id', companyId).range(de, ate),
     'conversa por número',
   )
-  return convs.find(c => chaveTelefone(c.numero) === chave)?.id ?? null
+  const achada = convs.find(c => chaveTelefone(c.numero) === chave)
+  return achada?.numero ? { id: achada.id, numero: achada.numero } : null
+}
+
+type MsgDaLoja = { role: 'human'; content: string; ts: string; midia?: unknown }
+
+/**
+ * Registra na conversa UMA mensagem que a loja acabou de enviar (painel, CRM, cobrança automática).
+ *
+ * Grava pela função atômica do banco (anexar_mensagem): cria a conversa se não existir, trava a linha e não
+ * se perde se o cliente escrever no mesmo instante. O jeito antigo — ler as mensagens, acrescentar no código e
+ * regravar tudo — apagava a mensagem que chegasse no meio. Reaproveita o número já gravado na conversa para
+ * não abrir uma segunda por causa do 9º dígito.
+ * Devolve o id da conversa (ou null se a gravação falhou; o erro vai para o log).
+ */
+export async function registrarMensagemDaLoja(
+  service: Service, companyId: string, contactId: string | null, numero: string, msg: MsgDaLoja,
+): Promise<string | null> {
+  const existente = await acharConversa(service, companyId, numero)
+  const { data, error } = await service.rpc('anexar_mensagem', {
+    p_company: companyId, p_numero: existente?.numero ?? numero, p_contact: contactId, p_msg: msg, p_marcar_cliente: true,
+  })
+  if (error) { console.error('[registrarMensagemDaLoja]', error.message); return null }
+  return (data as string | null) ?? null
 }
 
 /** Mensagens de uma conversa específica (sem arrastar as das outras). */

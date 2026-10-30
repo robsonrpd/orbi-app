@@ -84,6 +84,15 @@ export async function POST(req: NextRequest) {
     avisadas.push(empresa.name)
   }
 
+  // Faxina: a tabela de "mensagem já processada" cresce sem parar (27 mil linhas em 2 meses). Reentrega do
+  // WhatsApp acontece em horas/poucos dias, e mesmo depois disso a gravação da mensagem já não duplica (chave
+  // própria em anexar_mensagem), então 14 dias de memória bastam. Falha aqui não derruba a rotina.
+  try {
+    const corte = new Date(Date.now() - 14 * 24 * 3_600_000).toISOString()
+    const { error } = await service.from('whatsapp_mensagens_processadas' as never).delete().lt('created_at', corte)
+    if (error) console.error('[vigia faxina]', error.message)
+  } catch (err) { console.error('[vigia faxina]', err) }
+
   return NextResponse.json({ ok: true, avisadas })
 }
 
