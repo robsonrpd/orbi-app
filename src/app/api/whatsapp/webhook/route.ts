@@ -490,8 +490,12 @@ async function registrarSaida(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string, quando?: string,
 ) {
-  const { data: conv } = await service.from('conversations')
-    .select('id, messages, last_message_at').eq('company_id', companyId).eq('numero', numero).maybeSingle()
+  // .limit(1), NUNCA .maybeSingle(): com mais de uma linha o maybeSingle dá erro, o código lia isso como "não
+  // existe" e criava outra conversa — foi assim que um cliente chegou a ter 112 conversas (ver conversas-unicas.sql)
+  const { data: lista } = await service.from('conversations')
+    .select('id, messages, last_message_at').eq('company_id', companyId).eq('numero', numero)
+    .order('created_at', { ascending: true }).limit(1)
+  const conv = lista?.[0]
   const anteriores = (conv?.messages as Msg[] | undefined) ?? []
 
   // Dedup do eco: tudo que o Orbi envia (resposta manual ou roteiro automático) já é gravado
@@ -515,12 +519,46 @@ async function registrarSaida(
     return
   }
   const ts = quando ?? new Date().toISOString()
-  const novas = juntarMensagens(anteriores, { role: 'human' as const, content: conteudo, ts, ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}) })
-  // a conversa nunca "volta no tempo": mensagem atrasada do acumulado não pode rebaixar a última atividade
-  const anterior = (conv as { last_message_at?: string | null } | null)?.last_message_at
-  const patch = { messages: novas, last_message_at: anterior && anterior > ts ? anterior : ts }
-  if (conv) await service.from('conversations').update(patch).eq('id', (conv as { id: string }).id)
-  else await service.from('conversations').insert({ company_id: companyId, contact_id: null, numero, ...patch } as never)
+  await anexarMensagem(service, companyId, numero, null, { role: 'human' as const, content: conteudo, ts, ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}) }, false)
+}
+
+/**
+ * Acrescenta UMA mensagem à conversa do número, de forma atômica (função anexar_mensagem do banco): cria a
+ * conversa se não existir, trava a linha, não duplica reenvio e mantém a ordem pela hora real.
+ *
+ * Antes isto era "ler a conversa → mudar no código → regravar": duas mensagens do mesmo número processadas ao
+ * mesmo tempo se sobrescreviam (uma se perdia) e a corrida do primeiro contato criava conversas duplicadas.
+ */
+async function anexarMensagem(
+  service: ReturnType<typeof createServiceClient>,
+  companyId: string, numero: string, contactId: string | null, msg: Msg, marcarCliente: boolean,
+): Promise<string | null> {
+  const { data, error } = await service.rpc('anexar_mensagem', {
+    p_company: companyId, p_numero: numero, p_contact: contactId, p_msg: msg, p_marcar_cliente: marcarCliente,
+  })
+  if (!error) return (data as string | null) ?? null
+
+  // Plano B (banco sem a função): grava pelo caminho antigo, mas com busca robusta (.limit(1), nunca maybeSingle).
+  console.error('[wh anexar] função indisponível, usando o caminho antigo:', error.message)
+  const { data: lista } = await service.from('conversations')
+    .select('id, messages, last_message_at').eq('company_id', companyId).eq('numero', numero)
+    .order('created_at', { ascending: true }).limit(1)
+  const conv = lista?.[0] as { id: string; messages: Msg[] | null; last_message_at: string | null } | undefined
+  const ts = msg.ts ?? new Date().toISOString()
+  const novas = juntarMensagens(conv?.messages ?? [], msg)
+  const patch: Record<string, unknown> = {
+    messages: novas, last_message_at: conv?.last_message_at && conv.last_message_at > ts ? conv.last_message_at : ts,
+    ...(marcarCliente ? { handled_by_ai: false } : {}),
+  }
+  if (conv) {
+    const { error: e2 } = await service.from('conversations').update(patch).eq('id', conv.id)
+    if (e2) console.error('[wh convUpd]', e2.message)
+    return conv.id
+  }
+  const { data: nova, error: e3 } = await service.from('conversations')
+    .insert({ company_id: companyId, contact_id: contactId, numero, ...patch } as never).select('id').single()
+  if (e3) console.error('[wh convIns]', e3.message)
+  return (nova as { id?: string } | null)?.id ?? null
 }
 
 async function salvarConversa(
@@ -528,36 +566,13 @@ async function salvarConversa(
   companyId: string, contactId: string | null, numero: string,
   userMsg: string, midia?: Midia, waId?: string, grupo?: boolean, quando?: string,
 ) {
-  const { data: conv } = await service.from('conversations')
-    .select('id, messages, last_message_at').eq('company_id', companyId).eq('numero', numero).maybeSingle()
-
-  const anteriores = (conv?.messages as Msg[] | undefined) ?? []
-  const agora = quando ?? new Date().toISOString()
-  const novas: Msg[] = juntarMensagens(anteriores, { role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}) })
-  // a conversa nunca "volta no tempo": mensagem atrasada do acumulado não pode rebaixar a última atividade
-  const anteriorEm = (conv as { last_message_at?: string | null } | null)?.last_message_at
-  const ultimaEm = anteriorEm && anteriorEm > agora ? anteriorEm : agora
-
   // NUNCA misturar campos opcionais aqui: se um deles não existir no banco, a gravação
   // inteira falha e a mensagem do cliente se perde — sem erro visível pra ninguém.
   // Salvar a mensagem é o que não pode falhar; o resto vai depois, separado.
-  const patch: Record<string, unknown> = {
-    messages: novas,
-    last_message_at: ultimaEm,
-    handled_by_ai: false,
-  }
-
-  let convId = (conv as { id: string } | null)?.id ?? null
-  if (conv) {
-    const { error } = await service.from('conversations').update(patch).eq('id', convId!)
-    if (error) console.error('[wh convUpd]', error.message)
-  } else {
-    const { data: nova, error } = await service.from('conversations')
-      .insert({ company_id: companyId, contact_id: contactId, numero, ...patch } as never)
-      .select('id').single()
-    if (error) console.error('[wh convIns]', error.message)
-    convId = (nova as { id?: string } | null)?.id ?? null
-  }
+  const agora = quando ?? new Date().toISOString()
+  const convId = await anexarMensagem(service, companyId, numero, contactId, {
+    role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}),
+  }, true)
 
   // Cliente respondeu: zera a contagem de cobranças e o alerta de lead parado.
   // Gravação separada e best-effort de propósito — se essas colunas ainda não existirem,
