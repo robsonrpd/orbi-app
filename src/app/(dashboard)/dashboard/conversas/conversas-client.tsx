@@ -13,7 +13,7 @@ import {
   AlertTriangle, X, Trash2, Ban, UsersRound, Check, CheckCheck,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; status?: 'sent' | 'delivered' | 'read' }
 
 /**
  * Foto do contato com plano B: se a imagem falhar ao carregar (link vencido, arquivo apagado), mostra as
@@ -474,6 +474,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         style={{ background: m.apagada ? '#F0F0F0' : minha ? '#DCF8C6' : '#FFFFFF' }}>
                         {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" className="rounded-lg max-w-full mb-1" />}
                         {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
+                        {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
                         <p className={`whitespace-pre-wrap ${m.apagada ? 'italic text-[#8C8880]' : 'text-[#1C1B18]'}`}>{m.apagada ? 'Mensagem apagada' : m.content}</p>
                         {m.ts && (
                           <span className={`block text-[10px] mt-1 text-right ${minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
@@ -518,6 +519,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                           {m.midia && m.midia.tipo === 'document' && (
                             <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>
                           )}
+                          {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
                           <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
                         </>
                       )}

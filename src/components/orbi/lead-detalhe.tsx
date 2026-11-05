@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; midiaExpirada?: boolean; ts?: string; status?: 'sent' | 'delivered' | 'read' }
 
 function fmtHoraMsg(ts: string | undefined) {
   if (!ts) return null
@@ -282,7 +282,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                     <div key={'ant' + i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${meu ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
                         {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1" />}
-                        <span>{m.content}</span>
+                        {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}<span>{m.content}</span>
                         {m.ts && <span className="block text-[10px] mt-1 text-right text-[#8C8880]">{new Date(m.ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })} {fmtHoraMsg(m.ts)}</span>}
                       </div>
                     </div>
@@ -300,6 +300,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                       {m.midia?.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full max-h-60 mb-1" />}
                       {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="max-w-full mb-1" />}
                       {m.midia?.tipo === 'document' && <a href={m.midia.url} target="_blank" className="flex items-center gap-1.5 underline mb-1"><Paperclip className="size-3.5" />{m.midia.nome || 'Documento'}</a>}
+                      {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
                       {(!m.midia || m.content !== '📷 Imagem' && m.content !== '🎥 Vídeo' && m.content !== '🎤 Áudio') && <span>{m.content}</span>}
                       {fmtHoraMsg(m.ts) && (
                         <span className={`block text-[10px] mt-1 text-right ${m.role === 'assistant' ? 'text-white/60' : 'text-[#8C8880]'}`}>

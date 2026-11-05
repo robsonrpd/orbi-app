@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email'
 import { horaBrasil } from '@/lib/atendimento'
 import { listarInstancias } from '@/lib/evolution'
+import { expirarMidiaAntiga } from '@/lib/midia-expirada'
 
 export const maxDuration = 55
 
@@ -93,7 +94,10 @@ export async function POST(req: NextRequest) {
     if (error) console.error('[vigia faxina]', error.message)
   } catch (err) { console.error('[vigia faxina]', err) }
 
-  return NextResponse.json({ ok: true, avisadas })
+  // Validade da mídia: foto/áudio/vídeo com mais de 6 meses sai do Storage (o texto da mensagem fica). Em lotes, a cada hora.
+  const midia = await expirarMidiaAntiga(service)
+
+  return NextResponse.json({ ok: true, avisadas, midiaExpirada: midia.expiradas })
 }
 
 /**
