@@ -31,18 +31,17 @@ export default async function FunilPage() {
     obterColunasFunil(),
   ])
 
-  let produtosLoja: { id: string; name: string; price: number }[] = []
-  try { produtosLoja = ((await service.from('products').select('id, name, price').eq('company_id', companyId).eq('active', true).order('name')).data ?? []) as never } catch {}
-
-  // tabelas novas — toleram não existir ainda
-  let tarefas: { id: string; contact_id: string; titulo: string; vence_em: string | null; feito: boolean }[] = []
-  let anotacoes: { id: string; contact_id: string; texto: string; created_at: string }[] = []
-  let msgsProntas: { id: string; titulo: string; texto: string }[] = []
-  let produtos: { id: string; contact_id: string; nome: string; quantidade: number; preco: number; desconto: number }[] = []
-  try { tarefas = ((await service.from('lead_tarefas').select('id, contact_id, titulo, vence_em, feito').eq('company_id', companyId).order('vence_em')).data ?? []) as never } catch {}
-  try { anotacoes = ((await service.from('lead_anotacoes').select('id, contact_id, texto, created_at').eq('company_id', companyId).order('created_at', { ascending: false })).data ?? []) as never } catch {}
-  try { msgsProntas = ((await service.from('mensagens_prontas').select('id, titulo, texto').eq('company_id', companyId).order('titulo')).data ?? []) as never } catch {}
-  try { produtos = ((await service.from('lead_produtos').select('id, contact_id, nome, quantidade, preco, desconto').eq('company_id', companyId)).data ?? []) as never } catch {}
+  // cinco buscas independentes, em paralelo (antes eram cinco esperas em fila). Cada uma tolera a tabela não existir.
+  const seguro = async <T,>(q: PromiseLike<{ data: unknown }>): Promise<T[]> => {
+    try { return ((await q).data ?? []) as T[] } catch { return [] }
+  }
+  const [produtosLoja, tarefas, anotacoes, msgsProntas, produtos] = await Promise.all([
+    seguro<{ id: string; name: string; price: number }>(service.from('products').select('id, name, price').eq('company_id', companyId).eq('active', true).order('name')),
+    seguro<{ id: string; contact_id: string; titulo: string; vence_em: string | null; feito: boolean }>(service.from('lead_tarefas').select('id, contact_id, titulo, vence_em, feito').eq('company_id', companyId).order('vence_em')),
+    seguro<{ id: string; contact_id: string; texto: string; created_at: string }>(service.from('lead_anotacoes').select('id, contact_id, texto, created_at').eq('company_id', companyId).order('created_at', { ascending: false })),
+    seguro<{ id: string; titulo: string; texto: string }>(service.from('mensagens_prontas').select('id, titulo, texto').eq('company_id', companyId).order('titulo')),
+    seguro<{ id: string; contact_id: string; nome: string; quantidade: number; preco: number; desconto: number }>(service.from('lead_produtos').select('id, contact_id, nome, quantidade, preco, desconto').eq('company_id', companyId)),
+  ])
 
   const convPorChave = new Map<string, { id: string; last_message_at: string }>()
   for (const c of convs ?? []) {

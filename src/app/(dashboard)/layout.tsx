@@ -17,19 +17,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const companyId = await getEffectiveCompanyId()
   const impersonation = await getImpersonation()
 
-  const { data: company } = await service
-    .from('companies')
-    .select('name, trial_ends_at, subscription_status, subscription_plan, logo_url, business_type')
-    .eq('id', companyId)
-    .single()
+  // as quatro buscas são independentes: em paralelo (uma espera só, em vez de quatro em fila)
+  const [{ data: company }, modo, { data: vendedoresList }, { data: userRow }] = await Promise.all([
+    service.from('companies')
+      .select('name, trial_ends_at, subscription_status, subscription_plan, logo_url, business_type')
+      .eq('id', companyId).single(),
+    getModo(),
+    service.from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome'),
+    // Novo usuário só vale para a própria conta (não em modo suporte)
+    service.from('users').select('created_at').eq('id', user.id).single(),
+  ])
   const esconderNicho = nichoEsconde(company?.business_type)
-
-  const modo = await getModo()
-  const { data: vendedoresList } = await service
-    .from('vendedores').select('id, nome').eq('company_id', companyId).eq('active', true).order('nome')
-
-  // Novo usuário só vale para a própria conta (não em modo suporte)
-  const { data: userRow } = await service.from('users').select('created_at').eq('id', user.id).single()
   const isNewUser = !impersonation && userRow?.created_at
     ? (Date.now() - new Date(userRow.created_at).getTime()) < 60 * 60 * 1000
     : false

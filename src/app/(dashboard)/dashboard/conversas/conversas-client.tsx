@@ -118,6 +118,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const [erro, setErro] = useState<string | null>(null)
   const [confirmarPrimeiroContato, setConfirmarPrimeiroContato] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
+  // Rolagem: a conversa abre no FIM (mensagem mais recente) e fica "grudada" no fim enquanto as fotos carregam e
+  // chegam mensagens novas — mas só se a pessoa não subiu pra ler o histórico (senão cada atualização a puxaria de volta).
+  const rolagemRef = useRef<HTMLDivElement>(null)
+  const grudadoNoFimRef = useRef(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mediatypeRef = useRef<'image' | 'document' | 'video'>('image')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -223,9 +227,14 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoMudarVisibilidade) }
   }, [carregarMensagens])
 
-  useEffect(() => {
-    fimRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensagens])
+  const irAoFim = useCallback(() => {
+    const el = rolagemRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [])
+  useEffect(() => { grudadoNoFimRef.current = true }, [selecionada])
+  useEffect(() => { if (grudadoNoFimRef.current) irAoFim() }, [mensagens, carregandoMsgs, irAoFim])
+  // foto/vídeo aumenta a altura DEPOIS de aparecer: sem isto a conversa parava no meio (era o "abre lá em cima")
+  const aoCarregarMidia = useCallback(() => { if (grudadoNoFimRef.current) irAoFim() }, [irAoFim])
 
   const filtradas = conversas.filter(c => {
     const termo = busca.toLowerCase()
@@ -238,6 +247,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     if (!t) return
     if (!selecionada && !(naoEncontrada && telParam)) return
     setEnviando(true)
+    grudadoNoFimRef.current = true // quem envia quer ver a própria mensagem
     if (!forcarPrimeiroContato) setTexto('')
 
     const opts = forcarPrimeiroContato ? { confirmarPrimeiroContato: true } : undefined
@@ -439,7 +449,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div ref={rolagemRef} className="flex-1 overflow-y-auto p-4 space-y-2"
+              onScroll={e => { const el = e.currentTarget; grudadoNoFimRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150 }}>
               {!carregandoMsgs && (temAnteriores || anteriores.length > 0) && (
                 <div className="flex justify-center pb-1">
                   {temAnteriores ? (
@@ -461,7 +472,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                     <div key={'ant' + i} className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
                       <div className="max-w-[75%] rounded-xl px-3.5 py-2 text-sm shadow-sm opacity-95"
                         style={{ background: m.apagada ? '#F0F0F0' : minha ? '#DCF8C6' : '#FFFFFF' }}>
-                        {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full mb-1" />}
+                        {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" className="rounded-lg max-w-full mb-1" />}
                         {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
                         <p className={`whitespace-pre-wrap ${m.apagada ? 'italic text-[#8C8880]' : 'text-[#1C1B18]'}`}>{m.apagada ? 'Mensagem apagada' : m.content}</p>
                         {m.ts && (
@@ -501,8 +512,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         </p>
                       ) : (
                         <>
-                          {m.midia && m.midia.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full mb-1" />}
-                          {m.midia && m.midia.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full mb-1" />}
+                          {m.midia && m.midia.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" onLoad={aoCarregarMidia} className="rounded-lg max-w-full mb-1" />}
+                          {m.midia && m.midia.tipo === 'video' && <video src={m.midia.url} controls onLoadedMetadata={aoCarregarMidia} className="rounded-lg max-w-full mb-1" />}
                           {m.midia && m.midia.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
                           {m.midia && m.midia.tipo === 'document' && (
                             <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>

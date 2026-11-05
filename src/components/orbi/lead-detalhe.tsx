@@ -82,6 +82,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
   const [enviando, setEnviando] = useState(false)
   const [erroChat, setErroChat] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
+  const grudadoNoFimRef = useRef(true) // fica no fim enquanto as fotos carregam, salvo se a pessoa subiu pra ler
 
   const [nome, setNome] = useState(lead.name ?? '')
   const [email, setEmail] = useState(lead.email ?? '')
@@ -176,7 +177,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     } catch { alert('Não foi possível acessar o microfone.') }
   }
 
-  useEffect(() => { fimRef.current?.scrollIntoView() }, [msgs.length])
+  useEffect(() => { if (grudadoNoFimRef.current) fimRef.current?.scrollIntoView() }, [msgs.length])
+  const aoCarregarMidia = () => { if (grudadoNoFimRef.current) fimRef.current?.scrollIntoView() }
 
   async function enviar() {
     if (!texto.trim()) return
@@ -259,7 +261,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
         <div className="flex-1 flex min-h-0">
           {/* Chat */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-[#EAE8E1]">
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ECE5DD]">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ECE5DD]"
+              onScroll={e => { const el = e.currentTarget; grudadoNoFimRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150 }}>
               {(temAnteriores || anteriores.length > 0) && (
                 <div className="flex justify-center pb-1">
                   {temAnteriores ? (
@@ -278,7 +281,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   return (
                     <div key={'ant' + i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${meu ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
-                        {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full max-h-60 mb-1" />}
+                        {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1" />}
                         <span>{m.content}</span>
                         {m.ts && <span className="block text-[10px] mt-1 text-right text-[#8C8880]">{new Date(m.ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })} {fmtHoraMsg(m.ts)}</span>}
                       </div>
@@ -293,7 +296,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   <div key={i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${m.role === 'assistant' ? 'bg-[#1A56FF] text-white rounded-br-sm' : m.role === 'human' ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
                       {m.role === 'assistant' && <span className="text-[10px] opacity-80 block mb-0.5">🤖 IA</span>}
-                      {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer" onClick={() => window.open(m.midia!.url, '_blank')} />}
+                      {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer" onClick={() => window.open(m.midia!.url, '_blank')} />}
                       {m.midia?.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full max-h-60 mb-1" />}
                       {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="max-w-full mb-1" />}
                       {m.midia?.tipo === 'document' && <a href={m.midia.url} target="_blank" className="flex items-center gap-1.5 underline mb-1"><Paperclip className="size-3.5" />{m.midia.nome || 'Documento'}</a>}
