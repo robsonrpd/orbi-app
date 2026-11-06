@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { type FunilColuna } from '@/lib/funil'
+import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
 import { obterMensagens, obterMensagensAnteriores, temMensagensAnteriores } from '@/lib/actions/conversas'
 import { setResponsavel, avisarVendedorHandoff, criarTarefa, toggleTarefa, excluirTarefa, criarAnotacao, excluirAnotacao, setQualificacao, setStatusNegociacao, addProdutoLead, delProdutoLead, enviarOrcamentoLead, enviarArquivoLead, enviarAudioLead } from '@/lib/actions/crm'
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; midiaExpirada?: boolean; ts?: string; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; midiaExpirada?: boolean; anuncio?: AnuncioMsg; ts?: string; status?: 'sent' | 'delivered' | 'read' }
 
 function fmtHoraMsg(ts: string | undefined) {
   if (!ts) return null
@@ -296,6 +297,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                   <div key={i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${m.role === 'assistant' ? 'bg-[#1A56FF] text-white rounded-br-sm' : m.role === 'human' ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
                       {m.role === 'assistant' && <span className="text-[10px] opacity-80 block mb-0.5">🤖 IA</span>}
+                      {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
                       {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer" onClick={() => window.open(m.midia!.url, '_blank')} />}
                       {m.midia?.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full max-h-60 mb-1" />}
                       {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="max-w-full mb-1" />}

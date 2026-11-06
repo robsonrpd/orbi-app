@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getMediaBase64, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
-import { extrairConteudo } from '@/lib/whatsapp-mensagem'
+import { extrairAnuncio, extrairConteudo, type Anuncio } from '@/lib/whatsapp-mensagem'
 import { importarHistorico } from '@/lib/historico-whatsapp'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 import { buscarTodos } from '@/lib/supabase/paginacao'
@@ -238,6 +238,13 @@ export async function POST(req: NextRequest) {
       if (url) midia = { tipo: midiaTipo, url, nome: docNome }
     }
 
+    // veio de um anúncio ("clique para o WhatsApp")? Guarda o cartão do anúncio na mensagem, como o WhatsApp Web mostra
+    let anuncio: Anuncio | undefined
+    if (!e.key?.fromMe && !jid.endsWith('@g.us')) {
+      try { const a = extrairAnuncio(ev); if (a) anuncio = await prepararAnuncio(service, company.id, a) }
+      catch (err) { console.error('[wh anuncio]', err) }
+    }
+
     // mensagem enviada PELA LOJA (pelo celular ou pelo Orbi) → registra como saída sem duplicar o eco do Orbi
     if (e.key?.fromMe) {
       await registrarSaida(service, company.id, numero, conteudo, midia, e.key.id, quando)
@@ -252,7 +259,7 @@ export async function POST(req: NextRequest) {
       const etapaEntrada = funilColunas && funilColunas.length > 0 ? funilColunas[0].key : 'novo'
       const { data: novo, error: capErr } = await service.from('contacts').insert({
         company_id: company.id, name: e.pushName?.trim() || null, phone: numero,
-        origem: 'WhatsApp', funil_etapa: etapaEntrada, active: true, criado_por: 'WhatsApp',
+        origem: anuncio ? (anuncio.app === 'instagram' ? 'Instagram' : 'Facebook') : 'WhatsApp', funil_etapa: etapaEntrada, active: true, criado_por: 'WhatsApp',
       } as never).select('id').single()
       if (capErr) console.error('[wh capErr]', capErr.message)
       contactId = (novo as { id?: string })?.id
@@ -263,7 +270,7 @@ export async function POST(req: NextRequest) {
     // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
     // em grupo, o texto vai prefixado com quem falou: sem isso a conversa fica ilegível
     const conteudoFinal = grupo && e.pushName?.trim() ? `${e.pushName.trim()}: ${conteudo}` : conteudo
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo, quando)
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo, quando, anuncio)
 
     // roteiro de boas-vindas: NUNCA em grupo — o bot respondendo num grupo seria um desastre
     if (!grupo) {
@@ -331,9 +338,27 @@ async function avisarDesconexao(
 type Midia = { tipo: string; url: string; nome?: string }
 // waId/waFromMe: identificam a mensagem dentro do WhatsApp. Sem eles não dá pra
 // apagar no celular do cliente — o WhatsApp precisa saber exatamente qual mensagem é.
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; anuncio?: Anuncio; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
 
 const EXT: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
+
+// Cartão do anúncio: hospeda a miniatura UMA vez por anúncio (o link do Facebook vence) e devolve o que vai na mensagem.
+async function prepararAnuncio(
+  service: ReturnType<typeof createServiceClient>, companyId: string,
+  a: Anuncio & { miniaturaBase64?: string },
+): Promise<Anuncio> {
+  const { miniaturaBase64, ...anuncio } = a
+  if (miniaturaBase64) {
+    try {
+      const chave = (a.id || Buffer.from(a.link || a.titulo || 'x').toString('hex').slice(0, 24)).replace(/[^a-zA-Z0-9_-]/g, '')
+      const path = `${companyId}/anuncios/${chave}.jpg`
+      const { error } = await service.storage.from('fotos').upload(path, Buffer.from(miniaturaBase64, 'base64'), { contentType: 'image/jpeg', upsert: true })
+      if (!error) anuncio.imagem = service.storage.from('fotos').getPublicUrl(path).data.publicUrl
+      else console.error('[wh anuncio img]', error.message)
+    } catch (err) { console.error('[wh anuncio img]', err) }
+  }
+  return anuncio
+}
 
 // Baixa a mídia de uma mensagem (do payload base64 ou via endpoint) e guarda no Storage. Retorna a URL pública.
 async function baixarMidia(
@@ -559,14 +584,14 @@ async function anexarMensagem(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean, quando?: string,
+  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean, quando?: string, anuncio?: Anuncio,
 ) {
   // NUNCA misturar campos opcionais aqui: se um deles não existir no banco, a gravação
   // inteira falha e a mensagem do cliente se perde — sem erro visível pra ninguém.
   // Salvar a mensagem é o que não pode falhar; o resto vai depois, separado.
   const agora = quando ?? new Date().toISOString()
   const convId = await anexarMensagem(service, companyId, numero, contactId, {
-    role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}),
+    role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}), ...(anuncio ? { anuncio } : {}),
   }, true)
 
   // Cliente respondeu: zera a contagem de cobranças e o alerta de lead parado.

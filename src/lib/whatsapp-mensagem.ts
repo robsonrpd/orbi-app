@@ -73,3 +73,56 @@ export function extrairConteudo(msgBruta: unknown): ConteudoMensagem {
 
   return { conteudo: texto.trim() || rotulo, midiaTipo, docNome }
 }
+
+/**
+ * Anúncio (Facebook/Instagram "clique para o WhatsApp") que trouxe o cliente.
+ * O WhatsApp Web mostra um cartão com o anúncio na 1ª mensagem; ele vem em `contextInfo.externalAdReply`.
+ * Para mensagem de texto simples o Evolution coloca o contextInfo NO NÍVEL DO EVENTO (data.contextInfo), para as
+ * demais dentro do tipo da mensagem — por isso procuramos nos dois lugares.
+ */
+export type Anuncio = {
+  titulo?: string
+  corpo?: string
+  /** link curto do anúncio (o que o WhatsApp Web abre) */
+  link?: string
+  /** publicação no Facebook/Instagram */
+  post?: string
+  /** miniatura (hospedada por nós; o link do Facebook vence) */
+  imagem?: string
+  /** id do anúncio na Meta (sourceId) */
+  id?: string
+  app?: string
+}
+
+export function extrairAnuncio(ev: unknown): (Anuncio & { miniaturaBase64?: string }) | null {
+  const e = (ev && typeof ev === 'object' ? ev : {}) as Obj
+  const m = desembrulhar(e.message)
+  const candidatos: Obj[] = []
+  if (e.contextInfo && typeof e.contextInfo === 'object') candidatos.push(e.contextInfo as Obj)
+  for (const v of Object.values(m)) {
+    const ci = (v as { contextInfo?: unknown } | null)?.contextInfo
+    if (ci && typeof ci === 'object') candidatos.push(ci as Obj)
+  }
+  for (const ci of candidatos) {
+    const ad = ci.externalAdReply as Obj | undefined
+    if (!ad || typeof ad !== 'object') continue
+    // externalAdReply também aparece em outros usos; só é anúncio se tiver cara de anúncio
+    const ehAnuncio = txt(ad.sourceType) === 'ad' || !!txt(ad.sourceId) || !!txt(ad.ctwaClid) || !!txt(ci.entryPointConversionSource)
+    if (!ehAnuncio) continue
+    const titulo = txt(ad.title).trim() || undefined
+    const corpo = txt(ad.body).trim() || undefined
+    const link = txt(ad.sourceUrl).trim() || undefined
+    const post = txt(ad.mediaUrl).trim() || undefined
+    if (!titulo && !corpo && !link && !post) continue
+    const appBruto = (txt(ci.entryPointConversionApp) || txt(ad.sourceApp)).toLowerCase()
+    const thumb = txt(ad.thumbnail)
+    return {
+      titulo, corpo: corpo?.slice(0, 400), link, post,
+      id: txt(ad.sourceId) || undefined,
+      app: appBruto.includes('insta') ? 'instagram' : appBruto.includes('face') ? 'facebook' : undefined,
+      imagem: txt(ad.thumbnailUrl) || undefined,
+      miniaturaBase64: thumb.length > 100 ? thumb : undefined,
+    }
+  }
+  return null
+}
