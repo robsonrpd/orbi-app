@@ -5,7 +5,7 @@ export function CartaoAnuncio({ anuncio }: { anuncio: AnuncioMsg }) {
   const href = anuncio.link || anuncio.post
   const origem = anuncio.app === 'instagram' ? 'Instagram' : anuncio.app === 'facebook' ? 'Facebook' : 'anúncio'
   return (
-    <div className="mb-1.5 rounded-lg overflow-hidden border border-[#E5E3DC] bg-[#F7F6F3]">
+    <div className="mb-1.5 min-w-[220px] rounded-lg overflow-hidden border border-[#E5E3DC] bg-[#F7F6F3]">
       {anuncio.imagem && <img src={anuncio.imagem} alt="" loading="lazy" decoding="async" className="w-full max-h-40 object-cover" />}
       <div className="px-2.5 py-2">
         <p className="text-[10px] font-bold uppercase tracking-wide text-[#1A56FF] mb-0.5">📣 Veio de um anúncio no {origem}</p>

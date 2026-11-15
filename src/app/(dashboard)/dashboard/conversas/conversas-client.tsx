@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -100,6 +101,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const [selecionada, setSelecionada] = useState<string | null>(
     () => telParam ? achaConversaPorTel(telParam, conversasIniciais) : (conversasIniciais[0]?.id ?? null)
   )
+  // No celular não cabe lista + conversa lado a lado: mostra uma de cada vez (no computador as duas aparecem sempre)
+  const [tela, setTela] = useState<'lista' | 'conversa'>(telParam ? 'conversa' : 'lista')
   const [naoEncontrada, setNaoEncontrada] = useState(!!telParam && !achaConversaPorTel(telParam, conversasIniciais))
   const [fotoNaoEncontrada, setFotoNaoEncontrada] = useState<string | null>(null)
   const [menuApagar, setMenuApagar] = useState<number | null>(null)
@@ -343,11 +346,11 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   }
 
   return (
-    <div className="flex h-full rounded-2xl border border-[#EAE8E1] overflow-hidden bg-white">
+    <div className="flex h-full rounded-xl md:rounded-2xl border border-[#EAE8E1] overflow-hidden bg-white">
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleArquivoSelecionado} />
 
       {/* Lista de conversas */}
-      <div className="w-[320px] shrink-0 border-r border-[#EAE8E1] flex flex-col bg-[#F7F6F3]">
+      <div className={`w-full md:w-[320px] md:shrink-0 border-r border-[#EAE8E1] flex-col bg-[#F7F6F3] ${tela === 'lista' ? 'flex' : 'hidden md:flex'}`}>
         <div className="p-3 border-b border-[#EAE8E1]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
@@ -363,7 +366,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
             const nome = c.contactName ?? c.numero
             const ativo = c.id === selecionada
             return (
-              <button key={c.id} onClick={() => setSelecionada(c.id)}
+              <button key={c.id} onClick={() => { setSelecionada(c.id); setTela('conversa') }}
                 className={`w-full flex items-start gap-2.5 px-3 py-3 border-b border-[#EAE8E1] text-left transition-colors ${ativo ? 'bg-white' : 'hover:bg-white/60'}`}>
                 <FotoContato key={c.contactFoto ?? 'sem'} src={c.contactFoto} className="w-10 h-10 rounded-full shrink-0">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
@@ -385,10 +388,12 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
       </div>
 
       {/* Thread */}
-      <div className="flex-1 flex flex-col relative" style={{ background: '#EDEDED' }}>
+      <div className={`flex-1 min-w-0 flex-col relative ${tela === 'conversa' ? 'flex' : 'hidden md:flex'}`} style={{ background: '#EDEDED' }}>
         {!ativa && naoEncontrada && telParam ? (
           <>
             <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
+              <button onClick={() => setTela('lista')} aria-label="Voltar para as conversas"
+                className="md:hidden -ml-2 w-9 h-9 shrink-0 flex items-center justify-center rounded-lg text-[#5C5A54] hover:bg-[#F7F6F3]"><ArrowLeft className="size-5" /></button>
               {fotoNaoEncontrada ? (
                 <img src={fotoNaoEncontrada} alt="" className="w-9 h-9 rounded-full object-cover" />
               ) : (
@@ -434,15 +439,17 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
           </div>
         ) : (
           <>
-            <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-4 shrink-0">
+            <div className="h-14 bg-white border-b border-[#EAE8E1] flex items-center gap-2.5 px-3 md:px-4 shrink-0">
+              <button onClick={() => setTela('lista')} aria-label="Voltar para as conversas"
+                className="md:hidden -ml-2 w-9 h-9 shrink-0 flex items-center justify-center rounded-lg text-[#5C5A54] hover:bg-[#F7F6F3]"><ArrowLeft className="size-5" /></button>
               <FotoContato key={ativa.contactFoto ?? 'sem'} src={ativa.contactFoto} className="w-9 h-9 rounded-full">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
                   style={{ background: ativa.grupo ? '#8B5CF6' : '#1A56FF' }}>
                   {ativa.grupo ? <UsersRound className="size-4.5" strokeWidth={1.5} /> : iniciais(ativa.contactName ?? ativa.numero)}
                 </div>
               </FotoContato>
-              <div>
-                <p className="text-sm font-bold text-[#1C1B18] flex items-center gap-1.5">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[#1C1B18] flex items-center gap-1.5 truncate">
                   {ativa.contactName ?? ativa.numero}
                   {ativa.grupo && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F5F3FF] text-[#8B5CF6]">GRUPO</span>}
                 </p>
@@ -450,7 +457,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               </div>
             </div>
 
-            <div ref={rolagemRef} className="flex-1 overflow-y-auto p-4 space-y-2"
+            <div ref={rolagemRef} className="flex-1 min-h-0 overflow-y-auto p-2.5 md:p-4 space-y-2"
               onScroll={e => { const el = e.currentTarget; grudadoNoFimRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150 }}>
               {!carregandoMsgs && (temAnteriores || anteriores.length > 0) && (
                 <div className="flex justify-center pb-1">
@@ -471,7 +478,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                   const minha = m.role === 'assistant' || m.role === 'human'
                   return (
                     <div key={'ant' + i} className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
-                      <div className="max-w-[75%] rounded-xl px-3.5 py-2 text-sm shadow-sm opacity-95"
+                      <div className="max-w-[88%] md:max-w-[75%] min-w-0 rounded-xl px-3.5 py-2 text-sm shadow-sm opacity-95 break-words"
                         style={{ background: m.apagada ? '#F0F0F0' : minha ? '#DCF8C6' : '#FFFFFF' }}>
                         {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" className="rounded-lg max-w-full mb-1" />}
                         {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
@@ -502,7 +509,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         podeParaTodos={podeApagarParaTodos}
                         onApagar={paraTodos => handleApagar(i, m.ts, paraTodos)} />
                     )}
-                    <div className="max-w-[75%] rounded-xl px-3.5 py-2 text-sm shadow-sm"
+                    <div className="max-w-[88%] md:max-w-[75%] min-w-0 rounded-xl px-3.5 py-2 text-sm shadow-sm break-words"
                       style={{ background: m.apagada ? '#F0F0F0' : minha ? (m.role === 'assistant' ? '#D9FDD3' : '#DCF8C6') : '#FFFFFF' }}>
                       {m.role === 'assistant' && !m.apagada && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-[#0DB57A] mb-0.5">

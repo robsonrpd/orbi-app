@@ -80,6 +80,8 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     setCarregandoAnt(false)
   }
   const [texto, setTexto] = useState('')
+  // no celular a conversa e os dados do lead não cabem lado a lado: abas (no computador as duas colunas aparecem sempre)
+  const [aba, setAba] = useState<'conversa' | 'dados'>('conversa')
   const [enviando, setEnviando] = useState(false)
   const [erroChat, setErroChat] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
@@ -235,13 +237,13 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
     <div className="fixed inset-0 z-50 flex items-stretch justify-center" style={{ background: 'rgba(10,15,30,0.55)' }}>
       <div className="w-full h-full bg-white shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#EAE8E1] shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 px-3 md:px-5 py-3 border-b border-[#EAE8E1] shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: etapaInfo.cor }}>
               {(nome || lead.phone)[0].toUpperCase()}
             </div>
-            <div>
-              <p className="text-base font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>{nome || 'Sem nome'}</p>
+            <div className="min-w-0">
+              <p className="text-base font-black text-[#1C1B18] truncate" style={{ fontFamily: 'Fraunces, serif' }}>{nome || 'Sem nome'}</p>
               <p className="text-xs text-[#8C8880]">{lead.phone}</p>
             </div>
           </div>
@@ -259,10 +261,20 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
           ))}
         </div>
 
+        {/* Abas (só no celular) */}
+        <div className="md:hidden flex border-b border-[#EAE8E1] shrink-0">
+          {(['conversa', 'dados'] as const).map(a => (
+            <button key={a} onClick={() => setAba(a)}
+              className={`flex-1 h-10 text-sm font-bold transition-colors ${aba === a ? 'text-[#1A56FF] border-b-2 border-[#1A56FF]' : 'text-[#8C8880]'}`}>
+              {a === 'conversa' ? 'Conversa' : 'Dados do lead'}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 flex min-h-0">
           {/* Chat */}
-          <div className="flex-1 flex flex-col min-w-0 border-r border-[#EAE8E1]">
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ECE5DD]"
+          <div className={`flex-1 flex-col min-w-0 md:border-r border-[#EAE8E1] ${aba === 'conversa' ? 'flex' : 'hidden md:flex'}`}>
+            <div className="flex-1 min-h-0 overflow-y-auto p-2.5 md:p-4 space-y-2 bg-[#ECE5DD]"
               onScroll={e => { const el = e.currentTarget; grudadoNoFimRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150 }}>
               {(temAnteriores || anteriores.length > 0) && (
                 <div className="flex justify-center pb-1">
@@ -371,7 +383,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
           </div>
 
           {/* Painel */}
-          <div className="w-[340px] shrink-0 overflow-y-auto p-4 space-y-4">
+          <div className={`w-full md:w-[340px] md:shrink-0 min-w-0 overflow-y-auto p-4 space-y-4 ${aba === 'dados' ? 'block' : 'hidden md:block'}`}>
             {/* Negociação */}
             <div className="space-y-2.5">
               <p className={secTitle}><DollarSign className="size-3.5 text-[#0DB57A]" /> Negociação</p>
