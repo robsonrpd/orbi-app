@@ -139,7 +139,7 @@ export function Sidebar({ companyName, logoUrl, canEditLogo = true, modo, vended
         <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setOpen(false)} />
       )}
       <aside className={cn(
-        'w-[220px] shrink-0 flex flex-col h-screen fixed md:sticky top-0 z-50 transition-transform duration-200 ease-out',
+        'w-[220px] shrink-0 flex flex-col h-dvh fixed md:sticky top-0 z-50 transition-transform duration-200 ease-out',
         open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       )}
         style={{ background: 'linear-gradient(180deg, #0A0F1E 0%, #0D1635 100%)' }}>

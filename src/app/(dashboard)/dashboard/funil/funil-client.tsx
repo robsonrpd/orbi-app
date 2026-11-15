@@ -134,11 +134,11 @@ export function FunilClient({ leads: leadsIniciais, vendedores = [], msgsProntas
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4 shrink-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 mb-3 md:mb-4 shrink-0">
         <p className="text-sm text-[#8C8880]">
-          {leads.length} leads · <strong className="text-[#1A56FF]">{fmt(totalAberto)}</strong> em aberto · clique num card para abrir a conversa
+          {leads.length} leads · <strong className="text-[#1A56FF]">{fmt(totalAberto)}</strong> em aberto<span className="hidden md:inline"> · clique num card para abrir a conversa</span>
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 [&>button]:whitespace-nowrap [&>button]:px-2.5 md:[&>button]:px-3">
           <button onClick={() => setPersonalizarOpen(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-[#8C8880] bg-white border border-[#EAE8E1] hover:text-[#2E2D29]">
             <Palette className="size-4" /> Personalizar colunas
