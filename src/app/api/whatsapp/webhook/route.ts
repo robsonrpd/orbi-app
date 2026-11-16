@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getMediaBase64, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
+import { enviarPushEmpresa } from '@/lib/push'
 import { extrairAnuncio, extrairConteudo, type Anuncio } from '@/lib/whatsapp-mensagem'
 import { importarHistorico } from '@/lib/historico-whatsapp'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
@@ -271,6 +272,17 @@ export async function POST(req: NextRequest) {
     // em grupo, o texto vai prefixado com quem falou: sem isso a conversa fica ilegível
     const conteudoFinal = grupo && e.pushName?.trim() ? `${e.pushName.trim()}: ${conteudo}` : conteudo
     await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo, quando, anuncio)
+
+    // aviso no celular/computador de quem ativou ("como o WhatsApp"). Só mensagem de pessoa (grupo faria barulho demais)
+    // e só se for recente: depois de uma queda o WhatsApp reentrega o acumulado e isso viraria uma enxurrada de avisos.
+    if (!grupo && Date.now() - new Date(quando ?? Date.now()).getTime() < 15 * 60_000) {
+      const quem = e.pushName?.trim() || numero
+      const texto = anuncio ? `📣 Veio de um anúncio: ${conteudo}` : conteudo
+      await enviarPushEmpresa(service, company.id, {
+        titulo: quem, corpo: texto.length > 140 ? texto.slice(0, 137) + '…' : texto,
+        url: `/dashboard/conversas?tel=${numero}`, tag: numero,
+      })
+    }
 
     // roteiro de boas-vindas: NUNCA em grupo — o bot respondendo num grupo seria um desastre
     if (!grupo) {

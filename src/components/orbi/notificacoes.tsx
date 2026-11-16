@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { AvisosPush } from './avisos-push'
 import { Bell, Eye, Gift, PackageCheck, ArrowDownCircle, CalendarPlus, X } from 'lucide-react'
 
 type Notif = {
@@ -49,11 +50,12 @@ export function Notificacoes() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-[#EAE8E1] overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-[min(20rem,calc(100vw-1.5rem))] bg-white rounded-2xl shadow-2xl border border-[#EAE8E1] overflow-hidden z-50">
           <div className="px-4 py-3 border-b border-[#EAE8E1] flex items-center justify-between">
             <p className="text-sm font-black text-[#1C1B18]" style={{ fontFamily: 'Fraunces, serif' }}>Notificações</p>
             <button onClick={() => setOpen(false)} className="text-[#C8C5BB] hover:text-[#8C8880]"><X className="size-4" /></button>
           </div>
+          <AvisosPush />
 
           {notifs.length === 0 ? (
             <div className="px-4 py-10 text-center">

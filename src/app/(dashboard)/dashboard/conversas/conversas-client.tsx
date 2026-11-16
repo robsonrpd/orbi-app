@@ -1,7 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback } from 'react'
+import { SeparadorDia } from '@/components/orbi/separador-dia'
 import { ArrowLeft } from 'lucide-react'
+import { AvisosPush } from '@/components/orbi/avisos-push'
+import { BotaoMidiaPendente, type MidiaBaixada } from '@/components/orbi/botao-midia-pendente'
 import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -15,7 +18,7 @@ import {
   AlertTriangle, X, Trash2, Ban, UsersRound, Check, CheckCheck,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; anuncio?: AnuncioMsg; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; anuncio?: AnuncioMsg; midiaPendente?: { tipo: string }; status?: 'sent' | 'delivered' | 'read' }
 
 /**
  * Foto do contato com plano B: se a imagem falhar ao carregar (link vencido, arquivo apagado), mostra as
@@ -25,11 +28,6 @@ function FotoContato({ src, className, children }: { src: string | null; classNa
   const [erro, setErro] = useState(false)
   if (src && !erro) return <img src={src} alt="" className={`${className} object-cover`} onError={() => setErro(true)} />
   return <>{children}</>
-}
-
-/** "dd/mm/aa" — as mensagens do arquivo são antigas, então mostram a data junto da hora. */
-function fmtDataCompleta(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 /** Tiques como no WhatsApp: ✓ enviada, ✓✓ cinza entregue, ✓✓ azul lida. Sem status conhecido = enviada. */
@@ -238,6 +236,11 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   useEffect(() => { grudadoNoFimRef.current = true }, [selecionada])
   useEffect(() => { if (grudadoNoFimRef.current) irAoFim() }, [mensagens, carregandoMsgs, irAoFim])
   // foto/vídeo aumenta a altura DEPOIS de aparecer: sem isto a conversa parava no meio (era o "abre lá em cima")
+  // arquivo do histórico baixado sob demanda: troca nas duas listas (ativa e arquivo) sem recarregar
+  const aoBaixarMidia = useCallback((waId: string, midia: MidiaBaixada) => {
+    const trocar = (l: Msg[]) => l.map(x => x.waId === waId ? { ...x, midia, midiaPendente: undefined } : x)
+    setMensagens(trocar); setAnteriores(trocar)
+  }, [])
   const aoCarregarMidia = useCallback(() => { if (grudadoNoFimRef.current) irAoFim() }, [irAoFim])
 
   const filtradas = conversas.filter(c => {
@@ -358,6 +361,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               className="w-full h-9 pl-8 pr-3 text-sm rounded-lg border border-[#EAE8E1] bg-white outline-none focus:border-[#1A56FF] transition-all" />
           </div>
         </div>
+        <AvisosPush compacto />
         <div className="flex-1 overflow-y-auto">
           {filtradas.length === 0 && (
             <p className="text-sm text-[#8C8880] text-center py-10 px-4">Nenhuma conversa ainda. Quando um cliente mandar mensagem no WhatsApp, ela aparece aqui.</p>
@@ -474,25 +478,29 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               {/* mensagens do arquivo: só leitura (não dá pra apagar), e sem repetir as que já estão na conversa ativa */}
               {!carregandoMsgs && anteriores
                 .filter(a => !mensagens.some(m => (a.waId && m.waId === a.waId) || (!a.waId && m.ts === a.ts && m.content === a.content)))
-                .map((m, i) => {
+                .map((m, i, lista) => {
                   const minha = m.role === 'assistant' || m.role === 'human'
                   return (
-                    <div key={'ant' + i} className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
+                    <Fragment key={'ant' + i}>
+                    <SeparadorDia ts={m.ts} anterior={lista[i - 1]?.ts} />
+                    <div className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
                       <div className="max-w-[88%] md:max-w-[75%] min-w-0 rounded-xl px-3.5 py-2 text-sm shadow-sm opacity-95 break-words"
                         style={{ background: m.apagada ? '#F0F0F0' : minha ? '#DCF8C6' : '#FFFFFF' }}>
                         {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" className="rounded-lg max-w-full mb-1" />}
                         {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
+                        {!m.midia && m.midiaPendente && m.waId && selecionada && <BotaoMidiaPendente conversaId={selecionada} waId={m.waId} tipo={m.midiaPendente.tipo} onBaixada={md => aoBaixarMidia(m.waId!, md)} />}
                         {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
                         {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
                         <p className={`whitespace-pre-wrap ${m.apagada ? 'italic text-[#8C8880]' : 'text-[#1C1B18]'}`}>{m.apagada ? 'Mensagem apagada' : m.content}</p>
                         {m.ts && (
                           <span className={`block text-[10px] mt-1 text-right ${minha ? 'text-[#3A6B2E]' : 'text-[#8C8880]'}`}>
-                            {fmtDataCompleta(m.ts)}{' '}{fmtHora(m.ts)}
+                            {fmtHora(m.ts)}
                             {minha && !m.apagada && m.status && <Tiques status={m.status} ts={m.ts} />}
                           </span>
                         )}
                       </div>
                     </div>
+                    </Fragment>
                   )
                 })}
               {carregandoMsgs && (
@@ -502,7 +510,9 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                 const minha = m.role === 'assistant' || m.role === 'human'
                 const podeApagarParaTodos = !!m.waFromMe && !!m.waId && !m.apagada
                 return (
-                  <div key={i} className={`group flex items-center gap-1 ${minha ? 'justify-end' : 'justify-start'}`}>
+                  <Fragment key={i}>
+                  <SeparadorDia ts={m.ts} anterior={i > 0 ? mensagens[i - 1].ts : anteriores[anteriores.length - 1]?.ts} />
+                  <div className={`group flex items-center gap-1 ${minha ? 'justify-end' : 'justify-start'}`}>
                     {minha && !m.apagada && (
                       <BotaoApagar aberto={menuApagar === i} apagando={apagando}
                         onAbrir={() => setMenuApagar(menuApagar === i ? null : i)}
@@ -528,7 +538,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                           {m.midia && m.midia.tipo === 'document' && (
                             <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>
                           )}
-                          {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
+                          {!m.midia && m.midiaPendente && m.waId && selecionada && <BotaoMidiaPendente conversaId={selecionada} waId={m.waId} tipo={m.midiaPendente.tipo} onBaixada={md => aoBaixarMidia(m.waId!, md)} />}
+                        {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
                           {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
                           <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
                         </>
@@ -547,6 +558,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         onApagar={paraTodos => handleApagar(i, m.ts, paraTodos)} />
                     )}
                   </div>
+                  </Fragment>
                 )
               })}
               <div ref={fimRef} />

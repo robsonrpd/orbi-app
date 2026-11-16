@@ -126,3 +126,26 @@ export function extrairAnuncio(ev: unknown): (Anuncio & { miniaturaBase64?: stri
   }
   return null
 }
+
+/**
+ * "Endereço" de um arquivo do WhatsApp (foto, áudio, vídeo, documento) para baixar DEPOIS, sob demanda.
+ * O histórico importado no pareamento não baixa os arquivos na hora (seriam centenas), mas guardando isto dá pra
+ * buscar um arquivo específico quando a pessoa clicar — enquanto o WhatsApp ainda o tiver (algumas semanas).
+ */
+export type MidiaPendente = { tipo: MidiaTipo; nome?: string; no: string; dados: Obj; jid: string; fromMe: boolean }
+
+const NOS_DE_MIDIA = ['imageMessage', 'videoMessage', 'ptvMessage', 'audioMessage', 'pttMessage', 'documentMessage'] as const
+const CAMPOS_DE_MIDIA = ['url', 'directPath', 'mediaKey', 'mimetype', 'fileName', 'fileLength', 'fileSha256', 'fileEncSha256', 'mediaKeyTimestamp', 'seconds', 'ptt']
+
+export function descritorDeMidia(msgBruta: unknown, jid: string, fromMe: boolean): MidiaPendente | null {
+  const m = desembrulhar(msgBruta)
+  const { midiaTipo, docNome } = extrairConteudo(m)
+  if (!midiaTipo) return null
+  const no = NOS_DE_MIDIA.find(k => m[k] && typeof m[k] === 'object')
+  if (!no) return null
+  const bruto = m[no] as Obj
+  const dados: Obj = {}
+  for (const c of CAMPOS_DE_MIDIA) if (bruto[c] !== undefined && bruto[c] !== null) dados[c] = bruto[c]
+  if (!dados.mediaKey || !(dados.directPath || dados.url)) return null
+  return { tipo: midiaTipo, ...(docNome ? { nome: docNome } : {}), no, dados, jid, fromMe }
+}

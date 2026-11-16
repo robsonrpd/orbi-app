@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { Fragment, useState, useRef, useEffect } from 'react'
+import { SeparadorDia } from '@/components/orbi/separador-dia'
 import { type FunilColuna } from '@/lib/funil'
+import { BotaoMidiaPendente } from '@/components/orbi/botao-midia-pendente'
 import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
 import { responderLead, atualizarLead } from '@/lib/actions/lead'
 import { obterMensagens, obterMensagensAnteriores, temMensagensAnteriores } from '@/lib/actions/conversas'
@@ -13,7 +15,7 @@ import {
 } from 'lucide-react'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; midiaExpirada?: boolean; anuncio?: AnuncioMsg; ts?: string; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; midiaExpirada?: boolean; anuncio?: AnuncioMsg; waId?: string; midiaPendente?: { tipo: string }; ts?: string; status?: 'sent' | 'delivered' | 'read' }
 
 function fmtHoraMsg(ts: string | undefined) {
   if (!ts) return null
@@ -289,16 +291,19 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
               {/* mensagens do arquivo: só leitura, e sem repetir as que já estão na conversa ativa */}
               {anteriores
                 .filter(a => !msgs.some(m => ((m as { waId?: string }).waId && (m as { waId?: string }).waId === (a as { waId?: string }).waId) || (m.ts === a.ts && m.content === a.content)))
-                .map((m, i) => {
+                .map((m, i, lista) => {
                   const meu = m.role === 'assistant' || m.role === 'human'
                   return (
-                    <div key={'ant' + i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
+                    <Fragment key={'ant' + i}>
+                    <SeparadorDia ts={m.ts} anterior={lista[i - 1]?.ts} />
+                    <div className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${meu ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
                         {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1" />}
                         {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}<span>{m.content}</span>
                         {m.ts && <span className="block text-[10px] mt-1 text-right text-[#8C8880]">{new Date(m.ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })} {fmtHoraMsg(m.ts)}</span>}
                       </div>
                     </div>
+                    </Fragment>
                   )
                 })}
               {carregandoMsgs && msgs.length === 0 && <div className="flex justify-center py-10"><Loader2 className="size-5 animate-spin text-[#8C8880]" /></div>}
@@ -306,9 +311,13 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
               {msgs.map((m, i) => {
                 const meu = m.role === 'assistant' || m.role === 'human'
                 return (
-                  <div key={i} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
+                  <Fragment key={i}>
+                  <SeparadorDia ts={m.ts} anterior={i > 0 ? msgs[i - 1].ts : anteriores[anteriores.length - 1]?.ts} />
+                  <div className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${m.role === 'assistant' ? 'bg-[#1A56FF] text-white rounded-br-sm' : m.role === 'human' ? 'bg-[#DCF8C6] text-[#1C1B18] rounded-br-sm' : 'bg-white text-[#2E2D29] rounded-bl-sm'}`}>
                       {m.role === 'assistant' && <span className="text-[10px] opacity-80 block mb-0.5">🤖 IA</span>}
+                      {!m.midia && m.midiaPendente && m.waId && lead.conversaId && <BotaoMidiaPendente conversaId={lead.conversaId} waId={m.waId} tipo={m.midiaPendente.tipo}
+                        onBaixada={md => setMsgs(l => l.map(x => x.waId === m.waId ? { ...x, midia: md, midiaPendente: undefined } : x))} />}
                       {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
                       {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer" onClick={() => window.open(m.midia!.url, '_blank')} />}
                       {m.midia?.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full max-h-60 mb-1" />}
@@ -330,6 +339,7 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                       )}
                     </div>
                   </div>
+                  </Fragment>
                 )
               })}
               <div ref={fimRef} />

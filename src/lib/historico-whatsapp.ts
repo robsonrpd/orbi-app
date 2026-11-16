@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server'
-import { extrairConteudo } from '@/lib/whatsapp-mensagem'
+import { descritorDeMidia, extrairConteudo, type MidiaPendente } from '@/lib/whatsapp-mensagem'
 
 type Service = ReturnType<typeof createServiceClient>
 
@@ -14,7 +14,8 @@ type Service = ReturnType<typeof createServiceClient>
 //    Uma loja com anos de WhatsApp teria milhares de contatos antigos entupindo o funil.
 //  - nada dispara automação: conversas novas nascem "inertes" (boas-vindas, alerta de demora e
 //    cobrança marcados como já feitos). Mensagem de cliente de meses atrás não pode virar atendimento.
-//  - mídia antiga NÃO é baixada (os links do WhatsApp vencem): aparece o rótulo "📷 Imagem", "🎤 Áudio"...
+//  - mídia antiga NÃO é baixada na hora: aparece o rótulo "📷 Imagem", "🎤 Áudio"... Nas mensagens recentes guardamos o
+//    endereço do arquivo (midiaPendente) e a tela oferece "Baixar" — o WhatsApp só mantém o arquivo por algumas semanas.
 
 export const DIAS_PARA_VIRAR_LEAD = 90
 const MAX_CHATS_POR_CHAMADA = 600
@@ -24,7 +25,11 @@ const SIMULTANEOS = 6
 type Msg = {
   role: 'user' | 'human'; content: string; ts: string; waId: string; waFromMe: boolean
   status?: 'sent' | 'delivered' | 'read'
+  midiaPendente?: MidiaPendente
 }
+
+/** Arquivo mais velho que isso já não existe no WhatsApp: nem guarda o endereço. */
+const DIAS_MIDIA_BAIXAVEL = 30
 
 type Chat = {
   numero: string
@@ -117,10 +122,13 @@ export async function importarHistorico(
     if (!conteudo || !ts) continue
 
     const fromMe = !!m.key?.fromMe
+    const recente = Date.now() - new Date(ts).getTime() < DIAS_MIDIA_BAIXAVEL * 86_400_000
+    const midiaPendente = recente ? descritorDeMidia(m.message, jid, fromMe) : null
     const c = chats.get(numero) ?? { numero, msgs: [], nome: null, temEntrada: false, temSaida: false }
     c.msgs.push({
       role: fromMe ? 'human' : 'user', content: conteudo, ts, waId: id, waFromMe: fromMe,
       ...(fromMe && statusDoWhatsApp(m.status) ? { status: statusDoWhatsApp(m.status) } : {}),
+      ...(midiaPendente ? { midiaPendente } : {}),
     })
     if (fromMe) c.temSaida = true; else { c.temEntrada = true; if (!c.nome && m.pushName?.trim()) c.nome = m.pushName.trim() }
     chats.set(numero, c)

@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe, getMediaBase64 } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
@@ -381,4 +381,47 @@ export async function temMensagensAnteriores(conversaId: string): Promise<boolea
   const { count } = await service.from('mensagens_arquivo').select('id', { count: 'exact', head: true })
     .eq('conversation_id', conversaId).eq('company_id', companyId)
   return (count ?? 0) > 0
+}
+
+const EXT_MIDIA: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
+
+/**
+ * Baixa sob demanda um arquivo do HISTÓRICO importado (foto, áudio, vídeo, documento): busca no WhatsApp pelo
+ * endereço guardado na mensagem (midiaPendente), hospeda no Storage e troca o endereço pelo arquivo.
+ * O WhatsApp só guarda esses arquivos por algumas semanas; depois disso não há como recuperar.
+ */
+export async function baixarMidiaPendente(conversaId: string, waId: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+
+  const { data: conv } = await service.from('conversations').select('id, messages').eq('id', conversaId).eq('company_id', companyId).single()
+  if (!conv) return { error: 'Conversa não encontrada.' }
+  type ComPendente = { waId?: string; midiaPendente?: { tipo: string; nome?: string; no: string; dados: Record<string, unknown>; jid: string; fromMe: boolean } }
+  let alvo = ((conv.messages as ComPendente[] | null) ?? []).find(m => m.waId === waId)
+  if (!alvo) {
+    const { data: arq } = await service.from('mensagens_arquivo' as never).select('msg').eq('conversation_id', conversaId).eq('msg->>waId', waId).limit(1)
+    alvo = ((arq ?? []) as { msg: ComPendente }[])[0]?.msg
+  }
+  const p = alvo?.midiaPendente
+  if (!p) return { error: 'Este arquivo não pode ser baixado.' }
+
+  const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+  if (!instance) return { error: 'WhatsApp não conectado.' }
+
+  const r = await getMediaBase64(instance, { key: { remoteJid: p.jid, fromMe: p.fromMe, id: waId }, message: { [p.no]: p.dados } })
+  if (!r.base64) return { error: 'O WhatsApp não guarda mais este arquivo. Peça para o cliente enviar de novo.' }
+
+  const nome = p.nome
+  const ext = nome && nome.includes('.') ? nome.split('.').pop() : EXT_MIDIA[p.tipo] || 'bin'
+  const caminho = `${companyId}/wa/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const mime = r.mimetype || (typeof p.dados.mimetype === 'string' ? p.dados.mimetype : undefined)
+  const { error: eUp } = await service.storage.from('fotos').upload(caminho, Buffer.from(r.base64.replace(/^data:[^;]+;base64,/, ''), 'base64'), { contentType: mime, upsert: false })
+  if (eUp) { console.error('[midia pendente]', eUp.message); return { error: 'Não foi possível guardar o arquivo.' } }
+
+  const midia = { tipo: p.tipo, url: service.storage.from('fotos').getPublicUrl(caminho).data.publicUrl, ...(nome ? { nome } : {}) }
+  const { error: eTroca } = await service.rpc('trocar_midia_pendente', { p_conversation: conversaId, p_wa_id: waId, p_midia: midia })
+  if (eTroca) console.error('[midia pendente troca]', eTroca.message)
+  return { success: true as const, midia }
 }
