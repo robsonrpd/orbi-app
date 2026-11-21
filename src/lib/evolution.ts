@@ -203,3 +203,36 @@ export async function buscarFotoPerfil(instance: string, number: string) {
   const d = r.data as { profilePictureUrl?: string; picture?: string } | null
   return r.ok ? (d?.profilePictureUrl ?? d?.picture ?? null) : null
 }
+
+/** Envia um cartão de contato (vCard). telefone = só dígitos com DDI. */
+export async function enviarContato(instance: string, number: string, p: { nome: string; telefone: string }) {
+  const tel = p.telefone.replace(/\D/g, '')
+  return call(`/message/sendContact/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ number, contact: [{ fullName: p.nome, wuid: tel, phoneNumber: `+${tel}` }] }),
+  })
+}
+
+/** Envia uma enquete. escolhas = quantas opções a pessoa pode marcar (1 = só uma). */
+export async function enviarEnquete(instance: string, number: string, p: { pergunta: string; opcoes: string[]; escolhas: number }) {
+  return call(`/message/sendPoll/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ number, name: p.pergunta, selectableCount: p.escolhas, values: p.opcoes }),
+  })
+}
+
+/** Envia uma figurinha a partir de uma imagem (URL pública); o Evolution converte para o formato de figurinha. */
+export async function enviarFigurinha(instance: string, number: string, sticker: string) {
+  return call(`/message/sendSticker/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ number, sticker }),
+  })
+}
+
+/** Número do WhatsApp conectado na instância (só dígitos), ou null. */
+export async function numeroDaInstancia(instance: string) {
+  const r = await call(`/instance/fetchInstances?instanceName=${encodeURIComponent(instance)}`)
+  const i = (Array.isArray(r.data) ? r.data[0] : r.data) as { ownerJid?: string; number?: string } | null
+  const n = (i?.ownerJid ?? i?.number ?? '').split('@')[0].replace(/\D/g, '')
+  return n || null
+}

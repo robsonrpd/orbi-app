@@ -5,11 +5,12 @@ import { SeparadorDia } from '@/components/orbi/separador-dia'
 import { ArrowLeft } from 'lucide-react'
 import { AvisosPush } from '@/components/orbi/avisos-push'
 import { BotaoMidiaPendente, type MidiaBaixada } from '@/components/orbi/botao-midia-pendente'
+import { JanelaContato, JanelaEnquete, JanelaEvento, JanelaRespostas } from '@/components/orbi/anexos-conversa'
 import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
 import { useSearchParams } from 'next/navigation'
 import {
   listarConversas, conversasAtualizadas, obterMensagens, obterMensagensAnteriores, temMensagensAnteriores, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
-  apagarMensagem,
+  apagarMensagem, enviarContatoConversa, enviarEnqueteConversa, enviarFigurinhaConversa, linkDoCatalogo,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
@@ -46,17 +47,18 @@ function Tiques({ status, ts }: { status?: Msg['status']; ts?: string }) {
 
 const EMOJIS = ['😀', '😂', '😍', '👍', '🙏', '🎉', '❤️', '😊', '😢', '😮', '🔥', '✅', '👏', '🙌', '😅', '🤔', '😎', '💪', '📅', '⏰']
 
-const ANEXO_ITENS = [
-  { icon: FileText, label: 'Documento', cor: '#7E57C2', ativo: true, accept: '.pdf,.doc,.docx,.xls,.xlsx', mediatype: 'document' as const },
-  { icon: ImageIcon, label: 'Fotos e vídeos', cor: '#1A56FF', ativo: true, accept: 'image/*,video/*', mediatype: 'image' as const },
-  { icon: Camera, label: 'Câmera', cor: '#EC407A', ativo: false },
-  { icon: Headphones, label: 'Áudio', cor: '#FF7043', ativo: false },
-  { icon: User, label: 'Contato', cor: '#1A56FF', ativo: false },
-  { icon: BarChart2, label: 'Enquete', cor: '#F9A825', ativo: false },
-  { icon: Calendar, label: 'Evento', cor: '#EF5350', ativo: false },
-  { icon: Sticker, label: 'Nova figurinha', cor: '#0DB57A', ativo: false },
-  { icon: Book, label: 'Catálogo', cor: '#8D6E63', ativo: false },
-  { icon: Zap, label: 'Resposta rápida', cor: '#FBC02D', ativo: false },
+type AcaoAnexo = 'documento' | 'midia' | 'camera' | 'audio' | 'contato' | 'enquete' | 'evento' | 'figurinha' | 'catalogo' | 'respostas'
+const ANEXO_ITENS: { icon: typeof FileText; label: string; cor: string; acao: AcaoAnexo }[] = [
+  { icon: FileText, label: 'Documento', cor: '#7E57C2', acao: 'documento' },
+  { icon: ImageIcon, label: 'Fotos e vídeos', cor: '#1A56FF', acao: 'midia' },
+  { icon: Camera, label: 'Câmera', cor: '#EC407A', acao: 'camera' },
+  { icon: Headphones, label: 'Áudio', cor: '#FF7043', acao: 'audio' },
+  { icon: User, label: 'Contato', cor: '#1A56FF', acao: 'contato' },
+  { icon: BarChart2, label: 'Enquete', cor: '#F9A825', acao: 'enquete' },
+  { icon: Calendar, label: 'Evento', cor: '#EF5350', acao: 'evento' },
+  { icon: Sticker, label: 'Nova figurinha', cor: '#0DB57A', acao: 'figurinha' },
+  { icon: Book, label: 'Catálogo', cor: '#8D6E63', acao: 'catalogo' },
+  { icon: Zap, label: 'Resposta rápida', cor: '#FBC02D', acao: 'respostas' },
 ]
 
 function achaConversaPorTel(tel: string | null, lista: ConversaResumo[]) {
@@ -126,6 +128,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const grudadoNoFimRef = useRef(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mediatypeRef = useRef<'image' | 'document' | 'video'>('image')
+  // o mesmo seletor de arquivo serve para anexo comum, áudio gravado no aparelho e figurinha
+  const modoArquivoRef = useRef<'normal' | 'audio' | 'figurinha'>('normal')
+  const [janela, setJanela] = useState<null | 'contato' | 'enquete' | 'evento' | 'respostas'>(null)
+  const campoTextoRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
@@ -241,6 +247,13 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     const trocar = (l: Msg[]) => l.map(x => x.waId === waId ? { ...x, midia, midiaPendente: undefined } : x)
     setMensagens(trocar); setAnteriores(trocar)
   }, [])
+  // campo de mensagem cresce com o texto (até 5 linhas) e volta ao tamanho normal depois de enviar
+  useEffect(() => {
+    const el = campoTextoRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+  }, [texto])
   const aoCarregarMidia = useCallback(() => { if (grudadoNoFimRef.current) irAoFim() }, [irAoFim])
 
   const filtradas = conversas.filter(c => {
@@ -284,13 +297,59 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     }
   }
 
-  function abrirSeletorArquivo(mediatype: 'image' | 'document' | 'video', accept: string) {
+  function abrirSeletorArquivo(mediatype: 'image' | 'document' | 'video', accept: string, opts?: { camera?: boolean; modo?: 'normal' | 'audio' | 'figurinha' }) {
     mediatypeRef.current = mediatype
-    if (fileInputRef.current) {
-      fileInputRef.current.accept = accept
-      fileInputRef.current.click()
+    modoArquivoRef.current = opts?.modo ?? 'normal'
+    const el = fileInputRef.current
+    if (el) {
+      el.accept = accept
+      // no celular abre a câmera direto; no computador abre o seletor de arquivos
+      if (opts?.camera) el.setAttribute('capture', 'environment'); else el.removeAttribute('capture')
+      el.click()
     }
     setAnexoOpen(false)
+  }
+
+  /** Coloca um texto pronto no campo de mensagem (para revisar antes de enviar). */
+  function colocarNoCampo(t: string) {
+    setTexto(atual => (atual.trim() ? atual.trimEnd() + '\n' + t : t))
+    setTimeout(() => campoTextoRef.current?.focus(), 50)
+  }
+
+  async function escolherAnexo(acao: AcaoAnexo) {
+    setAnexoOpen(false)
+    if (acao === 'documento') return abrirSeletorArquivo('document', '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip')
+    if (acao === 'midia') return abrirSeletorArquivo('image', 'image/*,video/*')
+    if (acao === 'camera') return abrirSeletorArquivo('image', 'image/*', { camera: true })
+    if (acao === 'audio') return abrirSeletorArquivo('document', 'audio/*', { modo: 'audio' })
+    if (acao === 'figurinha') return abrirSeletorArquivo('image', 'image/png,image/jpeg,image/webp', { modo: 'figurinha' })
+    if (acao === 'catalogo') {
+      const r = await linkDoCatalogo()
+      if ('error' in r && r.error) { setErro(r.error); return }
+      if ('link' in r && r.link) colocarNoCampo(`🛍️ Confira nosso catálogo: ${r.link}`)
+      return
+    }
+    setJanela(acao)
+  }
+
+  async function enviarContatoJanela(p: { nome: string; telefone: string }) {
+    if (!selecionada) return 'Abra uma conversa primeiro.'
+    const r = await enviarContatoConversa(selecionada, p)
+    if ('error' in r && r.error) return r.error
+    grudadoNoFimRef.current = true
+    setMensagens(prev => [...prev, { role: 'human', content: 'conteudo' in r && r.conteudo ? r.conteudo : '👤 Contato', ts: new Date().toISOString() }])
+    listarConversas().then(setConversas)
+    return null
+  }
+
+  async function enviarEnqueteJanela(p: { pergunta: string; opcoes: string[]; variasRespostas: boolean }) {
+    if (!selecionada) return 'Abra uma conversa primeiro.'
+    const r = await enviarEnqueteConversa(selecionada, p)
+    if ('error' in r && r.error) return r.error
+    grudadoNoFimRef.current = true
+    setMensagens(prev => [...prev, { role: 'human', content: 'conteudo' in r && r.conteudo ? r.conteudo : '📊 Enquete', ts: new Date().toISOString() }])
+    listarConversas().then(setConversas)
+    return null
   }
 
   async function handleArquivoSelecionado(e: React.ChangeEvent<HTMLInputElement>) {
@@ -300,7 +359,24 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     setEnviando(true)
     const url = await uploadArquivo(file)
     if (!url) { setEnviando(false); setErro('Falha ao enviar o arquivo.'); return }
-    const tipo = file.type.startsWith('video') ? 'video' : mediatypeRef.current
+    grudadoNoFimRef.current = true
+    if (modoArquivoRef.current === 'audio') {
+      const ra = await enviarAudioConversa(selecionada, url)
+      setEnviando(false)
+      if ('error' in ra) { setErro(ra.error ?? 'Erro ao enviar.'); return }
+      setMensagens(prev => [...prev, { role: 'human', content: '🎤 Áudio', ts: new Date().toISOString(), midia: { tipo: 'audio', url } }])
+      listarConversas().then(setConversas)
+      return
+    }
+    if (modoArquivoRef.current === 'figurinha') {
+      const rf = await enviarFigurinhaConversa(selecionada, url)
+      setEnviando(false)
+      if ('error' in rf) { setErro(rf.error ?? 'Erro ao enviar.'); return }
+      setMensagens(prev => [...prev, { role: 'human', content: '😀 Figurinha', ts: new Date().toISOString(), midia: { tipo: 'image', url } }])
+      listarConversas().then(setConversas)
+      return
+    }
+    const tipo = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'image' : mediatypeRef.current
     const res = await enviarMidiaConversa(selecionada, { url, mediatype: tipo, fileName: file.name })
     setEnviando(false)
     if (!('error' in res)) {
@@ -583,13 +659,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
             {anexoOpen && (
               <div className="absolute bottom-16 left-3 bg-white rounded-xl shadow-xl border border-[#EAE8E1] py-1.5 w-56 z-20">
                 {ANEXO_ITENS.map(item => (
-                  <button key={item.label}
-                    onClick={() => item.ativo && abrirSeletorArquivo(item.mediatype!, item.accept!)}
-                    disabled={!item.ativo}
-                    className="w-full flex items-center gap-3 px-3.5 py-2 text-sm text-[#2E2D29] hover:bg-[#F7F6F3] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                  <button key={item.label} onClick={() => escolherAnexo(item.acao)}
+                    className="w-full flex items-center gap-3 px-3.5 py-2 text-sm text-[#2E2D29] hover:bg-[#F7F6F3] transition-colors">
                     <item.icon className="size-4.5" style={{ color: item.cor }} strokeWidth={1.5} />
                     {item.label}
-                    {!item.ativo && <span className="text-[10px] text-[#C8C5BB] ml-auto">em breve</span>}
                   </button>
                 ))}
               </div>
@@ -604,11 +677,12 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                 className="w-9 h-9 rounded-full flex items-center justify-center text-[#8C8880] hover:bg-[#F7F6F3] transition-colors shrink-0">
                 <Smile className="size-5" />
               </button>
-              <input value={texto} onChange={e => setTexto(e.target.value)}
+              <textarea ref={campoTextoRef} value={texto} rows={1}
+                onChange={e => setTexto(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEnviar() } }}
                 placeholder={gravando ? 'Gravando áudio...' : 'Digite uma mensagem...'}
                 disabled={gravando}
-                className="flex-1 h-10 px-4 rounded-full border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF] transition-all disabled:opacity-60" />
+                className="flex-1 min-h-10 max-h-32 py-2.5 px-4 rounded-[20px] border border-[#EAE8E1] bg-[#F7F6F3] text-sm leading-5 outline-none focus:border-[#1A56FF] transition-all disabled:opacity-60 resize-none" />
 
               {texto.trim() ? (
                 <button onClick={() => handleEnviar()} disabled={enviando}
@@ -627,6 +701,11 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
           </>
         )}
       </div>
+
+      {janela === 'contato' && <JanelaContato onFechar={() => setJanela(null)} onEnviar={enviarContatoJanela} />}
+      {janela === 'enquete' && <JanelaEnquete onFechar={() => setJanela(null)} onEnviar={enviarEnqueteJanela} />}
+      {janela === 'evento' && <JanelaEvento onFechar={() => setJanela(null)} onPronto={colocarNoCampo} />}
+      {janela === 'respostas' && <JanelaRespostas onFechar={() => setJanela(null)} onEscolher={colocarNoCampo} />}
 
       {confirmarPrimeiroContato && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>

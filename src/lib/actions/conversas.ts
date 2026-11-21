@@ -2,7 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe, getMediaBase64 } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe, getMediaBase64, enviarContato, enviarEnquete, enviarFigurinha, numeroDaInstancia } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
@@ -13,6 +13,18 @@ type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midi
 /** Extrai o id que o WhatsApp devolve ao enviar — é o que permite apagar a mensagem depois. */
 function idDoEnvio(data: unknown): string | undefined {
   return (data as { key?: { id?: string } } | null)?.key?.id
+}
+
+/** Prévia da última mensagem na lista: "📷 Foto", "🎤 Áudio"... (antes aparecia o tipo cru: "📎 image") */
+function previaDaMidia(tipo: string | null, texto: string | null) {
+  const t = (texto ?? '').trim()
+  if (!tipo) return t
+  const generico = !t || /^(📷|🎤|🎥|📎|😀)/.test(t)
+  if (tipo === 'image') return generico ? '📷 Foto' : `📷 ${t}`
+  if (tipo === 'audio') return '🎤 Áudio'
+  if (tipo === 'video') return generico ? '🎥 Vídeo' : `🎥 ${t}`
+  if (tipo === 'document') return t.startsWith('📎') ? t : `📎 ${t || 'Documento'}`
+  return t || '📎 Arquivo'
 }
 
 export type ConversaResumo = {
@@ -66,7 +78,7 @@ async function montarResumos(service: ReturnType<typeof createServiceClient>, li
       lastMessageAt: c.last_message_at ?? null,
       atividadeEm: c.atividade_em ?? c.last_message_at ?? null,
       handledByAi: !!c.handled_by_ai,
-      ultimaMensagem: c.ultima_midia ? `📎 ${c.ultima_midia}` : (c.ultima_texto ?? ''),
+      ultimaMensagem: previaDaMidia(c.ultima_midia, c.ultima_texto),
       grupo,
       grupoNome,
     }
@@ -424,4 +436,64 @@ export async function baixarMidiaPendente(conversaId: string, waId: string) {
   const { error: eTroca } = await service.rpc('trocar_midia_pendente', { p_conversation: conversaId, p_wa_id: waId, p_midia: midia })
   if (eTroca) console.error('[midia pendente troca]', eTroca.message)
   return { success: true as const, midia }
+}
+
+/** Envia um cartão de contato na conversa. */
+export async function enviarContatoConversa(conversaId: string, p: { nome: string; telefone: string }) {
+  const nome = p.nome.trim(), tel = p.telefone.replace(/\D/g, '')
+  if (!nome || tel.length < 10) return { error: 'Informe o nome e o telefone com DDD.' }
+  const telefone = tel.length <= 11 ? `55${tel}` : tel
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+  const env = await enviarContato(r.instance, destinoDe(r.conv.numero), { nome, telefone })
+  if (!env.ok) return { error: 'Falha ao enviar o contato pelo WhatsApp.' }
+  const conteudo = `👤 ${nome} (+${telefone})`
+  await registrarSaida(r.service, r.conv, { role: 'human', content: conteudo, waId: idDoEnvio(env.data), waFromMe: true })
+  return { success: true as const, conteudo }
+}
+
+/** Envia uma enquete na conversa. */
+export async function enviarEnqueteConversa(conversaId: string, p: { pergunta: string; opcoes: string[]; variasRespostas: boolean }) {
+  const pergunta = p.pergunta.trim()
+  const opcoes = [...new Set(p.opcoes.map(o => o.trim()).filter(Boolean))].slice(0, 12)
+  if (!pergunta) return { error: 'Escreva a pergunta.' }
+  if (opcoes.length < 2) return { error: 'A enquete precisa de pelo menos 2 opções diferentes.' }
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+  const env = await enviarEnquete(r.instance, destinoDe(r.conv.numero), { pergunta, opcoes, escolhas: p.variasRespostas ? opcoes.length : 1 })
+  if (!env.ok) return { error: 'Falha ao enviar a enquete pelo WhatsApp.' }
+  const conteudo = `📊 ${pergunta}\n${opcoes.map(o => `◯ ${o}`).join('\n')}`
+  await registrarSaida(r.service, r.conv, { role: 'human', content: conteudo, waId: idDoEnvio(env.data), waFromMe: true })
+  return { success: true as const, conteudo }
+}
+
+/** Envia uma imagem como figurinha. */
+export async function enviarFigurinhaConversa(conversaId: string, url: string) {
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+  const env = await enviarFigurinha(r.instance, destinoDe(r.conv.numero), url)
+  if (!env.ok) return { error: 'Falha ao enviar a figurinha pelo WhatsApp.' }
+  await registrarSaida(r.service, r.conv, { role: 'human', content: '😀 Figurinha', midia: { tipo: 'image', url }, waId: idDoEnvio(env.data), waFromMe: true })
+  return { success: true as const }
+}
+
+/** Link do catálogo do WhatsApp Business da loja (wa.me/c/<número>), para mandar na conversa. */
+export async function linkDoCatalogo() {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const service = createServiceClient()
+  const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+  const instance = (comp?.settings as { wa_instance?: string } | null)?.wa_instance
+  if (!instance) return { error: 'WhatsApp não conectado.' }
+  const numero = await numeroDaInstancia(instance)
+  if (!numero) return { error: 'Não consegui descobrir o número do WhatsApp conectado.' }
+  return { success: true as const, link: `https://wa.me/c/${numero}` }
+}
+
+/** Respostas rápidas (mensagens prontas) da loja. */
+export async function listarRespostasRapidas(): Promise<{ id: string; titulo: string; texto: string }[]> {
+  const companyId = await getCompanyId()
+  if (!companyId) return []
+  const { data } = await createServiceClient().from('mensagens_prontas').select('id, titulo, texto').eq('company_id', companyId).order('titulo')
+  return (data ?? []) as { id: string; titulo: string; texto: string }[]
 }
