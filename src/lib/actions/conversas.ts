@@ -6,6 +6,7 @@ import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfi
 import { revalidatePath } from 'next/cache'
 import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
+import { buscarTodos } from '@/lib/supabase/paginacao'
 
 type Midia = { tipo: string; url: string; nome?: string }
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read'; resposta?: { waId: string; texto: string }; encaminhada?: boolean }
@@ -40,6 +41,8 @@ export type ConversaResumo = {
   ultimaMensagem: string
   grupo: boolean
   grupoNome: string | null
+  /** etiquetas do contato (as mesmas do Funil) */
+  contactTags: string[]
 }
 
 type LinhaResumo = {
@@ -55,11 +58,11 @@ async function montarResumos(service: ReturnType<typeof createServiceClient>, li
   // Busca em lotes: com muitos contatos, um .in() único monta uma URL gigante e o
   // Postgrest devolve "Bad Request" — a lista voltava sem nome e sem foto de ninguém.
   // (Aconteceu de verdade: 977 contatos viravam uma URL de 36 mil caracteres.)
-  const contatoPorId = new Map<string, { id: string; name: string | null; foto_url: string | null }>()
+  const contatoPorId = new Map<string, { id: string; name: string | null; foto_url: string | null; tags: string[] | null }>()
   const LOTE = 150
   for (let i = 0; i < contactIds.length; i += LOTE) {
     const fatia = contactIds.slice(i, i + LOTE)
-    const { data, error } = await service.from('contacts').select('id, name, foto_url').in('id', fatia)
+    const { data, error } = await service.from('contacts').select('id, name, foto_url, tags').in('id', fatia)
     if (error) { console.error('[montarResumos contatos]', error.message); continue }
     for (const ct of data ?? []) contatoPorId.set(ct.id, ct as never)
   }
@@ -81,6 +84,7 @@ async function montarResumos(service: ReturnType<typeof createServiceClient>, li
       ultimaMensagem: previaDaMidia(c.ultima_midia, c.ultima_texto),
       grupo,
       grupoNome,
+      contactTags: grupo ? [] : (contato?.tags ?? []),
     }
   })
 }
@@ -599,4 +603,52 @@ export async function listarRespostasRapidas(): Promise<{ id: string; titulo: st
   if (!companyId) return []
   const { data } = await createServiceClient().from('mensagens_prontas').select('id, titulo, texto').eq('company_id', companyId).order('titulo')
   return (data ?? []) as { id: string; titulo: string; texto: string }[]
+}
+
+/** Todas as etiquetas já usadas na loja (as mesmas do Funil), para escolher na conversa. */
+export async function etiquetasDaLoja(): Promise<string[]> {
+  const companyId = await getCompanyId()
+  if (!companyId) return []
+  const service = createServiceClient()
+  const linhas = await buscarTodos<{ tags: string[] | null }>(
+    (de, ate) => service.from('contacts').select('tags').eq('company_id', companyId).not('tags', 'eq', '{}').order('id').range(de, ate) as never,
+    'etiquetas da loja',
+  )
+  const todas = new Set<string>()
+  for (const l of linhas) for (const t of l.tags ?? []) if (t?.trim()) todas.add(t.trim())
+  return [...todas].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+}
+
+/**
+ * Define as etiquetas de uma conversa (gravadas no contato, então aparecem também no Funil).
+ * Conversa de pessoa que ainda não é contato vira contato (lead) para poder receber etiqueta, como no WhatsApp Business.
+ */
+export async function definirEtiquetasConversa(conversaId: string, etiquetas: string[]) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const tags = [...new Set(etiquetas.map(t => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 20)
+  const service = createServiceClient()
+  const { data: conv } = await service.from('conversations').select('id, numero, contact_id').eq('id', conversaId).eq('company_id', companyId).single()
+  if (!conv) return { error: 'Conversa não encontrada.' }
+  if (ehGrupo(conv.numero)) return { error: 'Grupos não recebem etiqueta.' }
+
+  let contactId = conv.contact_id as string | null
+  if (!contactId) {
+    const existente = await acharContatoPorTelefone<{ id: string; phone: string | null }>(service, companyId, conv.numero)
+    if (existente) contactId = existente.id
+    else {
+      const { data: comp } = await service.from('companies').select('settings').eq('id', companyId).single()
+      const colunas = (comp?.settings as { funil_colunas?: { key: string }[] } | null)?.funil_colunas
+      const { data: novo, error } = await service.from('contacts').insert({
+        company_id: companyId, phone: conv.numero, origem: 'WhatsApp', funil_etapa: colunas?.[0]?.key ?? 'novo', active: true, criado_por: 'Conversas',
+      } as never).select('id').single()
+      if (error || !novo) return { error: 'Não foi possível criar o contato.' }
+      contactId = (novo as { id: string }).id
+    }
+    await service.from('conversations').update({ contact_id: contactId }).eq('id', conv.id)
+  }
+  const { error } = await service.from('contacts').update({ tags } as never).eq('id', contactId).eq('company_id', companyId)
+  if (error) return { error: 'Não foi possível salvar as etiquetas.' }
+  revalidatePath('/dashboard/funil')
+  return { success: true as const, tags, contactId }
 }

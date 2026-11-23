@@ -9,16 +9,18 @@ import { JanelaContato, JanelaEnquete, JanelaEvento, JanelaRespostas, JanelaNova
 import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { MenuMensagem, toqueLongo } from '@/components/orbi/menu-mensagem'
+import { ExportarConversas } from '@/components/orbi/exportar-conversas'
+import { Etiqueta, JanelaEtiquetas } from '@/components/orbi/etiquetas'
 import {
   listarConversas, conversasAtualizadas, obterMensagens, obterMensagensAnteriores, temMensagensAnteriores, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
   apagarMensagem, enviarContatoConversa, enviarEnqueteConversa, enviarFigurinhaConversa, linkDoCatalogo,
-  reagirMensagem, encaminharMensagens, listarRespostasRapidas,
+  reagirMensagem, encaminharMensagens, listarRespostasRapidas, definirEtiquetasConversa,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
-  AlertTriangle, X, Ban, UsersRound, Check, CheckCheck, MessageSquarePlus, Forward,
+  AlertTriangle, X, Ban, UsersRound, Check, CheckCheck, MessageSquarePlus, Forward, Download, MoreVertical, Tag,
 } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; anuncio?: AnuncioMsg; midiaPendente?: { tipo: string }; status?: 'sent' | 'delivered' | 'read'; resposta?: { waId: string; texto: string }; encaminhada?: boolean; reacoes?: { loja?: string; cliente?: string } }
@@ -95,7 +97,7 @@ async function uploadArquivo(file: File): Promise<string | null> {
   return res.ok ? data.url : null
 }
 
-export function ConversasClient({ conversasIniciais }: { conversasIniciais: ConversaResumo[] }) {
+export function ConversasClient({ conversasIniciais, lojaNome }: { conversasIniciais: ConversaResumo[]; lojaNome: string }) {
   const searchParams = useSearchParams()
   const telParam = searchParams.get('tel')
   const nomeParam = searchParams.get('nome')
@@ -138,7 +140,9 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const mediatypeRef = useRef<'image' | 'document' | 'video'>('image')
   // o mesmo seletor de arquivo serve para anexo comum, áudio gravado no aparelho e figurinha
   const modoArquivoRef = useRef<'normal' | 'audio' | 'figurinha'>('normal')
-  const [janela, setJanela] = useState<null | 'contato' | 'enquete' | 'evento' | 'respostas' | 'nova'>(null)
+  const [janela, setJanela] = useState<null | 'contato' | 'enquete' | 'evento' | 'respostas' | 'nova' | 'exportar' | 'exportar-uma' | 'etiquetas'>(null)
+  const [menuConversa, setMenuConversa] = useState(false)
+  const [filtroEtiqueta, setFiltroEtiqueta] = useState<string | null>(null)
   const campoTextoRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -266,8 +270,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
 
   const filtradas = conversas.filter(c => {
     const termo = busca.toLowerCase()
-    return (c.contactName ?? c.numero).toLowerCase().includes(termo)
+    if (filtroEtiqueta && !(c.contactTags ?? []).includes(filtroEtiqueta)) return false
+    return (c.contactName ?? c.numero).toLowerCase().includes(termo) || c.numero.includes(termo)
   })
+  const etiquetasEmUso = [...new Set(conversas.flatMap(c => c.contactTags ?? []))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
   const ativa = conversas.find(c => c.id === selecionada) ?? null
 
   // abrir conversa por número (link ?tel= ou "Nova conversa"): seleciona a existente ou prepara uma nova
@@ -280,7 +286,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   }, [telParam])
 
   useEffect(() => { if (!aviso) return; const t = setTimeout(() => setAviso(null), 2500); return () => clearTimeout(t) }, [aviso])
-  useEffect(() => { setRespondendo(null); setMenuApagar(null) }, [selecionada])
+  useEffect(() => { setRespondendo(null); setMenuApagar(null); setMenuConversa(false) }, [selecionada])
 
   // atalho "/" para respostas rápidas, como no WhatsApp Business
   const atalho = texto.startsWith('/') && !texto.includes('\n') ? texto.slice(1).toLowerCase() : null
@@ -496,11 +502,20 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
             <button onClick={() => setJanela('nova')} title="Nova conversa" aria-label="Nova conversa"
               className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-[#1A56FF] hover:bg-[#EEF2FF]"><MessageSquarePlus className="size-4" /></button>
+            <button onClick={() => setJanela('exportar')} title="Exportar conversas" aria-label="Exportar conversas"
+              className="absolute right-8 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-[#8C8880] hover:bg-[#F7F6F3] hover:text-[#1A56FF]"><Download className="size-4" /></button>
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar conversa..."
-              className="w-full h-9 pl-8 pr-3 text-sm rounded-lg border border-[#EAE8E1] bg-white outline-none focus:border-[#1A56FF] transition-all" />
+              className="w-full h-9 pl-8 pr-16 text-sm rounded-lg border border-[#EAE8E1] bg-white outline-none focus:border-[#1A56FF] transition-all" />
           </div>
         </div>
         <AvisosPush compacto />
+        {etiquetasEmUso.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-[#EAE8E1] shrink-0 [scrollbar-width:none]">
+            <button onClick={() => setFiltroEtiqueta(null)}
+              className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${filtroEtiqueta === null ? 'bg-[#1C1B18] text-white' : 'bg-white border border-[#EAE8E1] text-[#5C5A54]'}`}>Todas</button>
+            {etiquetasEmUso.map(e => <Etiqueta key={e} nome={e} ativa={filtroEtiqueta === e} onClick={() => setFiltroEtiqueta(f => f === e ? null : e)} />)}
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto">
           {filtradas.length === 0 && (
             <p className="text-sm text-[#8C8880] text-center py-10 px-4">Nenhuma conversa ainda. Quando um cliente mandar mensagem no WhatsApp, ela aparece aqui.</p>
@@ -523,6 +538,9 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                     <span className="text-[10px] text-[#8C8880] shrink-0">{fmtData(c.lastMessageAt)}</span>
                   </div>
                   <p className="text-xs text-[#8C8880] truncate mt-0.5">{c.ultimaMensagem || 'Sem mensagens'}</p>
+                  {(c.contactTags ?? []).length > 0 && (
+                    <div className="flex gap-1 mt-1 overflow-hidden">{c.contactTags.slice(0, 3).map(e => <Etiqueta key={e} nome={e} pequena />)}</div>
+                  )}
                 </div>
               </button>
             )
@@ -591,12 +609,38 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                   {ativa.grupo ? <UsersRound className="size-4.5" strokeWidth={1.5} /> : iniciais(ativa.contactName ?? ativa.numero)}
                 </div>
               </FotoContato>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-[#1C1B18] flex items-center gap-1.5 truncate">
                   {ativa.contactName ?? ativa.numero}
                   {ativa.grupo && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F5F3FF] text-[#8B5CF6]">GRUPO</span>}
                 </p>
-                <p className="text-xs text-[#8C8880]">{ativa.grupo ? 'Conversa de grupo' : ativa.numero}</p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p className="text-xs text-[#8C8880] shrink-0">{ativa.grupo ? 'Conversa de grupo' : ativa.numero}</p>
+                  <div className="hidden sm:flex gap-1 overflow-hidden">{(ativa.contactTags ?? []).map(e => <Etiqueta key={e} nome={e} pequena />)}</div>
+                </div>
+              </div>
+              {!ativa.grupo && (
+                <button onClick={() => setJanela('etiquetas')} title="Etiquetas" aria-label="Etiquetas"
+                  className="hidden md:flex w-9 h-9 rounded-lg items-center justify-center text-[#8C8880] hover:bg-[#F7F6F3] hover:text-[#1A56FF] shrink-0"><Tag className="size-4.5" /></button>
+              )}
+              <div className="relative shrink-0">
+                <button onClick={() => setMenuConversa(o => !o)} aria-label="Mais opções"
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-[#5C5A54] hover:bg-[#F7F6F3]"><MoreVertical className="size-5" /></button>
+                {menuConversa && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setMenuConversa(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-white rounded-xl shadow-xl border border-[#EAE8E1] py-1.5">
+                      {!ativa.grupo && (
+                        <button onClick={() => { setMenuConversa(false); setJanela('etiquetas') }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#2E2D29] hover:bg-[#F7F6F3]">
+                          <Tag className="size-4 text-[#8C8880]" /> Etiquetas
+                        </button>
+                      )}
+                      <button onClick={() => { setMenuConversa(false); setJanela('exportar-uma') }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#2E2D29] hover:bg-[#F7F6F3]">
+                        <Download className="size-4 text-[#8C8880]" /> Exportar conversa
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -827,6 +871,18 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
       {janela === 'enquete' && <JanelaEnquete onFechar={() => setJanela(null)} onEnviar={enviarEnqueteJanela} />}
       {janela === 'evento' && <JanelaEvento onFechar={() => setJanela(null)} onPronto={colocarNoCampo} />}
       {janela === 'respostas' && <JanelaRespostas onFechar={() => setJanela(null)} onEscolher={colocarNoCampo} />}
+      {janela === 'exportar' && <ExportarConversas loja={lojaNome} onFechar={() => setJanela(null)} />}
+      {janela === 'exportar-uma' && ativa && <ExportarConversas loja={lojaNome} conversa={{ id: ativa.id, nome: ativa.contactName ?? ativa.numero }} onFechar={() => setJanela(null)} />}
+      {janela === 'etiquetas' && ativa && (
+        <JanelaEtiquetas atuais={ativa.contactTags ?? []} nome={ativa.contactName ?? ativa.numero} onFechar={() => setJanela(null)}
+          onSalvar={async tags => {
+            const r = await definirEtiquetasConversa(ativa.id, tags)
+            if ('error' in r && r.error) return r.error
+            const novas = 'tags' in r && r.tags ? r.tags : tags
+            setConversas(l => l.map(c => c.id === ativa.id ? { ...c, contactTags: novas, contactId: ('contactId' in r && r.contactId) || c.contactId } : c))
+            return null
+          }} />
+      )}
       {janela === 'nova' && <JanelaNovaConversa onFechar={() => setJanela(null)}
         onEscolher={({ numero, nome }) => router.replace(`/dashboard/conversas?tel=${numero}${nome ? `&nome=${encodeURIComponent(nome)}` : ''}`)} />}
       {encaminhando && (
