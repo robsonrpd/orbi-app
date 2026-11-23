@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getMediaBase64, enviarTexto, buscarNomeGrupo } from '@/lib/evolution'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 import { enviarPushEmpresa } from '@/lib/push'
-import { extrairAnuncio, extrairConteudo, type Anuncio } from '@/lib/whatsapp-mensagem'
+import { extrairAnuncio, extrairCitacao, extrairConteudo, type Anuncio, type RespostaA } from '@/lib/whatsapp-mensagem'
 import { importarHistorico } from '@/lib/historico-whatsapp'
 import { lerFluxo, proximoDoRodizio, cargaDosVendedores } from '@/lib/atendimento'
 import { buscarTodos } from '@/lib/supabase/paginacao'
@@ -129,6 +129,29 @@ export async function POST(req: NextRequest) {
   // HISTÓRICO que o WhatsApp entrega quando um aparelho é pareado (e ao reconectar). Tem que vir ANTES do
   // caminho das mensagens normais: o nome do evento contém "messages" e seria tratado como mensagem nova
   // chegando agora (gerando lead, boas-vindas e alerta de demora para conversas de meses atrás).
+  // AGENDA do celular da loja (nome como está salvo no telefone). Chega no pareamento e a cada alteração.
+  // Guarda só pessoas (número real); vira a lista de contatos do Orbi (cartão de contato, nova conversa).
+  if (evento.includes('contacts')) {
+    try {
+      const lista = (Array.isArray(raw) ? raw : raw ? [raw] : []) as { remoteJid?: string; id?: string; pushName?: string; name?: string }[]
+      const porNumero = new Map<string, string>()
+      for (const c of lista) {
+        const jid = c.remoteJid ?? c.id ?? ''
+        if (!jid.endsWith('@s.whatsapp.net')) continue
+        const numero = jid.split('@')[0].replace(/\D/g, '')
+        const nome = (c.name ?? c.pushName ?? '').trim()
+        if (numero.length < 10 || !nome || nome.replace(/\D/g, '') === numero) continue
+        porNumero.set(numero, nome.slice(0, 120))
+      }
+      const linhas = [...porNumero].map(([numero, nome]) => ({ company_id: company.id, numero, nome, atualizado_em: new Date().toISOString() }))
+      for (let i = 0; i < linhas.length; i += 500) {
+        const { error } = await service.from('agenda_contatos' as never).upsert(linhas.slice(i, i + 500) as never, { onConflict: 'company_id,numero' })
+        if (error) { console.error('[wh agenda]', error.message); break }
+      }
+    } catch (err) { console.error('[wh agenda]', err) }
+    return NextResponse.json({ ok: true })
+  }
+
   if (evento.includes('messages.set')) {
     try {
       const resumo = await importarHistorico(service, { id: company.id, settings: company.settings }, raw)
@@ -229,8 +252,20 @@ export async function POST(req: NextRequest) {
     // monta o conteúdo: texto, legenda ou rótulo da mídia (foto/áudio/doc/etc.)
     const msg = e.message ?? {}
     // desembrulha mensagens temporárias / de visualização única antes de procurar o texto (ver whatsapp-mensagem.ts)
+    // reação (👍❤️…) a uma mensagem: não é mensagem nova, é marca na mensagem reagida
+    const reacao = (msg as { reactionMessage?: { key?: { id?: string }; text?: string } }).reactionMessage
+    if (reacao?.key?.id && !grupo) {
+      const { error } = await service.rpc('reagir_mensagem', {
+        p_company: company.id, p_numero: numero, p_wa_id: reacao.key.id, p_quem: e.key?.fromMe ? 'loja' : 'cliente', p_emoji: reacao.text ?? '',
+      })
+      if (error) console.error('[wh reacao]', error.message)
+      continue
+    }
+
     const { conteudo, midiaTipo, docNome } = extrairConteudo(msg)
     if (!conteudo) continue
+    // respondeu citando uma mensagem? guarda o trecho citado, como o WhatsApp mostra
+    const resposta = extrairCitacao(ev) ?? undefined
 
     // baixa a mídia (se houver) e guarda no Storage → URL pública pra exibir no chat
     let midia: Midia | undefined
@@ -248,7 +283,7 @@ export async function POST(req: NextRequest) {
 
     // mensagem enviada PELA LOJA (pelo celular ou pelo Orbi) → registra como saída sem duplicar o eco do Orbi
     if (e.key?.fromMe) {
-      await registrarSaida(service, company.id, numero, conteudo, midia, e.key.id, quando)
+      await registrarSaida(service, company.id, numero, conteudo, midia, e.key.id, quando, resposta)
       continue
     }
 
@@ -271,7 +306,7 @@ export async function POST(req: NextRequest) {
     // sem resposta automática, alguém da equipe responde pelo Conversas/CRM
     // em grupo, o texto vai prefixado com quem falou: sem isso a conversa fica ilegível
     const conteudoFinal = grupo && e.pushName?.trim() ? `${e.pushName.trim()}: ${conteudo}` : conteudo
-    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo, quando, anuncio)
+    await salvarConversa(service, company.id, contactId ?? null, numero, conteudoFinal, midia, e.key?.id, grupo, quando, anuncio, resposta)
 
     // aviso no celular/computador de quem ativou ("como o WhatsApp"). Só mensagem de pessoa (grupo faria barulho demais)
     // e só se for recente: depois de uma queda o WhatsApp reentrega o acumulado e isso viraria uma enxurrada de avisos.
@@ -350,7 +385,7 @@ async function avisarDesconexao(
 type Midia = { tipo: string; url: string; nome?: string }
 // waId/waFromMe: identificam a mensagem dentro do WhatsApp. Sem eles não dá pra
 // apagar no celular do cliente — o WhatsApp precisa saber exatamente qual mensagem é.
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; anuncio?: Anuncio; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; anuncio?: Anuncio; resposta?: RespostaA; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
 
 const EXT: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
 
@@ -520,7 +555,7 @@ async function atribuirPorRodizio(
 
 async function registrarSaida(
   service: ReturnType<typeof createServiceClient>,
-  companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string, quando?: string,
+  companyId: string, numero: string, conteudo: string, midia?: Midia, waId?: string, quando?: string, resposta?: RespostaA,
 ) {
   // .limit(1), NUNCA .maybeSingle(): com mais de uma linha o maybeSingle dá erro, o código lia isso como "não
   // existe" e criava outra conversa — foi assim que um cliente chegou a ter 112 conversas (ver conversas-unicas.sql)
@@ -551,7 +586,7 @@ async function registrarSaida(
     return
   }
   const ts = quando ?? new Date().toISOString()
-  await anexarMensagem(service, companyId, numero, null, { role: 'human' as const, content: conteudo, ts, ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}) }, false)
+  await anexarMensagem(service, companyId, numero, null, { role: 'human' as const, content: conteudo, ts, ...(waId ? { waId, waFromMe: true } : {}), ...(midia ? { midia } : {}), ...(resposta ? { resposta } : {}) }, false)
 }
 
 /**
@@ -596,14 +631,14 @@ async function anexarMensagem(
 async function salvarConversa(
   service: ReturnType<typeof createServiceClient>,
   companyId: string, contactId: string | null, numero: string,
-  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean, quando?: string, anuncio?: Anuncio,
+  userMsg: string, midia?: Midia, waId?: string, grupo?: boolean, quando?: string, anuncio?: Anuncio, resposta?: RespostaA,
 ) {
   // NUNCA misturar campos opcionais aqui: se um deles não existir no banco, a gravação
   // inteira falha e a mensagem do cliente se perde — sem erro visível pra ninguém.
   // Salvar a mensagem é o que não pode falhar; o resto vai depois, separado.
   const agora = quando ?? new Date().toISOString()
   const convId = await anexarMensagem(service, companyId, numero, contactId, {
-    role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}), ...(anuncio ? { anuncio } : {}),
+    role: 'user', content: userMsg, ts: agora, ...(waId ? { waId, waFromMe: false } : {}), ...(midia ? { midia } : {}), ...(anuncio ? { anuncio } : {}), ...(resposta ? { resposta } : {}),
   }, true)
 
   // Cliente respondeu: zera a contagem de cobranças e o alerta de lead parado.

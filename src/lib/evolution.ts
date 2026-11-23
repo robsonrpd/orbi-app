@@ -36,7 +36,7 @@ async function call(path: string, init?: RequestInit) {
  * Eventos que o Evolution avisa ao Orbi. MESSAGES_UPDATE traz entrega/leitura (tiques) e MESSAGES_SET traz o
  * histórico do pareamento. O webhook trata cada um explicitamente: evento novo aqui exige tratamento lá.
  */
-export const EVENTOS_WEBHOOK = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'MESSAGES_SET', 'QRCODE_UPDATED', 'CONNECTION_UPDATE']
+export const EVENTOS_WEBHOOK = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'MESSAGES_SET', 'QRCODE_UPDATED', 'CONNECTION_UPDATE', 'CONTACTS_SET', 'CONTACTS_UPSERT', 'CONTACTS_UPDATE']
 
 /** Cria a instância (se não existir) e já configura o webhook. Retorna o QR code (base64). */
 export async function criarInstancia(instance: string, webhookUrl: string) {
@@ -129,11 +129,25 @@ export async function deletarInstancia(instance: string) {
   return call(`/instance/delete/${instance}`, { method: 'DELETE' })
 }
 
-/** Envia uma mensagem de texto. number = só dígitos com DDI (ex: 5585999999999). */
-export async function enviarTexto(instance: string, number: string, text: string) {
+/** Mensagem citada numa resposta ("Responder" do WhatsApp). */
+export type Citacao = { id: string; remoteJid: string; fromMe: boolean; texto: string }
+
+/** Envia uma mensagem de texto. number = só dígitos com DDI (ex: 5585999999999). quoted = responder a uma mensagem. */
+export async function enviarTexto(instance: string, number: string, text: string, quoted?: Citacao) {
   return call(`/message/sendText/${instance}`, {
     method: 'POST',
-    body: JSON.stringify({ number, text }),
+    body: JSON.stringify({
+      number, text,
+      ...(quoted ? { quoted: { key: { id: quoted.id, remoteJid: quoted.remoteJid, fromMe: quoted.fromMe }, message: { conversation: quoted.texto } } } : {}),
+    }),
+  })
+}
+
+/** Reage a uma mensagem com um emoji (emoji vazio remove a reação). */
+export async function enviarReacao(instance: string, key: { id: string; remoteJid: string; fromMe: boolean }, emoji: string) {
+  return call(`/message/sendReaction/${instance}`, {
+    method: 'POST',
+    body: JSON.stringify({ key, reaction: emoji }),
   })
 }
 

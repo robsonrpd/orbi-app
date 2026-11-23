@@ -132,6 +132,27 @@ export function extrairAnuncio(ev: unknown): (Anuncio & { miniaturaBase64?: stri
  * O histórico importado no pareamento não baixa os arquivos na hora (seriam centenas), mas guardando isto dá pra
  * buscar um arquivo específico quando a pessoa clicar — enquanto o WhatsApp ainda o tiver (algumas semanas).
  */
+/** Mensagem citada ("Responder") numa mensagem recebida: id e um resumo do texto citado. */
+export type RespostaA = { waId: string; texto: string }
+
+export function extrairCitacao(ev: unknown): RespostaA | null {
+  const e = (ev && typeof ev === 'object' ? ev : {}) as Obj
+  const m = desembrulhar(e.message)
+  const candidatos: Obj[] = []
+  if (e.contextInfo && typeof e.contextInfo === 'object') candidatos.push(e.contextInfo as Obj)
+  for (const v of Object.values(m)) {
+    const ci = (v as { contextInfo?: unknown } | null)?.contextInfo
+    if (ci && typeof ci === 'object') candidatos.push(ci as Obj)
+  }
+  for (const ci of candidatos) {
+    const id = txt(ci.stanzaId)
+    if (!id || !ci.quotedMessage) continue
+    const texto = extrairConteudo(ci.quotedMessage).conteudo ?? ''
+    return { waId: id, texto: texto.slice(0, 200) }
+  }
+  return null
+}
+
 export type MidiaPendente = { tipo: MidiaTipo; nome?: string; no: string; dados: Obj; jid: string; fromMe: boolean }
 
 const NOS_DE_MIDIA = ['imageMessage', 'videoMessage', 'ptvMessage', 'audioMessage', 'pttMessage', 'documentMessage'] as const

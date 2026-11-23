@@ -2,13 +2,13 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
-import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe, getMediaBase64, enviarContato, enviarEnquete, enviarFigurinha, numeroDaInstancia } from '@/lib/evolution'
+import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe, getMediaBase64, enviarContato, enviarEnquete, enviarFigurinha, numeroDaInstancia, enviarReacao, type Citacao } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
 import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 
 type Midia = { tipo: string; url: string; nome?: string }
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read'; resposta?: { waId: string; texto: string }; encaminhada?: boolean }
 
 /** Extrai o id que o WhatsApp devolve ao enviar — é o que permite apagar a mensagem depois. */
 function idDoEnvio(data: unknown): string | undefined {
@@ -270,7 +270,7 @@ export async function apagarMensagem(conversaId: string, p: { ts?: string; indic
 }
 
 /** Envia uma resposta manual de texto pelo WhatsApp e registra na conversa. */
-export async function responderConversa(conversaId: string, texto: string, opts?: { confirmarPrimeiroContato?: boolean }) {
+export async function responderConversa(conversaId: string, texto: string, opts?: { confirmarPrimeiroContato?: boolean; respondendoA?: string }) {
   const limpo = texto.trim()
   if (!limpo) return { error: 'Digite uma mensagem.' }
 
@@ -283,11 +283,114 @@ export async function responderConversa(conversaId: string, texto: string, opts?
     return { avisoPrimeiroContato: true as const }
   }
 
-  const env = await enviarTexto(r.instance, destinoDe(r.conv.numero), limpo)
+  // "Responder": cita a mensagem escolhida (o cliente vê o balão citado, como no WhatsApp)
+  const citada = opts?.respondendoA ? await acharMensagemPorWaId(r.service, r.conv.id, ((r.conv.messages as Msg[] | null) ?? []), opts.respondendoA) : null
+  const citacao: Citacao | undefined = citada?.waId
+    ? { id: citada.waId, remoteJid: jidDaConversa(r.conv.numero), fromMe: citada.role !== 'user', texto: citada.content }
+    : undefined
+
+  const env = await enviarTexto(r.instance, destinoDe(r.conv.numero), limpo, citacao)
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
-  await registrarSaida(r.service, r.conv, { role: 'human', content: limpo, waId: idDoEnvio(env.data), waFromMe: true })
+  const resposta = citada?.waId ? { waId: citada.waId, texto: citada.content.slice(0, 200) } : undefined
+  await registrarSaida(r.service, r.conv, { role: 'human', content: limpo, waId: idDoEnvio(env.data), waFromMe: true, ...(resposta ? { resposta } : {}) })
+  return { success: true as const, resposta }
+}
+
+function jidDaConversa(numero: string) {
+  return ehGrupo(numero) ? numero : `${destinoDe(numero)}@s.whatsapp.net`
+}
+
+/** Acha uma mensagem da conversa pelo id do WhatsApp (na conversa ativa ou no arquivo de antigas). */
+async function acharMensagemPorWaId(service: ReturnType<typeof createServiceClient>, conversaId: string, ativas: Msg[], waId: string): Promise<Msg | null> {
+  const ativa = ativas.find(m => m.waId === waId)
+  if (ativa) return ativa
+  const { data } = await service.from('mensagens_arquivo' as never).select('msg').eq('conversation_id', conversaId).eq('msg->>waId', waId).limit(1)
+  return ((data ?? []) as { msg: Msg }[])[0]?.msg ?? null
+}
+
+/** Reage a uma mensagem (👍❤️…), como no WhatsApp. emoji vazio remove a reação da loja. */
+export async function reagirMensagem(conversaId: string, waId: string, emoji: string) {
+  const r = await resolverConversa(conversaId)
+  if ('error' in r) return r
+  const alvo = await acharMensagemPorWaId(r.service, r.conv.id, ((r.conv.messages as Msg[] | null) ?? []), waId)
+  if (!alvo) return { error: 'Mensagem não encontrada.' }
+  const env = await enviarReacao(r.instance, { id: waId, remoteJid: jidDaConversa(r.conv.numero), fromMe: alvo.role !== 'user' }, emoji)
+  if (!env.ok) return { error: 'O WhatsApp não aceitou a reação.' }
+  const { error } = await r.service.rpc('reagir_mensagem', { p_company: r.conv.company_id, p_numero: r.conv.numero, p_wa_id: waId, p_quem: 'loja', p_emoji: emoji })
+  if (error) console.error('[reagir]', error.message)
   return { success: true as const }
+}
+
+/**
+ * Encaminha mensagens desta conversa para outras conversas (texto, foto, vídeo, documento, áudio), como o
+ * "Encaminhar" do WhatsApp. Cada destino é validado como sendo da mesma loja (resolverConversa).
+ */
+export async function encaminharMensagens(origemId: string, chaves: string[], destinos: string[]) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  if (!chaves.length || !destinos.length) return { error: 'Escolha a mensagem e para quem encaminhar.' }
+  if (destinos.length > 20) return { error: 'Encaminhe para no máximo 20 conversas de cada vez.' }
+  const service = createServiceClient()
+  const { data: origem } = await service.from('conversations').select('id, messages').eq('id', origemId).eq('company_id', companyId).single()
+  if (!origem) return { error: 'Conversa não encontrada.' }
+  const ativas = (origem.messages as Msg[] | null) ?? []
+  const msgs: Msg[] = []
+  for (const chave of chaves) {
+    const m = ativas.find(x => x.waId === chave || x.ts === chave) ?? await acharMensagemPorWaId(service, origemId, [], chave)
+    if (m && !m.apagada) msgs.push(m)
+  }
+  if (!msgs.length) return { error: 'Mensagem não encontrada.' }
+
+  let enviadas = 0, falhas = 0
+  for (const destinoId of destinos) {
+    const r = await resolverConversa(destinoId)
+    if ('error' in r) { falhas++; continue }
+    const para = destinoDe(r.conv.numero)
+    for (const m of msgs) {
+      const legenda = /^(📷|🎥|🎤|📎|😀)/.test(m.content) ? undefined : m.content
+      const env = !m.midia ? await enviarTexto(r.instance, para, m.content)
+        : m.midia.tipo === 'audio' ? await enviarAudio(r.instance, para, m.midia.url)
+        : await enviarMedia(r.instance, para, { mediatype: m.midia.tipo, media: m.midia.url, fileName: m.midia.nome, caption: m.midia.tipo === 'document' ? undefined : legenda })
+      if (!env.ok) { falhas++; continue }
+      enviadas++
+      await registrarSaida(r.service, r.conv, { role: 'human', content: m.content, ...(m.midia ? { midia: m.midia } : {}), waId: idDoEnvio(env.data), waFromMe: true, encaminhada: true })
+      await new Promise(res => setTimeout(res, 600)) // ritmo humano entre envios
+    }
+  }
+  revalidatePath('/dashboard/conversas')
+  if (!enviadas) return { error: 'Nada foi encaminhado. Confira se o WhatsApp está conectado.' }
+  return { success: true as const, enviadas, falhas }
+}
+
+/**
+ * Busca contatos para iniciar conversa ou mandar cartão: a AGENDA do celular da loja (nome salvo no telefone) e os
+ * clientes/leads do Orbi. Sem termo, devolve os primeiros em ordem alfabética.
+ */
+export async function buscarContatos(termo: string): Promise<{ nome: string; numero: string; origem: 'agenda' | 'cliente' }[]> {
+  const companyId = await getCompanyId()
+  if (!companyId) return []
+  const service = createServiceClient()
+  const t = termo.trim()
+  const digitos = t.replace(/\D/g, '')
+  const filtroNome = t.replace(/[%,()*]/g, ' ')
+  let qa = service.from('agenda_contatos' as never).select('nome, numero').eq('company_id', companyId).order('nome').limit(30)
+  let qc = service.from('contacts').select('name, phone').eq('company_id', companyId).not('phone', 'is', null).order('name').limit(30)
+  if (digitos.length >= 3) { qa = qa.like('numero', `%${digitos}%`); qc = qc.like('phone', `%${digitos}%`) }
+  else if (t) { qa = qa.ilike('nome', `%${filtroNome}%`); qc = qc.ilike('name', `%${filtroNome}%`) }
+  const [{ data: ag }, { data: cl }] = await Promise.all([qa, qc])
+  const vistos = new Set<string>()
+  const saida: { nome: string; numero: string; origem: 'agenda' | 'cliente' }[] = []
+  for (const a of (ag ?? []) as { nome: string; numero: string }[]) {
+    const k = a.numero.slice(-8); if (vistos.has(k)) continue; vistos.add(k)
+    saida.push({ nome: a.nome, numero: a.numero, origem: 'agenda' })
+  }
+  for (const c of (cl ?? []) as { name: string | null; phone: string }[]) {
+    const n = (c.phone ?? '').replace(/\D/g, ''); const k = n.slice(-8)
+    if (!n || vistos.has(k)) continue; vistos.add(k)
+    saida.push({ nome: c.name || n, numero: n.length <= 11 ? `55${n}` : n, origem: 'cliente' })
+  }
+  return saida.slice(0, 40)
 }
 
 /** Inicia uma conversa nova com um número que ainda não tem conversa registrada (ex: a partir da ficha do cliente). */

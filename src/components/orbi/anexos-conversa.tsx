@@ -2,8 +2,49 @@
 
 // Janelas dos anexos do Conversas que pedem dados antes de enviar: contato, enquete, evento e respostas rápidas.
 import { useEffect, useState } from 'react'
-import { Loader2, Plus, Trash2, X } from 'lucide-react'
-import { listarRespostasRapidas } from '@/lib/actions/conversas'
+import { Check, Loader2, Plus, Search, Trash2, X } from 'lucide-react'
+import { listarRespostasRapidas, buscarContatos } from '@/lib/actions/conversas'
+
+type ContatoAgenda = { nome: string; numero: string; origem: 'agenda' | 'cliente' }
+
+function fmtTel(n: string) {
+  const d = n.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')
+  return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : n
+}
+
+/** Lista de contatos (agenda do celular da loja + clientes do Orbi) com busca, como a lista de contatos do WhatsApp. */
+function ListaContatos({ onEscolher, autoFocus = false }: { onEscolher: (c: ContatoAgenda) => void; autoFocus?: boolean }) {
+  const [termo, setTermo] = useState('')
+  const [itens, setItens] = useState<ContatoAgenda[] | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const t = setTimeout(() => { buscarContatos(termo).then(r => { if (vivo) setItens(r) }).catch(() => { if (vivo) setItens([]) }) }, termo ? 300 : 0)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [termo])
+  return (
+    <div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
+        <input autoFocus={autoFocus} value={termo} onChange={e => setTermo(e.target.value)} placeholder="Buscar nome ou número" className={`${inputCls} pl-8`} />
+      </div>
+      <div className="mt-2 max-h-64 overflow-y-auto divide-y divide-[#F3F1EB] rounded-lg border border-[#EAE8E1]">
+        {itens === null ? (
+          <div className="flex justify-center py-4"><Loader2 className="size-4 animate-spin text-[#1A56FF]" /></div>
+        ) : itens.length === 0 ? (
+          <p className="text-xs text-[#8C8880] text-center py-4 px-3">Nenhum contato encontrado. A agenda do celular aparece aqui depois que o WhatsApp sincronizar (ao conectar).</p>
+        ) : itens.map(c => (
+          <button key={c.numero} onClick={() => onEscolher(c)} className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-[#F7F6F3]">
+            <div className="w-8 h-8 rounded-full bg-[#1A56FF] text-white text-xs font-bold flex items-center justify-center shrink-0">{(c.nome[0] ?? '?').toUpperCase()}</div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-[#1C1B18] truncate">{c.nome}</p>
+              <p className="text-[11px] text-[#8C8880]">{fmtTel(c.numero)}{c.origem === 'cliente' ? ' · cliente do Orbi' : ''}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 const inputCls = 'w-full h-10 px-3 rounded-lg border border-[#EAE8E1] bg-[#F7F6F3] text-sm outline-none focus:border-[#1A56FF]'
 const labelCls = 'text-[11px] font-bold text-[#8C8880] uppercase tracking-wide block mb-1'
@@ -42,7 +83,11 @@ export function JanelaContato({ onFechar, onEnviar }: { onFechar: () => void; on
   }
   return (
     <Janela titulo="Enviar contato" onFechar={onFechar}>
-      <div><label className={labelCls}>Nome</label><input autoFocus value={nome} onChange={e => setNome(e.target.value)} className={inputCls} placeholder="Ex: Dra. Ana — Oftalmologista" /></div>
+      <div>
+        <label className={labelCls}>Escolher da agenda</label>
+        <ListaContatos onEscolher={c => { setNome(c.nome); setTelefone(c.numero) }} />
+      </div>
+      <div><label className={labelCls}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inputCls} placeholder="Ex: Dra. Ana — Oftalmologista" /></div>
       <div><label className={labelCls}>Telefone (com DDD)</label><input value={telefone} onChange={e => setTelefone(e.target.value)} inputMode="tel" className={inputCls} placeholder="(84) 99999-9999" /></div>
       {erro && <p className="text-xs text-red-600">{erro}</p>}
       <BotaoEnviar ocupado={ocupado} desabilitado={!nome.trim() || telefone.replace(/\D/g, '').length < 10} onClick={enviar} />
@@ -148,6 +193,69 @@ export function JanelaRespostas({ onFechar, onEscolher }: { onFechar: () => void
           </div>
         </>
       )}
+    </Janela>
+  )
+}
+
+/** Nova conversa: escolhe da agenda/clientes ou digita um número. */
+export function JanelaNovaConversa({ onFechar, onEscolher }: { onFechar: () => void; onEscolher: (p: { numero: string; nome?: string }) => void }) {
+  const [numero, setNumero] = useState('')
+  const d = numero.replace(/\D/g, '')
+  return (
+    <Janela titulo="Nova conversa" onFechar={onFechar}>
+      <ListaContatos autoFocus onEscolher={c => { onEscolher({ numero: c.numero, nome: c.nome }); onFechar() }} />
+      <div>
+        <label className={labelCls}>Ou digite o número (com DDD)</label>
+        <div className="flex gap-2">
+          <input value={numero} onChange={e => setNumero(e.target.value)} inputMode="tel" placeholder="(84) 99999-9999" className={inputCls} />
+          <button disabled={d.length < 10} onClick={() => { onEscolher({ numero: d.length <= 11 ? `55${d}` : d }); onFechar() }}
+            className="shrink-0 px-4 rounded-lg bg-[#1A56FF] text-white text-sm font-bold disabled:opacity-50">Abrir</button>
+        </div>
+      </div>
+    </Janela>
+  )
+}
+
+type ConversaParaEncaminhar = { id: string; nome: string; numero: string; foto?: string | null }
+
+/** Encaminhar: escolhe até 20 conversas e envia a mensagem para todas. */
+export function JanelaEncaminhar({ conversas, previa, onFechar, onEnviar }: {
+  conversas: ConversaParaEncaminhar[]; previa: string; onFechar: () => void; onEnviar: (ids: string[]) => Promise<string | null>
+}) {
+  const [busca, setBusca] = useState('')
+  const [sel, setSel] = useState<string[]>([])
+  const [ocupado, setOcupado] = useState(false), [erro, setErro] = useState<string | null>(null)
+  const filtradas = conversas.filter(c => (c.nome + ' ' + c.numero).toLowerCase().includes(busca.toLowerCase())).slice(0, 80)
+  const alternar = (id: string) => setSel(l => l.includes(id) ? l.filter(x => x !== id) : l.length >= 20 ? l : [...l, id])
+  async function enviar() {
+    setOcupado(true); setErro(null)
+    const e = await onEnviar(sel)
+    setOcupado(false)
+    if (e) setErro(e); else onFechar()
+  }
+  return (
+    <Janela titulo="Encaminhar mensagem" onFechar={onFechar}>
+      <p className="text-xs text-[#5C5A54] bg-[#F7F6F3] rounded-lg px-3 py-2 line-clamp-3 whitespace-pre-wrap">{previa}</p>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
+        <input autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar conversa" className={`${inputCls} pl-8`} />
+      </div>
+      <div className="max-h-72 overflow-y-auto divide-y divide-[#F3F1EB] rounded-lg border border-[#EAE8E1]">
+        {filtradas.map(c => {
+          const marcado = sel.includes(c.id)
+          return (
+            <button key={c.id} onClick={() => alternar(c.id)} className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-[#F7F6F3]">
+              <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${marcado ? 'bg-[#1A56FF] border-[#1A56FF]' : 'border-[#C8C5BB]'}`}>{marcado && <Check className="size-3.5 text-white" />}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-[#1C1B18] truncate">{c.nome}</span>
+                <span className="block text-[11px] text-[#8C8880]">{c.numero.includes('@') ? 'Grupo' : fmtTel(c.numero)}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {erro && <p className="text-xs text-red-600">{erro}</p>}
+      <BotaoEnviar ocupado={ocupado} desabilitado={sel.length === 0} onClick={enviar} rotulo={sel.length ? `Encaminhar para ${sel.length}` : 'Escolha as conversas'} />
     </Janela>
   )
 }

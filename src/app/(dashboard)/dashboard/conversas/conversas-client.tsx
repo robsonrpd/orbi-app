@@ -5,21 +5,23 @@ import { SeparadorDia } from '@/components/orbi/separador-dia'
 import { ArrowLeft } from 'lucide-react'
 import { AvisosPush } from '@/components/orbi/avisos-push'
 import { BotaoMidiaPendente, type MidiaBaixada } from '@/components/orbi/botao-midia-pendente'
-import { JanelaContato, JanelaEnquete, JanelaEvento, JanelaRespostas } from '@/components/orbi/anexos-conversa'
+import { JanelaContato, JanelaEnquete, JanelaEvento, JanelaRespostas, JanelaNovaConversa, JanelaEncaminhar } from '@/components/orbi/anexos-conversa'
 import { CartaoAnuncio, type AnuncioMsg } from '@/components/orbi/cartao-anuncio'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { MenuMensagem, toqueLongo } from '@/components/orbi/menu-mensagem'
 import {
   listarConversas, conversasAtualizadas, obterMensagens, obterMensagensAnteriores, temMensagensAnteriores, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
   apagarMensagem, enviarContatoConversa, enviarEnqueteConversa, enviarFigurinhaConversa, linkDoCatalogo,
+  reagirMensagem, encaminharMensagens, listarRespostasRapidas,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
-  AlertTriangle, X, Trash2, Ban, UsersRound, Check, CheckCheck,
+  AlertTriangle, X, Ban, UsersRound, Check, CheckCheck, MessageSquarePlus, Forward,
 } from 'lucide-react'
 
-type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; anuncio?: AnuncioMsg; midiaPendente?: { tipo: string }; status?: 'sent' | 'delivered' | 'read' }
+type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; anuncio?: AnuncioMsg; midiaPendente?: { tipo: string }; status?: 'sent' | 'delivered' | 'read'; resposta?: { waId: string; texto: string }; encaminhada?: boolean; reacoes?: { loja?: string; cliente?: string } }
 
 /**
  * Foto do contato com plano B: se a imagem falhar ao carregar (link vencido, arquivo apagado), mostra as
@@ -105,7 +107,13 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const [tela, setTela] = useState<'lista' | 'conversa'>(telParam ? 'conversa' : 'lista')
   const [naoEncontrada, setNaoEncontrada] = useState(!!telParam && !achaConversaPorTel(telParam, conversasIniciais))
   const [fotoNaoEncontrada, setFotoNaoEncontrada] = useState<string | null>(null)
-  const [menuApagar, setMenuApagar] = useState<number | null>(null)
+  const [menuApagar, setMenuApagar] = useState<number | null>(null) // índice da mensagem com o menu aberto
+  const [respondendo, setRespondendo] = useState<Msg | null>(null)
+  const [encaminhando, setEncaminhando] = useState<Msg | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [respostasRapidas, setRespostasRapidas] = useState<{ id: string; titulo: string; texto: string }[] | null>(null)
+  const [idxAtalho, setIdxAtalho] = useState(0)
+  const router = useRouter()
   const [apagando, setApagando] = useState(false)
   const [mensagens, setMensagens] = useState<Msg[]>([])
   const [busca, setBusca] = useState('')
@@ -130,7 +138,7 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   const mediatypeRef = useRef<'image' | 'document' | 'video'>('image')
   // o mesmo seletor de arquivo serve para anexo comum, áudio gravado no aparelho e figurinha
   const modoArquivoRef = useRef<'normal' | 'audio' | 'figurinha'>('normal')
-  const [janela, setJanela] = useState<null | 'contato' | 'enquete' | 'evento' | 'respostas'>(null)
+  const [janela, setJanela] = useState<null | 'contato' | 'enquete' | 'evento' | 'respostas' | 'nova'>(null)
   const campoTextoRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -262,6 +270,57 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
   })
   const ativa = conversas.find(c => c.id === selecionada) ?? null
 
+  // abrir conversa por número (link ?tel= ou "Nova conversa"): seleciona a existente ou prepara uma nova
+  useEffect(() => {
+    if (!telParam) return
+    const id = achaConversaPorTel(telParam, conversas)
+    if (id) { setSelecionada(id); setNaoEncontrada(false) } else { setSelecionada(null); setNaoEncontrada(true) }
+    setTela('conversa')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telParam])
+
+  useEffect(() => { if (!aviso) return; const t = setTimeout(() => setAviso(null), 2500); return () => clearTimeout(t) }, [aviso])
+  useEffect(() => { setRespondendo(null); setMenuApagar(null) }, [selecionada])
+
+  // atalho "/" para respostas rápidas, como no WhatsApp Business
+  const atalho = texto.startsWith('/') && !texto.includes('\n') ? texto.slice(1).toLowerCase() : null
+  useEffect(() => {
+    if (atalho !== null && respostasRapidas === null) listarRespostasRapidas().then(setRespostasRapidas).catch(() => setRespostasRapidas([]))
+  }, [atalho, respostasRapidas])
+  const opcoesAtalho = atalho === null ? [] : (respostasRapidas ?? []).filter(r => (r.titulo + ' ' + r.texto).toLowerCase().includes(atalho)).slice(0, 8)
+  useEffect(() => { setIdxAtalho(0) }, [atalho])
+
+  function nomeAutor(waId: string) {
+    const m = [...anteriores, ...mensagens].find(x => x.waId === waId)
+    if (!m) return 'Mensagem'
+    return m.role === 'user' ? (ativa?.contactName ?? 'Cliente') : 'Você'
+  }
+
+  async function reagir(m: Msg, emoji: string) {
+    setMenuApagar(null)
+    if (!selecionada || !m.waId) return
+    const trocar = (l: Msg[]) => l.map(x => x.waId === m.waId ? { ...x, reacoes: { ...(x.reacoes ?? {}), loja: emoji || undefined } } : x)
+    setMensagens(trocar); setAnteriores(trocar)
+    const r = await reagirMensagem(selecionada, m.waId, emoji)
+    if ('error' in r && r.error) setErro(r.error)
+  }
+
+  async function copiar(m: Msg) {
+    setMenuApagar(null)
+    try { await navigator.clipboard.writeText(m.content); setAviso('Mensagem copiada') } catch { setErro('Não foi possível copiar.') }
+  }
+
+  async function encaminharPara(ids: string[]) {
+    if (!selecionada || !encaminhando) return 'Mensagem não encontrada.'
+    const chave = encaminhando.waId ?? encaminhando.ts
+    if (!chave) return 'Essa mensagem não pode ser encaminhada.'
+    const r = await encaminharMensagens(selecionada, [chave], ids)
+    if ('error' in r && r.error) return r.error
+    setAviso(`Encaminhada para ${ids.length} conversa${ids.length > 1 ? 's' : ''}`)
+    listarConversas().then(setConversas)
+    return null
+  }
+
   async function handleEnviar(forcarPrimeiroContato = false) {
     const t = forcarPrimeiroContato ? confirmarPrimeiroContato : texto.trim()
     if (!t) return
@@ -270,7 +329,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
     grudadoNoFimRef.current = true // quem envia quer ver a própria mensagem
     if (!forcarPrimeiroContato) setTexto('')
 
-    const opts = forcarPrimeiroContato ? { confirmarPrimeiroContato: true } : undefined
+    const citada = respondendo?.waId && selecionada ? respondendo : null
+    const opts = { ...(forcarPrimeiroContato ? { confirmarPrimeiroContato: true } : {}), ...(citada ? { respondendoA: citada.waId } : {}) }
     const res = selecionada
       ? await responderConversa(selecionada, t, opts)
       : await iniciarConversa(telParam!, t, opts)
@@ -289,8 +349,9 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
         setSelecionada((res as { conversaId: string }).conversaId)
         setMensagens([{ role: 'human', content: t, ts: new Date().toISOString() }])
       } else {
-        setMensagens(prev => [...prev, { role: 'human', content: t, ts: new Date().toISOString() }])
+        setMensagens(prev => [...prev, { role: 'human', content: t, ts: new Date().toISOString(), ...(citada?.waId ? { resposta: { waId: citada.waId, texto: citada.content.slice(0, 200) } } : {}) }])
       }
+      setRespondendo(null)
       listarConversas().then(setConversas)
     } else {
       setErro(res.error ?? 'Erro ao enviar.')
@@ -433,6 +494,8 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
         <div className="p-3 border-b border-[#EAE8E1]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#C8C5BB]" />
+            <button onClick={() => setJanela('nova')} title="Nova conversa" aria-label="Nova conversa"
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-[#1A56FF] hover:bg-[#EEF2FF]"><MessageSquarePlus className="size-4" /></button>
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar conversa..."
               className="w-full h-9 pl-8 pr-3 text-sm rounded-lg border border-[#EAE8E1] bg-white outline-none focus:border-[#1A56FF] transition-all" />
           </div>
@@ -584,23 +647,28 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               )}
               {!carregandoMsgs && mensagens.map((m, i) => {
                 const minha = m.role === 'assistant' || m.role === 'human'
-                const podeApagarParaTodos = !!m.waFromMe && !!m.waId && !m.apagada
+                const podeApagarParaTodos = minha && !!m.waFromMe && !!m.waId && !m.apagada
+                const reacoes = [m.reacoes?.cliente, m.reacoes?.loja].filter(Boolean) as string[]
                 return (
                   <Fragment key={i}>
                   <SeparadorDia ts={m.ts} anterior={i > 0 ? mensagens[i - 1].ts : anteriores[anteriores.length - 1]?.ts} />
-                  <div className={`group flex items-center gap-1 ${minha ? 'justify-end' : 'justify-start'}`}>
-                    {minha && !m.apagada && (
-                      <BotaoApagar aberto={menuApagar === i} apagando={apagando}
-                        onAbrir={() => setMenuApagar(menuApagar === i ? null : i)}
-                        podeParaTodos={podeApagarParaTodos}
-                        onApagar={paraTodos => handleApagar(i, m.ts, paraTodos)} />
-                    )}
-                    <div className="max-w-[88%] md:max-w-[75%] min-w-0 rounded-xl px-3.5 py-2 text-sm shadow-sm break-words"
+                  <div className={`flex ${minha ? 'justify-end' : 'justify-start'} ${reacoes.length ? 'mb-3' : ''}`}>
+                    <div className="group relative max-w-[88%] md:max-w-[75%] min-w-0 select-text"
+                      {...(m.apagada ? {} : toqueLongo(() => setMenuApagar(i)))}
+                      onContextMenu={m.apagada ? undefined : e => { e.preventDefault(); setMenuApagar(i) }}>
+                    <div className="rounded-xl px-3.5 py-2 pr-7 text-sm shadow-sm break-words"
                       style={{ background: m.apagada ? '#F0F0F0' : minha ? (m.role === 'assistant' ? '#D9FDD3' : '#DCF8C6') : '#FFFFFF' }}>
                       {m.role === 'assistant' && !m.apagada && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-[#0DB57A] mb-0.5">
                           <Bot className="size-3" /> IA
                         </span>
+                      )}
+                      {m.encaminhada && !m.apagada && <p className="flex items-center gap-1 text-[11px] italic text-[#8C8880] mb-0.5"><Forward className="size-3" /> Encaminhada</p>}
+                      {m.resposta && !m.apagada && (
+                        <div className="mb-1 rounded-md border-l-4 border-[#1A56FF] bg-black/5 px-2 py-1">
+                          <p className="text-[11px] font-bold text-[#1A56FF]">{nomeAutor(m.resposta.waId)}</p>
+                          <p className="text-xs text-[#5C5A54] line-clamp-3 whitespace-pre-wrap">{m.resposta.texto}</p>
+                        </div>
                       )}
                       {m.apagada ? (
                         <p className="flex items-center gap-1.5 text-[#8C8880] italic">
@@ -610,14 +678,16 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         <>
                           {m.midia && m.midia.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" onLoad={aoCarregarMidia} className="rounded-lg max-w-full mb-1" />}
                           {m.midia && m.midia.tipo === 'video' && <video src={m.midia.url} controls onLoadedMetadata={aoCarregarMidia} className="rounded-lg max-w-full mb-1" />}
-                          {m.midia && m.midia.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1" />}
+                          {m.midia && m.midia.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1 max-w-full" />}
                           {m.midia && m.midia.tipo === 'document' && (
                             <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>
                           )}
                           {!m.midia && m.midiaPendente && m.waId && selecionada && <BotaoMidiaPendente conversaId={selecionada} waId={m.waId} tipo={m.midiaPendente.tipo} onBaixada={md => aoBaixarMidia(m.waId!, md)} />}
-                        {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
+                          {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
                           {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
-                          <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
+                          {!(m.midia && m.midia.tipo === 'document' && (m.content === m.midia.nome || m.content === `📎 ${m.midia.nome}`)) && (
+                            <p className="text-[#1C1B18] whitespace-pre-wrap">{m.content}</p>
+                          )}
                         </>
                       )}
                       {m.ts && (
@@ -627,12 +697,20 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                         </span>
                       )}
                     </div>
-                    {!minha && !m.apagada && (
-                      <BotaoApagar aberto={menuApagar === i} apagando={apagando}
-                        onAbrir={() => setMenuApagar(menuApagar === i ? null : i)}
-                        podeParaTodos={false}
+                    {reacoes.length > 0 && (
+                      <span className={`absolute -bottom-3.5 ${minha ? 'right-2' : 'left-2'} bg-white rounded-full shadow border border-[#EAE8E1] px-1.5 text-sm leading-6`}>{reacoes.join('')}</span>
+                    )}
+                    {!m.apagada && (
+                      <MenuMensagem aberto={menuApagar === i} minha={minha} apagando={apagando}
+                        podeResponder={!!m.waId} podeReagir={!!m.waId} podeParaTodos={podeApagarParaTodos} minhaReacao={m.reacoes?.loja}
+                        onAbrir={() => setMenuApagar(i)} onFechar={() => setMenuApagar(null)}
+                        onReagir={e => reagir(m, e)}
+                        onResponder={() => { setRespondendo(m); setMenuApagar(null); setTimeout(() => campoTextoRef.current?.focus(), 50) }}
+                        onCopiar={() => copiar(m)}
+                        onEncaminhar={() => { setEncaminhando(m); setMenuApagar(null) }}
                         onApagar={paraTodos => handleApagar(i, m.ts, paraTodos)} />
                     )}
+                    </div>
                   </div>
                   </Fragment>
                 )
@@ -645,6 +723,10 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
                 onClick={() => setErro(null)}>
                 {erro}
               </div>
+            )}
+
+            {aviso && (
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-[#0DB57A] text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow z-30">{aviso}</div>
             )}
 
             {emojiOpen && (
@@ -668,7 +750,37 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               </div>
             )}
 
-            <div className="p-3 bg-white border-t border-[#EAE8E1] flex items-center gap-1.5 shrink-0">
+            {opcoesAtalho.length > 0 && (
+              <div className="absolute bottom-16 left-3 right-3 md:right-auto md:w-[420px] bg-white rounded-xl shadow-xl border border-[#EAE8E1] z-20 overflow-hidden">
+                <p className="px-3.5 pt-2.5 pb-1 text-[11px] font-bold text-[#8C8880] uppercase tracking-wide">Respostas rápidas</p>
+                {opcoesAtalho.map((r, k) => (
+                  <button key={r.id} onMouseDown={e => { e.preventDefault(); setTexto(r.texto); campoTextoRef.current?.focus() }}
+                    className={`w-full text-left px-3.5 py-2 ${k === idxAtalho ? 'bg-[#F0F4FF]' : 'hover:bg-[#F7F6F3]'}`}>
+                    <p className="text-sm font-semibold text-[#1C1B18]">{r.titulo}</p>
+                    <p className="text-xs text-[#8C8880] line-clamp-2 whitespace-pre-wrap">{r.texto}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {atalho !== null && respostasRapidas !== null && respostasRapidas.length === 0 && (
+              <div className="absolute bottom-16 left-3 bg-white rounded-xl shadow-xl border border-[#EAE8E1] z-20 px-3.5 py-2.5 text-xs text-[#8C8880]">
+                Nenhuma resposta rápida. Cadastre em <strong>Funil → Mensagens prontas</strong>.
+              </div>
+            )}
+
+            {respondendo && (
+              <div className="px-3 pt-2 bg-white border-t border-[#EAE8E1] shrink-0">
+                <div className="flex items-start gap-2 rounded-lg bg-[#F7F6F3] border-l-4 border-[#1A56FF] px-3 py-1.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-[#1A56FF]">Respondendo a {respondendo.role === 'user' ? (ativa?.contactName ?? 'Cliente') : 'você'}</p>
+                    <p className="text-xs text-[#5C5A54] truncate">{respondendo.content}</p>
+                  </div>
+                  <button onClick={() => setRespondendo(null)} aria-label="Cancelar resposta" className="text-[#8C8880] hover:text-[#1C1B18] shrink-0"><X className="size-4" /></button>
+                </div>
+              </div>
+            )}
+
+            <div className={`p-3 bg-white ${respondendo ? '' : 'border-t border-[#EAE8E1]'} flex items-end gap-1.5 shrink-0`}>
               <button onClick={() => { setAnexoOpen(o => !o); setEmojiOpen(false) }}
                 className="w-9 h-9 rounded-full flex items-center justify-center text-[#8C8880] hover:bg-[#F7F6F3] transition-colors shrink-0">
                 <Plus className="size-5" />
@@ -679,7 +791,16 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               </button>
               <textarea ref={campoTextoRef} value={texto} rows={1}
                 onChange={e => setTexto(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEnviar() } }}
+                onKeyDown={e => {
+                  if (opcoesAtalho.length > 0) {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setIdxAtalho(k => (k + 1) % opcoesAtalho.length); return }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setIdxAtalho(k => (k - 1 + opcoesAtalho.length) % opcoesAtalho.length); return }
+                    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); setTexto(opcoesAtalho[idxAtalho]?.texto ?? texto); return }
+                    if (e.key === 'Escape') { e.preventDefault(); setTexto(''); return }
+                  }
+                  if (e.key === 'Escape' && respondendo) { setRespondendo(null); return }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEnviar() }
+                }}
                 placeholder={gravando ? 'Gravando áudio...' : 'Digite uma mensagem...'}
                 disabled={gravando}
                 className="flex-1 min-h-10 max-h-32 py-2.5 px-4 rounded-[20px] border border-[#EAE8E1] bg-[#F7F6F3] text-sm leading-5 outline-none focus:border-[#1A56FF] transition-all disabled:opacity-60 resize-none" />
@@ -706,6 +827,13 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
       {janela === 'enquete' && <JanelaEnquete onFechar={() => setJanela(null)} onEnviar={enviarEnqueteJanela} />}
       {janela === 'evento' && <JanelaEvento onFechar={() => setJanela(null)} onPronto={colocarNoCampo} />}
       {janela === 'respostas' && <JanelaRespostas onFechar={() => setJanela(null)} onEscolher={colocarNoCampo} />}
+      {janela === 'nova' && <JanelaNovaConversa onFechar={() => setJanela(null)}
+        onEscolher={({ numero, nome }) => router.replace(`/dashboard/conversas?tel=${numero}${nome ? `&nome=${encodeURIComponent(nome)}` : ''}`)} />}
+      {encaminhando && (
+        <JanelaEncaminhar onFechar={() => setEncaminhando(null)} onEnviar={encaminharPara}
+          previa={encaminhando.midia ? `${encaminhando.content}` : encaminhando.content}
+          conversas={conversas.map(c => ({ id: c.id, nome: c.contactName ?? c.numero, numero: c.numero, foto: c.contactFoto }))} />
+      )}
 
       {confirmarPrimeiroContato && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,15,30,0.7)', backdropFilter: 'blur(6px)' }}>
@@ -730,37 +858,6 @@ export function ConversasClient({ conversasIniciais }: { conversasIniciais: Conv
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Botão de apagar que aparece ao passar o mouse na mensagem, com as duas opções do WhatsApp. */
-function BotaoApagar({ aberto, apagando, podeParaTodos, onAbrir, onApagar }: {
-  aberto: boolean; apagando: boolean; podeParaTodos: boolean
-  onAbrir: () => void; onApagar: (paraTodos: boolean) => void
-}) {
-  return (
-    <div className="relative shrink-0">
-      <button onClick={onAbrir} title="Apagar mensagem" aria-label="Apagar mensagem"
-        className={`w-7 h-7 flex items-center justify-center rounded-full text-[#8C8880] hover:bg-black/5 hover:text-red-500 transition-all ${aberto ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-        {apagando && aberto ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-      </button>
-      {aberto && (
-        <div className="absolute z-20 top-full right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-[#EAE8E1] overflow-hidden">
-          {podeParaTodos && (
-            <button onClick={() => onApagar(true)} disabled={apagando}
-              className="w-full text-left px-3 py-2.5 hover:bg-[#F7F6F3] border-b border-[#EAE8E1] disabled:opacity-50">
-              <p className="text-xs font-bold text-red-500">Apagar para todos</p>
-              <p className="text-[10px] text-[#8C8880] leading-snug">Some também do celular do cliente</p>
-            </button>
-          )}
-          <button onClick={() => onApagar(false)} disabled={apagando}
-            className="w-full text-left px-3 py-2.5 hover:bg-[#F7F6F3] disabled:opacity-50">
-            <p className="text-xs font-bold text-[#2E2D29]">Apagar só aqui</p>
-            <p className="text-[10px] text-[#8C8880] leading-snug">Limpa o painel, não mexe no WhatsApp do cliente</p>
-          </button>
         </div>
       )}
     </div>
