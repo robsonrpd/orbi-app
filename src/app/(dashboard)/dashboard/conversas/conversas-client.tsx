@@ -14,13 +14,13 @@ import { Etiqueta, JanelaEtiquetas } from '@/components/orbi/etiquetas'
 import {
   listarConversas, conversasAtualizadas, obterMensagens, obterMensagensAnteriores, temMensagensAnteriores, responderConversa, enviarMidiaConversa, enviarAudioConversa, iniciarConversa, obterFotoContato,
   apagarMensagem, enviarContatoConversa, enviarEnqueteConversa, enviarFigurinhaConversa, linkDoCatalogo,
-  reagirMensagem, encaminharMensagens, listarRespostasRapidas, definirEtiquetasConversa,
+  reagirMensagem, encaminharMensagens, listarRespostasRapidas, definirEtiquetasConversa, apagarConversa,
   type ConversaResumo,
 } from '@/lib/actions/conversas'
 import {
   Search, Send, Loader2, Bot, MessageCircle, Smile, Plus, Mic, Square,
   FileText, Image as ImageIcon, Camera, Headphones, User, BarChart2, Calendar, Sticker, Book, Zap,
-  AlertTriangle, X, Ban, UsersRound, Check, CheckCheck, MessageSquarePlus, Forward, Download, MoreVertical, Tag,
+  AlertTriangle, X, Ban, UsersRound, Check, CheckCheck, MessageSquarePlus, Forward, Download, MoreVertical, Tag, Trash2,
 } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: { tipo: string; url: string; nome?: string }; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; midiaExpirada?: boolean; anuncio?: AnuncioMsg; midiaPendente?: { tipo: string }; status?: 'sent' | 'delivered' | 'read'; resposta?: { waId: string; texto: string }; encaminhada?: boolean; reacoes?: { loja?: string; cliente?: string } }
@@ -142,6 +142,8 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
   const modoArquivoRef = useRef<'normal' | 'audio' | 'figurinha'>('normal')
   const [janela, setJanela] = useState<null | 'contato' | 'enquete' | 'evento' | 'respostas' | 'nova' | 'exportar' | 'exportar-uma' | 'etiquetas'>(null)
   const [menuConversa, setMenuConversa] = useState(false)
+  const [confirmarApagarConversa, setConfirmarApagarConversa] = useState(false)
+  const [apagandoConversa, setApagandoConversa] = useState(false)
   const [filtroEtiqueta, setFiltroEtiqueta] = useState<string | null>(null)
   const campoTextoRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -645,6 +647,10 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
                       <button onClick={() => { setMenuConversa(false); setJanela('exportar-uma') }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#2E2D29] hover:bg-[#F7F6F3]">
                         <Download className="size-4 text-[#8C8880]" /> Exportar conversa
                       </button>
+                      <div className="my-1 border-t border-[#EAE8E1]" />
+                      <button onClick={() => { setMenuConversa(false); setConfirmarApagarConversa(true) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                        <Trash2 className="size-4" /> Apagar conversa
+                      </button>
                     </div>
                   </>
                 )}
@@ -896,6 +902,35 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
         <JanelaEncaminhar onFechar={() => setEncaminhando(null)} onEnviar={encaminharPara}
           previa={encaminhando.midia ? `${encaminhando.content}` : encaminhando.content}
           conversas={conversas.map(c => ({ id: c.id, nome: c.contactName ?? c.numero, numero: c.numero, foto: c.contactFoto }))} />
+      )}
+
+      {confirmarApagarConversa && ativa && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4" style={{ background: 'rgba(10,15,30,0.6)' }} onClick={() => !apagandoConversa && setConfirmarApagarConversa(false)}>
+          <div className="w-full md:max-w-sm bg-white rounded-t-2xl md:rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <p className="text-base font-bold text-[#1C1B18]">Apagar a conversa com {ativa.contactName ?? ativa.numero}?</p>
+            <p className="text-sm text-[#5C5A54] leading-relaxed">
+              Todas as mensagens desta conversa somem do Orbi. <strong>Não dá para desfazer.</strong> O WhatsApp do cliente e o celular da loja
+              não são afetados, e o lead continua no Funil. Se a pessoa escrever de novo, a conversa recomeça do zero.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setConfirmarApagarConversa(false)} disabled={apagandoConversa}
+                className="flex-1 h-11 rounded-xl border border-[#EAE8E1] text-sm font-semibold text-[#5C5A54]">Cancelar</button>
+              <button disabled={apagandoConversa} onClick={async () => {
+                setApagandoConversa(true)
+                const id = ativa.id
+                const r = await apagarConversa(id)
+                setApagandoConversa(false)
+                if ('error' in r && r.error) { setConfirmarApagarConversa(false); setErro(r.error); return }
+                setConfirmarApagarConversa(false)
+                setConversas(l => l.filter(c => c.id !== id))
+                setSelecionada(null); setMensagens([]); setTela('lista')
+                setAviso('Conversa apagada')
+              }} className="flex-1 h-11 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2">
+                {apagandoConversa && <Loader2 className="size-4 animate-spin" />} Apagar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmarPrimeiroContato && (

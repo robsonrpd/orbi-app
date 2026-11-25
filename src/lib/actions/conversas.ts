@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja, numeroDoEnvio } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 import { buscarTodos } from '@/lib/supabase/paginacao'
+import { getModo } from '@/lib/auth/modo'
 
 type Midia = { tipo: string; url: string; nome?: string }
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean; status?: 'sent' | 'delivered' | 'read'; resposta?: { waId: string; texto: string }; encaminhada?: boolean }
@@ -651,4 +652,23 @@ export async function definirEtiquetasConversa(conversaId: string, etiquetas: st
   if (error) return { error: 'Não foi possível salvar as etiquetas.' }
   revalidatePath('/dashboard/funil')
   return { success: true as const, tags, contactId }
+}
+
+/**
+ * Apaga a conversa inteira do Orbi (mensagens recentes e o arquivo de antigas), como o "Apagar conversa" do WhatsApp.
+ * Não mexe no WhatsApp de ninguém nem no lead do Funil. Se a pessoa escrever de novo, a conversa recomeça.
+ * Só o dono: vendedor não apaga histórico de atendimento.
+ */
+export async function apagarConversa(conversaId: string) {
+  const companyId = await getCompanyId()
+  if (!companyId) return { error: 'Não autenticado.' }
+  const modo = await getModo()
+  if (modo.funcionario) return { error: 'Só o dono da loja pode apagar uma conversa inteira.' }
+  const service = createServiceClient()
+  // o arquivo de mensagens antigas sai junto (on delete cascade)
+  const { data, error } = await service.from('conversations').delete().eq('id', conversaId).eq('company_id', companyId).select('id')
+  if (error) return { error: 'Não foi possível apagar a conversa.' }
+  if (!data?.length) return { error: 'Conversa não encontrada.' }
+  revalidatePath('/dashboard/conversas')
+  return { success: true as const }
 }
