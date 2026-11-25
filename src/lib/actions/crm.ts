@@ -19,8 +19,8 @@ async function envioBase(companyId: string, contactId: string) {
 }
 
 type Midia = { tipo: string; url: string; nome?: string }
-async function logConversa(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, numero: string, content: string, midia?: Midia) {
-  await registrarMensagemDaLoja(service, companyId, contactId, numero, { role: 'human', content, ts: new Date().toISOString(), ...(midia ? { midia } : {}) })
+async function logConversa(service: ReturnType<typeof createServiceClient>, companyId: string, contactId: string, numero: string, content: string, midia?: Midia, respostaDoEnvio?: unknown) {
+  await registrarMensagemDaLoja(service, companyId, contactId, numero, { role: 'human', content, ts: new Date().toISOString(), ...(midia ? { midia } : {}) }, respostaDoEnvio)
 }
 
 /** Envia um arquivo/imagem (URL) ao lead pelo WhatsApp. */
@@ -32,7 +32,7 @@ export async function enviarArquivoLead(contactId: string, url: string, mediatyp
   const env = await enviarMedia(base.instance, base.numero, { mediatype, media: url, fileName, caption })
   if (!env.ok) return { error: 'Falha ao enviar o arquivo.' }
   const rotulo = mediatype === 'image' ? '📷 Imagem' : mediatype === 'video' ? '🎥 Vídeo' : `📎 ${fileName}`
-  await logConversa(base.service, companyId, contactId, base.numero, rotulo, { tipo: mediatype, url, nome: fileName })
+  await logConversa(base.service, companyId, contactId, base.numero, rotulo, { tipo: mediatype, url, nome: fileName }, env.data)
   revalidatePath('/dashboard/funil')
   return { success: true }
 }
@@ -45,7 +45,7 @@ export async function enviarAudioLead(contactId: string, url: string) {
   if (!base) return { error: 'WhatsApp não conectado ou lead sem telefone.' }
   const env = await enviarAudio(base.instance, base.numero, url)
   if (!env.ok) return { error: 'Falha ao enviar o áudio.' }
-  await logConversa(base.service, companyId, contactId, base.numero, '🎤 Áudio', { tipo: 'audio', url })
+  await logConversa(base.service, companyId, contactId, base.numero, '🎤 Áudio', { tipo: 'audio', url }, env.data)
   revalidatePath('/dashboard/funil')
   return { success: true }
 }
@@ -124,7 +124,7 @@ export async function enviarOrcamentoLead(contactId: string) {
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   // registra na conversa
-  await registrarMensagemDaLoja(service, companyId, contactId, numero, { role: 'human', content: texto, ts: new Date().toISOString() })
+  await registrarMensagemDaLoja(service, companyId, contactId, numero, { role: 'human', content: texto, ts: new Date().toISOString() }, env.data)
   revalidatePath('/dashboard/funil')
   return { success: true }
 }

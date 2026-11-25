@@ -147,8 +147,11 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
+  // conversa aberta AGORA (atualizada a cada troca). Resposta que chega atrasada, de outra conversa, é descartada:
+  // sem isso a tela mostrava mensagens de outra pessoa e "apagar" procurava a mensagem na conversa errada.
+  const abertaRef = useRef<string | null>(null)
   const carregarMensagens = useCallback((id: string) => {
-    obterMensagens(id).then(setMensagens)
+    obterMensagens(id).then(m => { if (abertaRef.current === id) setMensagens(m) })
   }, [])
 
   async function handleApagar(indice: number, ts: string | undefined, paraTodos: boolean) {
@@ -161,9 +164,11 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
   }
 
   useEffect(() => {
+    abertaRef.current = selecionada
     if (!selecionada) return
-    setCarregandoMsgs(true)
-    obterMensagens(selecionada).then(m => { setMensagens(m); setCarregandoMsgs(false) })
+    const id = selecionada
+    setCarregandoMsgs(true); setMensagens([])
+    obterMensagens(id).then(m => { if (abertaRef.current === id) { setMensagens(m); setCarregandoMsgs(false) } })
     // conversa nova na tela: zera o que foi carregado da anterior e vê se há mensagens antigas no arquivo
     setAnteriores([]); setTemAnteriores(false)
     let vivo = true
@@ -176,7 +181,9 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
     setCarregandoAnt(true)
     // continua de onde parou: antes da mais antiga já carregada ou, na 1ª vez, antes da mais antiga da conversa ativa
     const marco = anteriores[0]?.ts ?? mensagens[0]?.ts ?? null
-    const r = await obterMensagensAnteriores(selecionada, marco, 50)
+    const id = selecionada
+    const r = await obterMensagensAnteriores(id, marco, 50)
+    if (abertaRef.current !== id) { setCarregandoAnt(false); return } // trocou de conversa enquanto carregava
     setAnteriores(prev => [...r.msgs, ...prev])
     setTemAnteriores(r.temMais)
     setCarregandoAnt(false)

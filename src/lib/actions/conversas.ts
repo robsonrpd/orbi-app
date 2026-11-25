@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveCompanyId as getCompanyId } from '@/lib/auth/company'
 import { enviarTexto, enviarMedia, enviarAudio, statusInstancia, buscarFotoPerfil, apagarMensagemWhatsApp, ehGrupo, destinoDe, getMediaBase64, enviarContato, enviarEnquete, enviarFigurinha, numeroDaInstancia, enviarReacao, type Citacao } from '@/lib/evolution'
 import { revalidatePath } from 'next/cache'
-import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja } from '@/lib/conversas-busca'
+import { acharConversa, acharContatoPorTelefone, mensagensDaConversa, registrarMensagemDaLoja, numeroDoEnvio } from '@/lib/conversas-busca'
 import { atualizarFotoDoContato } from '@/lib/foto-perfil'
 import { buscarTodos } from '@/lib/supabase/paginacao'
 
@@ -440,7 +440,7 @@ export async function iniciarConversa(numero: string, texto: string, opts?: { co
 
   const contact = existente ? null : await acharContatoPorTelefone<{ id: string; phone: string | null }>(service, companyId, numeroFmt)
   // gravação atômica (cria a conversa se não existir; não apaga mensagem que chegue no mesmo instante)
-  const conversaId = await registrarMensagemDaLoja(service, companyId, contact?.id ?? null, existente?.numero ?? numeroFmt,
+  const conversaId = await registrarMensagemDaLoja(service, companyId, contact?.id ?? null, existente?.numero ?? numeroDoEnvio(env.data) ?? numeroFmt,
     { role: 'human', content: limpo, ts: nova.ts ?? new Date().toISOString() })
   if (!conversaId) return { error: 'Mensagem enviada, mas houve um erro ao salvar a conversa.' }
 

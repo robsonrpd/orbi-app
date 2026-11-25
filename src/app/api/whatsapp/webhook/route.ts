@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
     // grupo entra como UMA conversa: guarda o JID inteiro e não vira lead.
     // Cada participante virando contato entupiria o CRM de gente que não é cliente.
     const grupo = jid.endsWith('@g.us')
-    const numero = grupo ? jid : jid.split('@')[0]
+    const numero = grupo ? jid : await numeroDaConversaExistente(service, company.id, jid.split('@')[0])
     if (!numero) continue
     const chave = grupo ? '' : numero.replace(/\D/g, '').slice(-8)
 
@@ -388,6 +388,19 @@ type Midia = { tipo: string; url: string; nome?: string }
 type Msg = { role: 'user' | 'assistant' | 'human'; content: string; midia?: Midia; anuncio?: Anuncio; resposta?: RespostaA; ts?: string; waId?: string; waFromMe?: boolean; apagada?: boolean }
 
 const EXT: Record<string, string> = { image: 'jpg', audio: 'ogg', video: 'mp4', document: 'bin' }
+
+/**
+ * 9º dígito: o mesmo celular pode aparecer como 5585999035302 (com 9, como a loja digita) e 558599035302 (como o
+ * WhatsApp registra). Se a conversa já existe com a OUTRA forma, a mensagem entra nela em vez de abrir uma segunda.
+ */
+async function numeroDaConversaExistente(service: ReturnType<typeof createServiceClient>, companyId: string, numero: string) {
+  const m = /^55(\d{2})(9?)(\d{8})$/.exec(numero)
+  if (!m) return numero
+  const outra = m[2] ? `55${m[1]}${m[3]}` : `55${m[1]}9${m[3]}`
+  const { data } = await service.from('conversations').select('numero').eq('company_id', companyId).in('numero', [numero, outra]).limit(2)
+  const nums = ((data ?? []) as { numero: string }[]).map(r => r.numero)
+  return nums.includes(numero) || !nums.includes(outra) ? numero : outra
+}
 
 // Cartão do anúncio: hospeda a miniatura UMA vez por anúncio (o link do Facebook vence) e devolve o que vai na mensagem.
 async function prepararAnuncio(

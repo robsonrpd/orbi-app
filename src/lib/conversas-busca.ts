@@ -52,14 +52,27 @@ type MsgDaLoja = { role: 'human'; content: string; ts: string; midia?: unknown }
  * Devolve o id da conversa (ou null se a gravação falhou; o erro vai para o log).
  */
 export async function registrarMensagemDaLoja(
-  service: Service, companyId: string, contactId: string | null, numero: string, msg: MsgDaLoja,
+  service: Service, companyId: string, contactId: string | null, numero: string, msg: MsgDaLoja, respostaDoEnvio?: unknown,
 ): Promise<string | null> {
   const existente = await acharConversa(service, companyId, numero)
   const { data, error } = await service.rpc('anexar_mensagem', {
-    p_company: companyId, p_numero: existente?.numero ?? numero, p_contact: contactId, p_msg: msg, p_marcar_cliente: true,
+    p_company: companyId, p_numero: existente?.numero ?? numeroDoEnvio(respostaDoEnvio) ?? numero, p_contact: contactId, p_msg: msg, p_marcar_cliente: true,
   })
   if (error) { console.error('[registrarMensagemDaLoja]', error.message); return null }
   return (data as string | null) ?? null
+}
+
+/**
+ * Número como o WhatsApp registra o contato, tirado da resposta do envio (key.remoteJid).
+ * Importa por causa do 9º dígito: a loja digita "85 9 9903-5302", mas a conta pode estar registrada como
+ * 558599035302. A conversa nova tem que nascer com o número do WhatsApp, senão a resposta do cliente
+ * (que chega com o número do WhatsApp) abre OUTRA conversa e parece que "não recebeu".
+ */
+export function numeroDoEnvio(resposta: unknown): string | null {
+  const jid = (resposta as { key?: { remoteJid?: string } } | null)?.key?.remoteJid ?? ''
+  if (!jid.endsWith('@s.whatsapp.net')) return null
+  const n = jid.split('@')[0].replace(/\D/g, '')
+  return n.length >= 10 ? n : null
 }
 
 /** Mensagens de uma conversa específica (sem arrastar as das outras). */

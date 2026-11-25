@@ -31,7 +31,7 @@ export async function responderLead(contactId: string, texto: string) {
   if (!env.ok) return { error: 'Falha ao enviar pelo WhatsApp.' }
 
   // encontra ou cria a conversa (match pelos últimos 8 dígitos)
-  await registrarMensagemDaLoja(service, companyId, contactId, numero, { role: 'human', content: texto.trim(), ts: new Date().toISOString() })
+  await registrarMensagemDaLoja(service, companyId, contactId, numero, { role: 'human', content: texto.trim(), ts: new Date().toISOString() }, env.data)
 
   revalidatePath('/dashboard/funil')
   return { success: true }
