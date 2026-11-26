@@ -54,7 +54,10 @@ export async function criarInstancia(instance: string, webhookUrl: string) {
       webhook: {
         url: webhookUrl,
         byEvents: false,
-        base64: true,
+        // NÃO embutir o arquivo no aviso: foto/PDF grande passava do limite de 4,5 MB da Vercel (erro 413) e o
+        // Evolution ficava reenviando o mesmo aviso, travando TODAS as mensagens da loja atrás dele (Ritmo Cordis,
+        // 25/11). O webhook busca o arquivo depois, pela API (getMediaBase64).
+        base64: false,
         events: EVENTOS_WEBHOOK,
       },
     }),
@@ -78,7 +81,10 @@ export async function setWebhook(instance: string, url: string) {
         enabled: true,
         url,
         byEvents: false,
-        base64: true,
+        // NÃO embutir o arquivo no aviso: foto/PDF grande passava do limite de 4,5 MB da Vercel (erro 413) e o
+        // Evolution ficava reenviando o mesmo aviso, travando TODAS as mensagens da loja atrás dele (Ritmo Cordis,
+        // 25/11). O webhook busca o arquivo depois, pela API (getMediaBase64).
+        base64: false,
         events: EVENTOS_WEBHOOK,
       },
     }),
