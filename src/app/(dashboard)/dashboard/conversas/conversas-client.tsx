@@ -734,7 +734,12 @@ export function ConversasClient({ conversasIniciais, lojaNome }: { conversasInic
                       ) : (
                         <>
                           {m.midia && m.midia.tipo === 'image' && <img src={m.midia.url} alt="" loading="lazy" decoding="async" onLoad={aoCarregarMidia} className="rounded-lg max-w-full mb-1" />}
-                          {m.midia && m.midia.tipo === 'video' && <video src={m.midia.url} controls onLoadedMetadata={aoCarregarMidia} className="rounded-lg max-w-full mb-1" />}
+                          {m.midia && m.midia.tipo === 'video' && (
+                            <>
+                              <video src={`${m.midia.url}#t=0.1`} controls playsInline preload="metadata" onLoadedMetadata={aoCarregarMidia} className="rounded-lg max-w-full max-h-[70dvh] mb-1 bg-black" />
+                              <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-[#1A56FF] underline mb-1">Abrir vídeo em outra aba</a>
+                            </>
+                          )}
                           {m.midia && m.midia.tipo === 'audio' && <audio src={m.midia.url} controls className="mb-1 max-w-full" />}
                           {m.midia && m.midia.tipo === 'document' && (
                             <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="text-[#1A56FF] underline">📎 {m.midia.nome || 'Documento'}</a>

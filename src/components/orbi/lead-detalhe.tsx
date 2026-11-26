@@ -320,7 +320,12 @@ export function LeadDetalhe({ lead, onClose, onChange, vendedores, msgsProntas, 
                         onBaixada={md => setMsgs(l => l.map(x => x.waId === m.waId ? { ...x, midia: md, midiaPendente: undefined } : x))} />}
                       {m.anuncio && <CartaoAnuncio anuncio={m.anuncio} />}
                       {m.midia?.tipo === 'image' && <img src={m.midia.url} alt="" onLoad={aoCarregarMidia} className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer" onClick={() => window.open(m.midia!.url, '_blank')} />}
-                      {m.midia?.tipo === 'video' && <video src={m.midia.url} controls className="rounded-lg max-w-full max-h-60 mb-1" />}
+                      {m.midia?.tipo === 'video' && (
+                        <>
+                          <video src={`${m.midia.url}#t=0.1`} controls playsInline preload="metadata" className="rounded-lg max-w-full max-h-60 mb-1 bg-black" />
+                          <a href={m.midia.url} target="_blank" rel="noopener noreferrer" className="block text-[11px] underline mb-1 opacity-80">Abrir vídeo em outra aba</a>
+                        </>
+                      )}
                       {m.midia?.tipo === 'audio' && <audio src={m.midia.url} controls className="max-w-full mb-1" />}
                       {m.midia?.tipo === 'document' && <a href={m.midia.url} target="_blank" className="flex items-center gap-1.5 underline mb-1"><Paperclip className="size-3.5" />{m.midia.nome || 'Documento'}</a>}
                       {m.midiaExpirada && <p className="text-[11px] italic text-[#8C8880] mb-1">📎 Mídia removida (guardamos por 6 meses)</p>}
